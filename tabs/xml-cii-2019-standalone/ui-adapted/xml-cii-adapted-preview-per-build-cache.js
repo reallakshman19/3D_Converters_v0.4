@@ -50,7 +50,8 @@ export function createPreviewPerBuildCache() {
   const classByMasterRows = new WeakMap();
   const rankingsByConfig = new WeakMap();
   const stats = { classBuilds: 0, classHits: 0, classInvalidations: 0,
-    rankComputes: 0, rankHits: 0, rankInvalidations: 0, rankClones: 0 };
+    rankComputes: 0, rankHits: 0, rankInvalidations: 0, rankClones: 0,
+    rankSignatureChecks: 0 };
 
   function getPipingClassIndex(masterRows) {
     if (!Array.isArray(masterRows)) {
@@ -81,40 +82,43 @@ export function createPreviewPerBuildCache() {
       return rankXmlCiiWeightCandidates(context, config, options);
     }
     const signature = JSON.stringify([contextSignature, optionsSignature]);
-    let byInput = rankingsByConfig.get(config);
-    if (byInput?.has(signature)) {
-      const entry = byInput.get(signature);
+    let group = rankingsByConfig.get(config);
+    if (group?.entries.has(signature)) {
+      stats.rankSignatureChecks += 1;
       const currentWeight = dataSignature(config.weight);
-      if (currentWeight !== null && currentWeight === entry.weightSignature) {
+      if (currentWeight !== null && currentWeight === group.weightSignature) {
         try {
-          const result = structuredClone(entry.snapshot);
+          const result = structuredClone(group.entries.get(signature));
           stats.rankClones += 1;
           stats.rankHits += 1;
           return result;
         } catch {
-          // Cannot clone safely: re-evaluate instead of sharing mutable objects.
+          // Recompute rather than exposing a mutable cached result.
         }
       } else {
         stats.rankInvalidations += 1;
-        byInput.delete(signature);
+        rankingsByConfig.delete(config);
+        group = null;
       }
     }
     stats.rankComputes += 1;
     const result = rankXmlCiiWeightCandidates(context, config, options);
-    // Ranking normalizes default weight settings in-place. Fingerprint only
-    // AFTER calculation, so the saved signature describes the evaluated input.
-    const weightSignature = dataSignature(config.weight);
-    if (weightSignature !== null) {
+    // The ranker normalizes defaults in-place; capture the signature after
+    // calculation, and only once per config until a potential cache hit.
+    if (!group) {
+      stats.rankSignatureChecks += 1;
+      const weightSignature = dataSignature(config.weight);
+      if (weightSignature !== null) {
+        group = { weightSignature, entries: new Map() };
+        rankingsByConfig.set(config, group);
+      }
+    }
+    if (group) {
       try {
-        const snapshot = structuredClone(result);
+        group.entries.set(signature, structuredClone(result));
         stats.rankClones += 1;
-        if (!byInput) {
-          byInput = new Map();
-          rankingsByConfig.set(config, byInput);
-        }
-        byInput.set(signature, { snapshot, weightSignature });
       } catch {
-        // Unsupported result values fail open to recalculation.
+        // Future noncloneable ranking outputs are not memoized.
       }
     }
     return result;
