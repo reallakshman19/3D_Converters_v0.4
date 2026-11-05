@@ -119,3 +119,27 @@ test('same-object settings change and unsupported master values fail open', () =
   assert.equal(classCache.stats.classHits, 0);
   assert.equal(classCache.stats.classBuilds, 2);
 });
+
+test('different ranking contexts do not rescan master content just to miss', () => {
+  const config = { weight: { masterRows: masterRows() } };
+  const cache = createPreviewPerBuildCache();
+  for (let index = 0; index < 12; index += 1) {
+    cache.rankWeight({ ...context, nodeName: 'VALVE-' + index }, config, { includeRejected: true });
+  }
+  assert.equal(cache.stats.rankHits, 0);
+  assert.equal(cache.stats.rankComputes, 12);
+  assert.equal(cache.stats.rankSignatureChecks, 1, 'content check needed for hits, not distinct contexts');
+});
+
+test('master changes during a different ranking miss cannot revive older result', () => {
+  const rows = masterRows();
+  const config = { weight: { masterRows: rows } };
+  const cache = createPreviewPerBuildCache();
+  const before = cache.rankWeight(context, config, { includeRejected: true });
+  rows[0].weight = 33;
+  cache.rankWeight({ ...context, componentRefNo: '=DIFFERENT' }, config, { includeRejected: true });
+  const after = cache.rankWeight(context, config, { includeRejected: true });
+  assert.notDeepStrictEqual(after, before);
+  assert.deepStrictEqual(after, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }));
+  assert.equal(cache.stats.rankInvalidations, 1);
+});
