@@ -70,3 +70,52 @@ test('a new Preview invocation does not reuse stale rankings or mutated master i
   assert.equal(newBuild.stats.rankHits, 0);
   assert.equal(newBuild.stats.rankComputes, 1);
 });
+
+test('same-object weight master edit invalidates cached ranking within the same build', () => {
+  const rows = masterRows();
+  const config = { weight: { masterRows: rows } };
+  const cache = createPreviewPerBuildCache();
+  const original = cache.rankWeight(context, config, { includeRejected: true });
+  rows[0].weight = 20;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  const fresh = rankXmlCiiWeightCandidates(context, config, { includeRejected: true });
+  assert.deepStrictEqual(changed, fresh);
+  assert.notDeepStrictEqual(changed, original, 'stale weight must not be returned');
+  assert.equal(cache.stats.rankInvalidations, 1);
+  assert.equal(cache.stats.rankHits, 0);
+  assert.equal(cache.stats.rankComputes, 2);
+});
+
+test('same-object class row edits invalidate index without replacing master array', () => {
+  const rows = [{ 'Piping Class': '93833', DN: 50, Rating: 900 }];
+  const cache = createPreviewPerBuildCache();
+  const original = cache.getPipingClassIndex(rows);
+  rows[0]['Piping Class'] = '93834';
+  const updated = cache.getPipingClassIndex(rows);
+  assert.notStrictEqual(updated, original);
+  assert.deepStrictEqual([...updated.keys()], ['93834']);
+  assert.equal(cache.stats.classInvalidations, 1);
+  assert.equal(cache.stats.classBuilds, 2);
+  assert.equal(cache.stats.classHits, 0);
+});
+
+test('same-object settings change and unsupported master values fail open', () => {
+  const rows = masterRows();
+  const config = { weight: { masterRows: rows } };
+  const cache = createPreviewPerBuildCache();
+  cache.rankWeight(context, config, { includeRejected: true });
+  config.weight.valveHintLengthToleranceMm = 0;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  assert.deepStrictEqual(changed, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }));
+  assert.equal(cache.stats.rankInvalidations, 1);
+  config.weight.nonSerializable = () => 1;
+  cache.rankWeight(context, config, { includeRejected: true });
+  cache.rankWeight(context, config, { includeRejected: true });
+  assert.equal(cache.stats.rankHits, 0);
+  const classRows = [{ 'Piping Class': '93833', DN: 50, debugFn: () => 1 }];
+  const classCache = createPreviewPerBuildCache();
+  classCache.getPipingClassIndex(classRows);
+  classCache.getPipingClassIndex(classRows);
+  assert.equal(classCache.stats.classHits, 0);
+  assert.equal(classCache.stats.classBuilds, 2);
+});
