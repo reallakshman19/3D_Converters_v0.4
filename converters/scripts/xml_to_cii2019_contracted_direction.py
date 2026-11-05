@@ -557,8 +557,33 @@ def _sif_owner_node(edge: base.Edge) -> base.XmlNode | None:
     return _component_owner_node(edge, {"TEE", "OLET"})
 
 
+def _reducer_taper_angle(node: base.XmlNode, branch_name: str) -> float | None:
+    if node.alpha_angle is not None and abs(node.alpha_angle) > 1e-9:
+        return node.alpha_angle
+    occ = _occurrence_for_node(node.node_number, branch_name)
+    if occ is not None and occ.semantic_type == "REDU":
+        for r in occ.records:
+            if r.node_number == node.node_number and r.alpha_angle is not None and abs(r.alpha_angle) > 1e-9:
+                return r.alpha_angle
+    return None
+
+
 def _reducer_owner_node(edge: base.Edge) -> base.XmlNode | None:
-    return _component_owner_node(edge, {"REDU"})
+    from_is_redu = _semantic_type_for_node(edge.from_node, edge.branch_name) == "REDU"
+    to_is_redu = _semantic_type_for_node(edge.to_node, edge.branch_name) == "REDU"
+    if not (from_is_redu or to_is_redu):
+        return None
+    to_angle = _reducer_taper_angle(edge.to_node, edge.branch_name)
+    from_angle = _reducer_taper_angle(edge.from_node, edge.branch_name)
+    if to_is_redu and to_angle is not None:
+        return edge.to_node
+    if from_is_redu and from_angle is not None:
+        return edge.from_node
+    from_occ = _occurrence_for_node(edge.from_node.node_number, edge.branch_name)
+    to_occ = _occurrence_for_node(edge.to_node.node_number, edge.branch_name)
+    if from_occ is not None and to_occ is not None and from_occ.occurrence_id == to_occ.occurrence_id:
+        return edge.to_node
+    return None
 
 
 def _build_bend_indices(edges: list[base.Edge]) -> tuple[list[base.Edge], dict[int, int]]:
@@ -570,7 +595,54 @@ def _build_sif_indices(edges: list[base.Edge]) -> tuple[list[base.Edge], dict[in
 
 
 def _build_reducer_indices(edges: list[base.Edge]) -> tuple[list[base.Edge], dict[int, int]]:
-    return _build_component_indices(edges, {"REDU"})
+    candidates_by_occ: dict[str, list[tuple[int, base.Edge]]] = {}
+    for edge_index, edge in enumerate(edges):
+        from_occ = _occurrence_for_node(edge.from_node.node_number, edge.branch_name)
+        to_occ = _occurrence_for_node(edge.to_node.node_number, edge.branch_name)
+        candidate_occs = set()
+        if from_occ is not None and from_occ.semantic_type == "REDU":
+            candidate_occs.add(from_occ)
+        if to_occ is not None and to_occ.semantic_type == "REDU":
+            candidate_occs.add(to_occ)
+        for occ in candidate_occs:
+            candidates_by_occ.setdefault(occ.occurrence_id, []).append((edge_index, edge))
+
+    selected_indices: set[int] = set()
+    for occ_id, cand_list in candidates_by_occ.items():
+        best_edge_idx = None
+        best_rank = -1
+        for edge_idx, edge in cand_list:
+            from_occ = _occurrence_for_node(edge.from_node.node_number, edge.branch_name)
+            to_occ = _occurrence_for_node(edge.to_node.node_number, edge.branch_name)
+            is_internal = (from_occ is not None and to_occ is not None and 
+                           from_occ.occurrence_id == occ_id and to_occ.occurrence_id == occ_id)
+            has_angle = (_reducer_taper_angle(edge.to_node, edge.branch_name) is not None or 
+                         _reducer_taper_angle(edge.from_node, edge.branch_name) is not None)
+            od_change = abs(edge.to_node.outside_diameter - edge.from_node.outside_diameter) > 1e-3
+            
+            if is_internal and has_angle:
+                rank = 3
+            elif is_internal:
+                rank = 2
+            elif has_angle and od_change:
+                rank = 1
+            else:
+                rank = 0
+
+            if rank > best_rank:
+                best_rank = rank
+                best_edge_idx = edge_idx
+
+        if best_edge_idx is not None and best_rank > 0:
+            selected_indices.add(best_edge_idx)
+
+    selected_edges: list[base.Edge] = []
+    edge_to_index: dict[int, int] = {}
+    for edge_index, edge in enumerate(edges):
+        if edge_index in selected_indices:
+            selected_edges.append(edge)
+            edge_to_index[edge_index] = len(selected_edges)
+    return selected_edges, edge_to_index
 
 
 def _bend_reference_node(owner: base.XmlNode, edge: base.Edge) -> int:
@@ -656,14 +728,15 @@ def _build_reducer_payload(model: base.ConversionModel) -> list[str]:
     lines: list[str] = []
     for edge in model.reducer_edges:
         owner = _reducer_owner_node(edge)
-        if owner is None or owner.alpha_angle is None:
+        alpha = _reducer_taper_angle(owner, edge.branch_name) if owner else None
+        if owner is None or alpha is None:
             raise ValueError("REDUCERS auxiliary edge has no PSI116 reducer component owner/AlphaAngle.")
         other = edge.from_node if owner is edge.to_node else edge.to_node
         thickness = owner.wall_thickness if owner.wall_thickness > 0.0 else other.wall_thickness
         lines.append(base._row([
             base._format_auto_float(owner.outside_diameter),
             base._format_auto_float(thickness if thickness > 0.0 else 0.0),
-            base._format_fixed_float(owner.alpha_angle, 4),
+            base._format_fixed_float(alpha, 4),
             base._format_fixed_float(0.0, 6),
             base._format_fixed_float(0.0, 6),
         ]))
