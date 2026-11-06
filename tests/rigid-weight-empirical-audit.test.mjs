@@ -98,6 +98,28 @@ assert.equal(clean.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
 assert.equal(clean.massVerified,false);
 assert.deepEqual(clean.flags,[]);
 assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:heavyCii},clean).ciiText,heavyCii);
+const changedCii=heavyCii.replace('1100 0','1099 0');
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:changedCii},clean).ciiText,'',
+  'stale audit cannot be applied to different output bytes');
+const cleanZeroRows=[
+  source('ZERO',7000,'=PCOM_ZERO',1,0,0,'PCOM'),
+  source('ZERO',7001,'=PCOM_ZERO',2,12.7,0,'PCOM')
+];
+const cleanZeroCii=ciiText([{from:7000,to:7001,mm:12.7,pointer:1,weightN:0,branch:'ZERO'}]);
+const cleanZero=auditRigidWeightOwnership({ciiText:cleanZeroCii,xmlRows:cleanZeroRows,estimator});
+assert.equal(cleanZero.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:cleanZeroCii},cleanZero).ciiText,cleanZeroCii,
+  'explicit zero mass structural rigid must remain available');
+const qualifiedApiSource=[
+  source('API',6000,'=WELDNECK',1,0,15,'FLAN',flangeInfo),
+  source('API',6001,'=WELDNECK',2,109,15,'RIGID',flangeInfo)
+];
+const qualifiedApiCii=ciiText([{from:6000,to:6001,mm:109,pointer:1,weightN:150,branch:'API'}]);
+const productionApi=auditRigidWeightOwnership({ciiText:qualifiedApiCii,xmlRows:qualifiedApiSource});
+assert.equal(productionApi.rows[0].empirical.status,'API_ESTIMATE');
+assert.equal(productionApi.rows[0].empirical.weightKg,15,
+  'production model built-in 2-inch Class 900 Weldneck Flange exact master cell');
+
 const wrong=heavy.map(x=>x.nodeNumber===9001?{...x,position:[0,0,9]}:x);
 assert.equal(auditRigidWeightOwnership({ciiText:heavyCii,xmlRows:wrong,estimator})
   .summary.flagsByCode.CII_SOURCE_GEOMETRY_MISMATCH,1);
