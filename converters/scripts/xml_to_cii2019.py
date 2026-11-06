@@ -98,6 +98,7 @@ class XmlNode:
     bend_type: int | None
     position: tuple[float, float, float]
     restraint_specs: tuple[RestraintSpec, ...]
+    component_ref_no: str = ""  # Preserve physical source owner; not a node-derived mass.
 
 
 @dataclass(frozen=True)
@@ -585,6 +586,7 @@ def _parse_xml_document(path: Path) -> XmlDocument:
                     endpoint=endpoint,
                     component_type=_child_text(node_element, namespace, "ComponentType").upper(),
                     rigid=rigid,
+                    component_ref_no=_child_text(node_element, namespace, "ComponentRefNo"),
                     weight=weight_value,
                     material_code=_parse_node_material_code(node_element, namespace),
                     outside_diameter=outside_diameter_value,
@@ -1267,23 +1269,30 @@ def _build_bend_payload(model: ConversionModel) -> list[str]:
 
 
 def _rigid_weight_for_edge(edge: Edge) -> float:
-    """Return the RIGID auxiliary weight for an edge.
+    """Return native kg mass, refusing an unowned flange-entry assignment.
 
-    Parameters expected:
-    - `edge`: a converted branch edge with parsed endpoint nodes.
-
-    Outputs passed:
-    - Weight from the edge owner node only; a zero/missing owner weight stays zero.
-
-    Fallback:
-    - `RIGID -> FLAN` remains a RIGID auxiliary edge, but it uses the FLAN/to-node
-      weight so an upstream RIGID weight cannot populate a blank flange edge.
+    Preserves established accepted weights. This is NOT a pipe/PCOM weight
+    estimator and does not allocate or redistribute physical mass.
     """
     if edge.to_node.rigid == 2:
-        return edge.to_node.weight
-    if edge.from_node.rigid == 2 and edge.to_node.component_type == "FLAN":
-        return edge.to_node.weight
-    return 0.0
+        weight = edge.to_node.weight
+    elif edge.from_node.rigid == 2 and edge.to_node.component_type == "FLAN":
+        weight = edge.to_node.weight
+    else:
+        return 0.0
+
+    # A component's FIRST endpoint is a boundary, not mass ownership of the
+    # incoming (often PCOM) span. The 19.1mm GLRD connection must not inherit
+    # the 109mm flange's 15kg merely because its to-node is a flange endpoint.
+    # Refuse rather than silently zeroing the mass: independent connection
+    # mass authority remains unresolved.
+    if weight > 0.0 and edge.to_node.component_type == "FLAN" and edge.to_node.endpoint == 1:
+        from_ref = "".join((edge.from_node.component_ref_no or "").lstrip("=").split()).upper()
+        to_ref = "".join((edge.to_node.component_ref_no or "").lstrip("=").split()).upper()
+        if not (from_ref and to_ref and from_ref == to_ref):
+            raise ValueError("CII_RIGID_FLANGE_ENTRY_MASS_OWNER_UNVERIFIED")
+
+    return weight
 
 
 def _build_rigid_payload(model: ConversionModel, weight_scale: float = 1.0) -> list[str]:
