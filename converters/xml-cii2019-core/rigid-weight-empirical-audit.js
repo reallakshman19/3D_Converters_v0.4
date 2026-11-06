@@ -198,3 +198,20 @@ export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, es
     estimator: resolvedEstimator,
   });
 }
+
+/** Withhold actual CII bytes when a complete source component mass is duplicated. */
+export function holdDuplicateRigidMassOutput(output, audit) {
+  const hasDuplicate = (audit?.flags || []).some((row) => row.code === 'DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
+  const diagnostics = { ...(output?.diagnostics || {}), rigidMassAudit: audit };
+  if (!hasDuplicate) return { ...output, diagnostics };
+  const error = 'RIGID_MASS_CONSERVATION_HOLD';
+  return {
+    ...output,
+    ok: false,
+    error,
+    ciiText: '',
+    ciiName: '',
+    diagnostics: { ...diagnostics, rigidMassCiiReleaseAuthorized: false },
+    logs: [...(output?.logs || []), error],
+  };
+}
