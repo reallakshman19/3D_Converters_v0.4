@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { auditRigidWeightOwnership, parseCiiRigidElementWeights } from '../converters/xml-cii2019-core/rigid-weight-empirical-audit.js';
+import { auditRigidWeightOwnership, parseCiiRigidElementWeights, holdDuplicateRigidMassOutput } from '../converters/xml-cii2019-core/rigid-weight-empirical-audit.js';
 
 const section = (name, rows) => [`#$ ${name}`, ...rows].join('\n');
 const row = (numbers) => numbers.join(' ');
@@ -31,7 +31,11 @@ assert.equal(audit.rows[0].empirical.status, 'API_NOT_APPLICABLE_CONNECTION');
 assert.equal(audit.rows[1].physicalComponentRef, '=A/FLANGE');
 assert.equal(audit.rows[1].empirical.status, 'API_ESTIMATE');
 assert.deepEqual(requests, [{typeDesc:'Weldneck Flange',dn:50,rating:900,target:'RF/RTJ KG'}]);
+const held = holdDuplicateRigidMassOutput({ok:true,ciiText:cii,ciiName:'GLRD.cii',diagnostics:{},logs:[]},audit);
+assert.equal(held.ok,false);
+assert.equal(held.ciiText,'');
+assert.equal(held.error,'RIGID_MASS_CONSERVATION_HOLD');
 const clean = cii.replace('150 0\n150 0', '0 0\n150 0');
 assert.equal(auditRigidWeightOwnership({ciiText:clean,xmlRows:source,estimator}).flags.length,0);
 assert.throws(() => parseCiiRigidElementWeights(cii.replace('0 1 0 0 0 0','0 9 0 0 0 0')), /CII_ELEMENT_INVALID/);
-console.log('rigid-weight-empirical-audit: 8 assertions PASS');
+console.log('rigid-weight-empirical-audit: 11 assertions PASS');
