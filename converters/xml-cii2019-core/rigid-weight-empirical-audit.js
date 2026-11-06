@@ -288,7 +288,8 @@ export function holdDuplicateRigidMassOutput(output,audit) {
       Number.isSafeInteger(row.rigidPointer)&&row.rigidPointer>0&&
       Number.isFinite(row.weightN)&&row.weightN>=0&&
       row.ownership==='GEOMETRIC_INTERIOR_OVERLAP'&&
-      row.massAuthority==='XML_CONSISTENT_UNAPPROVED');
+      (row.massAuthority==='XML_CONSISTENT_UNAPPROVED' ||
+       (row.massAuthority==='XML_EXPLICIT_ZERO' && row.weightN===0)));
   const summaryClean=audit?.summary?.flaggedElements===0&&
     audit?.summary?.flagsByCode&&Object.keys(audit.summary.flagsByCode).length===0;
   const complete=typeof output?.ciiText==='string'&&output.ciiText.length>0&&
