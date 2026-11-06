@@ -25,3 +25,5 @@ jobs:
           python3 -m py_compile converters/scripts/xml_to_cii2019.py
           python3 tests/test_xml_cii_native_rigid_owner_guard.py
           python3 tests/test_xml_cii_native_cli_guard.py
+          python3 tests/xml-cii-runtime-custody.test.py
+          (cd converters/scripts && python3 test_xml_to_cii_restraint_axis_lineno.py)
