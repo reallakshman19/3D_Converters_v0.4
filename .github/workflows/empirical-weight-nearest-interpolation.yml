@@ -1,0 +1,42 @@
+name: Empirical Weight nearest master interpolation
+on:
+  push:
+    branches:
+      - feat/empirical-weight-nearest-interpolation-20261107
+  pull_request:
+    paths:
+      - 'converters/empirical-weight/**'
+      - 'tabs/empirical-weight-tuning-tab.js'
+      - 'tests/empirical-weight-*.test.*'
+      - 'docs/EmpiricalWeightAPI.md'
+      - '.github/workflows/empirical-weight-nearest-interpolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nearest-bracket-and-legacy-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check exact implementation and UI syntax
+        run: |
+          node --check converters/empirical-weight/empirical-weight-matrix.js
+          node --check converters/empirical-weight/empirical-weight-estimator.js
+          node --check converters/empirical-weight/empirical-weight-sandbox.js
+          node --check tabs/empirical-weight-tuning-tab.js
+          node --check tests/empirical-weight-nearest-interpolation.test.mjs
+      - name: New actual-master bracket, NS5 screenshot and authority tests
+        run: node --test tests/empirical-weight-nearest-interpolation.test.mjs
+      - name: Existing estimator, sandbox, tuning and UI regression tests
+        run: |
+          node tests/empirical-weight-estimator.test.js
+          node --test tests/empirical-weight-sandbox.test.mjs
+          node --test tests/empirical-weight-tuning.test.mjs
+          node --test tests/empirical-weight-sandbox-ui-static.test.mjs
+          node tests/empirical-weight-validation-report.test.js
