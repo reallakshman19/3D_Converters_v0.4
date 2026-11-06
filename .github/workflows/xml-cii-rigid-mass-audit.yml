@@ -8,6 +8,7 @@ on:
       - 'converters/xml-cii2019-core/rigid-weight-empirical-audit.js'
       - 'tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js'
       - 'tests/rigid-weight-empirical-audit.test.mjs'
+      - 'tests/rigid-weight-run-gate.integration.test.mjs'
       - '.github/workflows/xml-cii-rigid-mass-audit.yml'
   workflow_dispatch:
 
@@ -28,5 +29,8 @@ jobs:
           node --check converters/xml-cii2019-core/rigid-weight-empirical-audit.js
           node --check tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js
           node --check tests/rigid-weight-empirical-audit.test.mjs
+          node --check tests/rigid-weight-run-gate.integration.test.mjs
       - name: Test rigid ownership, release gate and the production empirical weight API
-        run: node tests/rigid-weight-empirical-audit.test.mjs
+        run: |
+          node tests/rigid-weight-empirical-audit.test.mjs
+          node tests/rigid-weight-run-gate.integration.test.mjs
