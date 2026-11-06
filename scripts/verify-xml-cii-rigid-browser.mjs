@@ -53,15 +53,15 @@ try {
       lines.push('#$ RIGID',...edges.map(x=>x[5]+' 0'));
       return lines.join('\n')+'\n';
     }
-    async function run(xml,ciiText){
+    async function run(xml,ciiText,{inputXml=xml,engineExtra={}}={}){
       const job={sourceKind:'xml',sourceName:'browser-synthetic.xml',
-        sourceText:xml,supportConfigJson:'{}',options:{outputMode:'cii-only',kgToNewton:true}};
+        sourceText:inputXml,supportConfigJson:'{}',options:{outputMode:'cii-only',kgToNewton:true}};
       const runtime={
-        runParityEnricher:async()=>({applied:true,xmlText:xml,
+        runParityEnricher:async()=>({applied:true,xmlText:inputXml,
           evidence:{ok:true,engineInputDigest:'BROWSER_SYNTHETIC'},stats:{},logs:[]}),
         engineRunner:async()=>({ok:true,sourceKind:'xml',outputKind:'enrichedXML',
           enrichedText:xml,enrichedName:'browser-enriched.xml',ciiText,
-          ciiName:'browser.cii',diagnostics:{warnings:[]},logs:['INJECTED_ENGINE_NOT_PYODIDE']})
+          ciiName:'browser.cii',diagnostics:{warnings:[]},logs:['INJECTED_ENGINE_NOT_PYODIDE'],...engineExtra})
       };
       return runXmlCii2019WorkflowService(job,runtime);
     }
@@ -90,6 +90,16 @@ try {
       '</Branch></Pipe></PipeStressExport>';
     const heavyCii=cii([[9000,9001,1.1,1,'HEAVY',1100]]);
     const heavy=await run(heavyXml,heavyCii);
+    const originalBeforeTopoFix=heavyXml.replace('<Position>0 0 1.1</Position>',
+      '<Position>0 0 9.1</Position>');
+    const committedTopoFix=await run(heavyXml,heavyCii,{
+      inputXml:originalBeforeTopoFix,
+      engineExtra:{ciiInputSource:'topofix',topoFixCommitted:true,topoFixXmlText:heavyXml},
+    });
+    const missingTopoFix=await run(heavyXml,heavyCii,{
+      inputXml:originalBeforeTopoFix,
+      engineExtra:{ciiInputSource:'topofix',topoFixCommitted:false,topoFixXmlText:''},
+    });
     const heavyState={...state,sourceText:heavyXml,result:heavy};
     const heavyReport=buildStandaloneOutputRunReadiness(heavyState);
     return {evidence,heavy:{
@@ -97,7 +107,12 @@ try {
       qualified:heavy.diagnostics?.rigidMassEngineeringQualified,
       weight:heavy.diagnostics?.rigidMassAudit?.rows?.[0]?.weightN,
       ciiAvailable:heavyReport.artifactRows.find(x=>x.kind==='cii')?.available,
-      ciiMatches:heavy.ciiText===heavyCii}};
+      ciiMatches:heavy.ciiText===heavyCii},
+      topoFix:{ok:committedTopoFix.ok,ciiSame:committedTopoFix.ciiText===heavyCii,
+        status:committedTopoFix.diagnostics?.rigidMassAudit?.status,
+        missingHeld:missingTopoFix.ok===false&&missingTopoFix.ciiText===''&&
+          missingTopoFix.diagnostics?.rigidMassAudit?.errorCode==='RIGID_AUDIT_TOPOFIX_INPUT_MISSING'}
+    };
   });
   assert.equal(result.evidence.ok,false);
   assert.equal(result.evidence.error,'RIGID_MASS_CONSERVATION_HOLD');
@@ -121,10 +136,15 @@ try {
   assert.equal(result.heavy.weight,1100);
   assert.equal(result.heavy.ciiAvailable,true);
   assert.equal(result.heavy.ciiMatches,true);
+  assert.equal(result.topoFix.ok,true);
+  assert.equal(result.topoFix.ciiSame,true);
+  assert.equal(result.topoFix.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
+  assert.equal(result.topoFix.missingHeld,true);
   receipt.statements.push({id:'BROWSER_DOM',status:'PASS',meaning:'Real Chromium parses XML; 19.1mm owns PCOM and 109mm owns flange'});
   receipt.statements.push({id:'BROWSER_OUTPUT_RUN_SERVICE',status:'PASS',meaning:'CII withheld with duplicate mass; no manufactured allocation'});
   receipt.statements.push({id:'BROWSER_OUTPUT_RUN_UI',status:'PASS',meaning:'Held CII download disabled; diagnostics downloadable and HOLD visible'});
   receipt.statements.push({id:'HEAVY_SHORT_RIGID',status:'PASS',meaning:'Legitimate short heavy rigid not rejected by length alone; not engineering approved'});
+  receipt.statements.push({id:'TOPOFIX_CUSTODY',status:'PASS',meaning:'Audits committed fixed XML, refuses missing TopoFix CII-input custody'});
   await page.screenshot({path:resolve(artifactDir,'output-run-held-cii.png'),fullPage:true});
   await writeFile(resolve(artifactDir,'receipt.json'),JSON.stringify({...receipt,evidence:result,consoleErrors:errors},null,2));
   console.log('XML-CII rigid mass Chromium checks PASS (real DOM, injected engine).');
