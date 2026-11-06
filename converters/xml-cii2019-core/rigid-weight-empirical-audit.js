@@ -8,6 +8,58 @@ const positive = (v) => finite(v) !== null && Number(v) > 0 ? Number(v) : null;
 const tokens = (v) => norm(v).split(/\s+/).filter(Boolean);
 const numbers = (v) => String(v ?? '').match(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/g) || []; // CII fields may touch at a minus sign
 const equal = (a, b) => Math.abs(a - b) <= Math.max(0.01, Math.abs(a) * 1e-5);
+const vec = (a,b) => a.map((v,i)=>v-b[i]);
+const dot = (a,b) => a.reduce((sum,v,i)=>sum+v*b[i],0);
+const len = (a,b) => Math.hypot(...vec(a,b));
+const keyRef = (branch, ref) => branch + '\u0000' + refKey(ref);
+const keyNode = (branch, node) => branch + '\u0000' + node;
+
+function positiveInteriorOverlap(a,b,start,end,toleranceMm=0.2) {
+  const span=vec(end,start), L=Math.hypot(...span);
+  if (!(L>0))return 0;
+  const axis=span.map(x=>x/L), va=vec(a,start), vb=vec(b,start);
+  const pa=dot(va,axis), pb=dot(vb,axis);
+  if(Math.hypot(...vec(va,axis.map(x=>x*pa)))>toleranceMm ||
+     Math.hypot(...vec(vb,axis.map(x=>x*pb)))>toleranceMm)return 0;
+  return Math.max(0, Math.min(L,Math.max(pa,pb))-Math.max(0,Math.min(pa,pb)));
+}
+function groupSourceComponents(source) {
+  const byRef=new Map();
+  for(const row of source) {
+    if(!refKey(row.ref))continue;
+    const k=keyRef(row.branch,row.ref);
+    if(!byRef.has(k))byRef.set(k,[]);
+    byRef.get(k).push(row);
+  }
+  return [...byRef.entries()].map(([key,records])=>{
+    const starts=records.filter(r=>r.endpoint===1&&Array.isArray(r.position));
+    const ends=records.filter(r=>r.endpoint===2&&Array.isArray(r.position));
+    const massValues=[...new Set(records.map(r=>positive(r.weightKg)).filter(Boolean))];
+    return {key,branch:records[0].branch,ref:records[0].ref,records,
+      start:starts.length===1?starts[0]:null,end:ends.length===1?ends[0]:null,
+      massKg:massValues.length===1?massValues[0]:null,
+      massConflict:massValues.length>1,massMissing:massValues.length===0,
+      explicitZeroMass:massValues.length===0&&records.every(r=>r.weightKg===0),
+      ambiguous:starts.length!==1||ends.length!==1};
+  });
+}
+function groupEmpiricalRequest(group) {
+  if(!group||!group.records.some(r=>['FLAN','RIGID'].includes(r.componentType)))return null;
+  const evidence=group.records.find(r=>/WELD(?:ING)?\s*NECK\s*FLANGE/i.test(r.dtxr||''));
+  if(!evidence||!positive(evidence.dn)||!positive(evidence.rating))return null;
+  return {typeDesc:'Weldneck Flange',dn:evidence.dn,rating:evidence.rating,target:'RF/RTJ KG'};
+}
+function empiricalForGroup(group,estimator) {
+  const request=groupEmpiricalRequest(group);
+  if(!request)return {status:'API_NOT_APPLICABLE_OR_MISSING_INPUT'};
+  try {
+    const result=estimator.estimate(request);
+    return result?.ok
+      ? {status:'API_ESTIMATE',weightKg:result.weightKg,modelId:result.modelId,
+         approach:result.approach,confidence:result.confidence}
+      : {status:'API_UNAVAILABLE',code:result?.error?.code||'UNKNOWN'};
+  }catch{return {status:'API_UNAVAILABLE',code:'EMPIRICAL_ESTIMATOR_FAILED'};}
+}
 
 export function parseCiiRigidElementWeights(ciiText) {
   const sections = new Map();
@@ -33,7 +85,7 @@ export function parseCiiRigidElementWeights(ciiText) {
     throw new Error('CII_RECORD_COUNT_MISMATCH');
   const weights = rigidRows.map((line) => {
     const fields = tokens(line);
-    if (fields.length !== 2 || finite(fields[0]) === null || Number(fields[0]) < 0)
+    if (fields.length !== 2 || finite(fields[0]) === null || Number(fields[0]) < 0 || finite(fields[1]) === null)
       throw new Error('CII_RIGID_WEIGHT_INVALID');
     return Number(fields[0]);
   });
@@ -44,7 +96,10 @@ export function parseCiiRigidElementWeights(ciiText) {
     const geom = numbers(b[0]);
     const ints = tokens(b[12]);
     const pointer = Number(ints[1]);
-    if (geom.length !== 6 || ints.length !== 6 || !Number.isSafeInteger(pointer) || pointer < 0 || pointer > rigidCount)
+    if (geom.length !== 6 || geom.some(x=>!Number.isFinite(Number(x))) ||
+        ![geom[0],geom[1]].every(x=>Number.isSafeInteger(Number(x))) ||
+        ints.length !== 6 || !ints.every(x=>Number.isSafeInteger(Number(x))) ||
+        !Number.isSafeInteger(pointer) || pointer < 0 || pointer > rigidCount)
       throw new Error(`CII_ELEMENT_INVALID:${i + 1}`);
     if (pointer && usedPointers.has(pointer)) throw new Error('CII_RIGID_POINTER_DUPLICATE');
     if (pointer) usedPointers.add(pointer);
@@ -57,6 +112,7 @@ export function parseCiiRigidElementWeights(ciiText) {
       from: Number(geom[0]),
       to: Number(geom[1]),
       lengthMm: Math.hypot(...delta),
+      dx:delta[0],dy:delta[1],dz:delta[2],
       rigidPointer: pointer,
       weightN: pointer ? weights[pointer - 1] : 0,
     });
@@ -69,6 +125,10 @@ function child(node, tag) {
   return [...(node?.children || [])].find((x) => x.localName === tag)?.textContent?.trim() || '';
 }
 
+function xmlPosition(value) {
+  const fields=tokens(value).map(Number);
+  return fields.length===3&&fields.every(Number.isFinite)?fields:null;
+}
 export function extractXmlRigidAuditRows(xmlText) {
   if (typeof DOMParser === 'undefined') throw new Error('XML_DOM_PARSER_UNAVAILABLE');
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
@@ -76,10 +136,11 @@ export function extractXmlRigidAuditRows(xmlText) {
   const result = [];
   for (const branch of [...doc.getElementsByTagNameNS('*', 'Branch')]) {
     const branchName = child(branch, 'Branchname');
-    for (const node of [...branch.children].filter((x) => x.localName === 'Node')) {
+    for (const [ordinal,node] of [...branch.children].filter((x) => x.localName === 'Node').entries()) {
       result.push({
-        branch: branchName,
+        branch: branchName, ordinal,
         nodeNumber: finite(child(node, 'NodeNumber')),
+        position: xmlPosition(child(node, 'Position')),
         ref: child(node, 'ComponentRefNo'),
         endpoint: finite(child(node, 'Endpoint')),
         componentType: child(node, 'ComponentType').toUpperCase(),
@@ -90,6 +151,7 @@ export function extractXmlRigidAuditRows(xmlText) {
       });
     }
   }
+  if(!result.length)throw Error('XML_COMPONENT_POPULATION_EMPTY');
   return result;
 }
 
@@ -106,91 +168,96 @@ function empiricalRequest(row) {
  * from ELEMENTS -> pointer -> RIGID, never from an XML node as a substitute.
  * The empirical estimator is evidence for a recognized physical family only.
  */
-export function auditRigidWeightOwnership({ ciiText, xmlRows, estimator, kgToNewtonScale = 10 }) {
-  const parsed = parseCiiRigidElementWeights(ciiText);
-  const source = Array.isArray(xmlRows) ? xmlRows : [];
-  const byNumber = new Map();
-  const byRef = new Map();
-  for (const row of source) {
-    const key = `${row.branch}\u0000${row.nodeNumber}`;
-    if (positive(row.nodeNumber)) byNumber.set(key, [...(byNumber.get(key) || []), row]);
-    const ref = refKey(row.ref);
-    if (ref) {
-      const refId = `${row.branch}\u0000${ref}`;
-      byRef.set(refId, [...(byRef.get(refId) || []), row]);
-    }
+export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonScale=10}={}) {
+  if(!(finite(kgToNewtonScale)>0))throw Error('WEIGHT_SCALE_INVALID');
+  const parsed=parseCiiRigidElementWeights(ciiText);
+  const source=Array.isArray(xmlRows)?xmlRows:[];
+  if(!source.length)throw Error('XML_COMPONENT_POPULATION_EMPTY');
+  const byNode=new Map();
+  for(const s of source) {
+    if(!Number.isSafeInteger(s.nodeNumber)||s.nodeNumber<=0)continue;
+    const k=keyNode(s.branch,s.nodeNumber);
+    if(!byNode.has(k))byNode.set(k,[]);
+    byNode.get(k).push(s);
   }
-  const rows = parsed.elements.filter((item) => item.rigidPointer > 0).map((edge) => {
-    const fromRows = byNumber.get(`${edge.branch}\u0000${edge.from}`) || [];
-    const toRows = byNumber.get(`${edge.branch}\u0000${edge.to}`) || [];
-    const from = fromRows.length === 1 ? fromRows[0] : null;
-    const to = toRows.length === 1 ? toRows[0] : null;
-    const sameComponent = Boolean(from && to && refKey(from.ref) && refKey(from.ref) === refKey(to.ref));
-    return {
-      ...edge,
-      fromRef: from?.ref || null,
-      toRef: to?.ref || null,
-      toEndpoint: to?.endpoint ?? null,
-      toComponentType: to?.componentType || null,
-      sourceWeightKg: to?.weightKg ?? null,
-      physicalComponentRef: sameComponent ? to.ref : null,
-      ownership: !from || !to ? 'SOURCE_NODE_UNRESOLVED'
-        : sameComponent ? 'SAME_PHYSICAL_COMPONENT'
-        : to.endpoint === 1 ? 'CONNECTION_TO_COMPONENT_START' : 'CROSSES_COMPONENT_BOUNDARY',
-      empirical: null,
-      flags: [],
-      _to: to,
-    };
+  const groups=groupSourceComponents(source);
+  const byRef=new Map(groups.map(g=>[g.key,g]));
+  const effectiveEstimator=estimator||createEmpiricalWeightEstimator();
+  const apiCache=new Map();
+  const rows=parsed.elements.filter(e=>e.rigidPointer>0).map(edge=>{
+    const a=byNode.get(keyNode(edge.branch,edge.from))||[];
+    const b=byNode.get(keyNode(edge.branch,edge.to))||[];
+    const from=a.length===1?a[0]:null,to=b.length===1?b[0]:null, flags=[];
+    if(a.length!==1||b.length!==1||!from?.position||!to?.position)
+      flags.push('SOURCE_NODE_UNRESOLVED');
+    if(from?.position&&to?.position&&Math.abs(len(from.position,to.position)-edge.lengthMm)>0.25)
+      flags.push('CII_SOURCE_GEOMETRY_MISMATCH');
+    const matches=flags.length?[]:groups.map(group=>{
+      if(group.branch!==edge.branch||!group.start||!group.end)return null;
+      const overlap=positiveInteriorOverlap(from.position,to.position,group.start.position,group.end.position);
+      if(overlap<=0.2)return null;
+      const span=len(group.start.position,group.end.position);
+      return overlap>=0.5*Math.min(edge.lengthMm,span)?{group,overlap}:null;
+    }).filter(Boolean);
+    if(matches.length>1)flags.push('PHYSICAL_OWNER_AMBIGUOUS');
+    const hit=matches.length===1?matches[0]:null;
+    const group=hit?.group||null;
+    if(!group)flags.push('PHYSICAL_OWNER_UNRESOLVED');
+    if(group?.ambiguous)flags.push('SOURCE_COMPONENT_OCCURRENCE_AMBIGUOUS');
+    if(group?.massConflict)flags.push('SOURCE_ENDPOINT_WEIGHTS_CONFLICT');
+    if(group?.explicitZeroMass&&edge.weightN>0)flags.push('POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT');
+    else if(group?.massMissing&&!group?.explicitZeroMass)flags.push('SOURCE_COMPONENT_MASS_UNRESOLVED');
+    let empirical={status:'API_NOT_APPLICABLE_CONNECTION'};
+    if(group&&!group.explicitZeroMass) {
+      if(!apiCache.has(group.key))apiCache.set(group.key,empiricalForGroup(group,effectiveEstimator));
+      empirical=apiCache.get(group.key);
+    }
+    return {...edge,
+      fromRef:from?.ref||null,toRef:to?.ref||null,
+      fromPosition:from?.position||null,toPosition:to?.position||null,
+      physicalComponentRef:group?.ref||null,physicalComponentKey:group?.key||null,
+      ownerType:group?.end?.componentType||group?.start?.componentType||null,
+      ownerSpanMm:group?.start&&group?.end?len(group.start.position,group.end.position):null,
+      sourceOverlapMm:hit?.overlap??0,
+      approvedSourceMassKg:null,sourceMassCandidateKg:group?.massKg??null,
+      massAuthority:group?.massConflict?'CONFLICT':group?.explicitZeroMass?'XML_EXPLICIT_ZERO':
+        group?.massMissing?'UNRESOLVED':group?'XML_CONSISTENT_UNAPPROVED':'NO_OWNER',
+      ownership:group?'GEOMETRIC_INTERIOR_OVERLAP':'UNRESOLVED',
+      allocationBasis:group?'CII_ELEMENT_OVERLAP_XML_COMPONENT_SPAN':'NO_SOURCE_COMPONENT_INTERIOR_OVERLAP',
+      empirical,flags};
   });
-  for (const row of rows) {
-    if (row.ownership === 'CONNECTION_TO_COMPONENT_START' && row.weightN > 0) {
-      const following = rows.find((next) =>
-        next.branch === row.branch && next.from === row.to &&
-        next.ownership === 'SAME_PHYSICAL_COMPONENT' && next.physicalComponentRef &&
-        refKey(next.physicalComponentRef) === refKey(row.toRef) && next.weightN > 0);
-      const group = byRef.get(`${row.branch}\u0000${refKey(row.toRef)}`) || [];
-      const masses = [...new Set(group.map((x) => positive(x.weightKg)).filter(Boolean))];
-      const sourceKg = masses.length === 1 ? masses[0] : null;
-      if (following && sourceKg !== null && equal(row.weightN, sourceKg * kgToNewtonScale)
-          && equal(following.weightN, sourceKg * kgToNewtonScale)) {
-        row.flags.push('DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
-        row.duplicatedWithElement = following.element;
-      } else {
-        row.flags.push('WEIGHTED_CONNECTION_REQUIRES_INDEPENDENT_OWNER');
-      }
-    }
-    if (row.ownership === 'SAME_PHYSICAL_COMPONENT') {
-      const group = byRef.get(`${row.branch}\u0000${refKey(row.physicalComponentRef)}`) || [];
-      const positiveWeights = [...new Set(group.map((x) => positive(x.weightKg)).filter(Boolean))];
-      if (positiveWeights.length > 1) row.flags.push('SOURCE_ENDPOINT_WEIGHTS_CONFLICT');
-      const request = empiricalRequest(row._to);
-      if (request) {
-        try {
-          const result = (estimator || createEmpiricalWeightEstimator()).estimate(request);
-          row.empirical = result?.ok
-            ? { status: 'API_ESTIMATE', weightKg: result.weightKg, modelId: result.modelId, approach: result.approach, confidence: result.confidence }
-            : { status: 'API_UNAVAILABLE', code: result?.error?.code || 'UNKNOWN' };
-        } catch {
-          row.empirical = { status: 'API_UNAVAILABLE', code: 'EMPIRICAL_ESTIMATOR_FAILED' };
-        }
-      } else {
-        row.empirical = { status: 'API_NOT_APPLICABLE_OR_MISSING_INPUT' };
-      }
-    } else if (row.ownership === 'CONNECTION_TO_COMPONENT_START') {
-      row.empirical = { status: 'API_NOT_APPLICABLE_CONNECTION' };
-    }
-    delete row._to;
+  for(const row of rows) {
+    if(!(row.weightN>0)||!row.toRef||
+       (row.physicalComponentRef&&row.massAuthority!=='XML_EXPLICIT_ZERO'))continue;
+    const next=rows.find(x=>x.branch===row.branch&&x.from===row.to&&x.physicalComponentRef&&
+      refKey(x.physicalComponentRef)===refKey(row.toRef));
+    const group=byRef.get(keyRef(row.branch,row.toRef));
+    if(next&&group?.massKg!==null&&!group?.massConflict&&
+       equal(row.weightN,group.massKg*kgToNewtonScale)&&
+       equal(next.weightN,group.massKg*kgToNewtonScale)) {
+      row.flags.push('DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
+      row.duplicatedWithElement=next.element;
+    }else row.flags.push('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER');
   }
-  const flags = rows.flatMap((row) => row.flags.map((code) => ({ element: row.element, from: row.from, to: row.to, code })));
-  return {
-    schema: 'xml-cii2019-rigid-empirical-ownership-audit/v1',
-    authority: 'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
-    elementCount: parsed.elementCount,
-    rigidCount: parsed.rigidCount,
-    flags,
-    rows,
-    status: flags.length ? 'REVIEW_REQUIRED' : 'NO_FLAGGED_WEIGHT_OWNERSHIP',
-  };
+  for(const group of groups) {
+    const children=rows.filter(row=>row.physicalComponentKey===group.key);
+    if(!children.length||group.massConflict||group.massMissing)continue;
+    const total=children.reduce((sum,row)=>sum+row.weightN,0);
+    if(!equal(total,group.massKg*kgToNewtonScale))
+      for(const child of children)child.flags.push('PHYSICAL_COMPONENT_MASS_NOT_CONSERVED');
+  }
+  const flags=rows.flatMap(row=>[...new Set(row.flags)].map(code=>({
+    element:row.element,branch:row.branch,from:row.from,to:row.to,
+    rigidPointer:row.rigidPointer,weightN:row.weightN,lengthMm:row.lengthMm,
+    physicalComponentRef:row.physicalComponentRef,code})));
+  return {schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',
+    authority:'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
+    massVerified:false,elementCount:parsed.elementCount,rigidCount:parsed.rigidCount,
+    auditedRigidCount:rows.length,
+    summary:{flaggedElements:new Set(flags.map(f=>f.element)).size,
+      flagsByCode:Object.fromEntries([...new Set(flags.map(f=>f.code))].sort().map(
+        code=>[code,flags.filter(f=>f.code===code).length]))},
+    flags,rows,status:flags.length?'HOLD':'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'};
 }
 
 export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, estimator, kgToNewtonScale = 10 } = {}) {
@@ -211,19 +278,18 @@ export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, es
   });
 }
 
-/** Withhold actual CII bytes when a complete source component mass is duplicated. */
-export function holdDuplicateRigidMassOutput(output, audit) {
-  const hasDuplicate = (audit?.flags || []).some((row) => row.code === 'DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
-  const diagnostics = { ...(output?.diagnostics || {}), rigidMassAudit: audit };
-  if (!hasDuplicate) return { ...output, diagnostics };
-  const error = 'RIGID_MASS_CONSERVATION_HOLD';
-  return {
-    ...output,
-    ok: false,
-    error,
-    ciiText: '',
-    ciiName: '',
-    diagnostics: { ...diagnostics, rigidMassCiiReleaseAuthorized: false },
-    logs: [...(output?.logs || []), error],
-  };
+/** Fail-closed output gate. A clean source parity check is not engineering mass approval. */
+export function holdDuplicateRigidMassOutput(output,audit) {
+  const complete=audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
+    audit.auditedRigidCount===audit.rigidCount&&audit.massVerified===false&&
+    audit.status==='SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'&&
+    Array.isArray(audit.flags)&&audit.flags.length===0;
+  const diagnostics={...(output?.diagnostics||{}),rigidMassAudit:audit||{
+    schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',status:'NOT_RUN',massVerified:false},
+    rigidMassEngineeringQualified:false};
+  if(complete)return {...output,diagnostics};
+  const error='RIGID_MASS_CONSERVATION_HOLD';
+  return {...output,ok:false,error,ciiText:'',ciiName:'',
+    diagnostics:{...diagnostics,rigidMassCiiReleaseAuthorized:false},
+    logs:[...(output?.logs||[]),error]};
 }
