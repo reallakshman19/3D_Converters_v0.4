@@ -162,14 +162,6 @@ export function extractXmlRigidAuditRows(xmlText) {
   return result;
 }
 
-function empiricalRequest(row) {
-  // The repository API has model families for valve/flange devices, not PCOM or pipe metal.
-  if (row?.componentType !== 'FLAN' && row?.componentType !== 'RIGID') return null;
-  if (!/WELD(?:ING)?\s*NECK\s*FLANGE/i.test(row.dtxr || '')) return null;
-  if (!positive(row.dn) || !positive(row.rating)) return null;
-  return { typeDesc: 'Weldneck Flange', dn: row.dn, rating: row.rating, target: 'RF/RTJ KG' };
-}
-
 /**
  * Read-only actual-CII-to-source audit. Every numeric CII weight is resolved
  * from ELEMENTS -> pointer -> RIGID, never from an XML node as a substitute.
