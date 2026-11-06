@@ -31,6 +31,19 @@ assert.equal(withheld.diagnostics.rigidMassAudit.status,'NOT_RUN');
 assert.ok(withheld.diagnostics.rigidMassAudit.errorCode);
 assert.equal(withheld.enrichedText,xml,'keep reviewed enriched XML when CII is held');
 
+const missing=await runXmlCii2019WorkflowService(job,{
+  runParityEnricher:runtime.runParityEnricher,
+  engineRunner:async()=>({
+    ok:true,sourceKind:'xml',ciiText:'',ciiName:'',
+    enrichedText:xml,enrichedName:'synthetic-enriched.xml',
+    diagnostics:{},logs:[]
+  })
+});
+assert.equal(missing.ok,false);
+assert.equal(missing.ciiText,'');
+assert.equal(missing.diagnostics.rigidMassAudit.errorCode,'CII_OUTPUT_MISSING');
+assert.equal(missing.diagnostics.rigidMassCiiReleaseAuthorized,false);
+
 let blockedEngineCalls=0;
 const parityBlocked=await runXmlCii2019WorkflowService(job,{
   async runParityEnricher() {return {applied:false,error:'SOURCE_PARITY_BLOCKED',logs:[]};},
