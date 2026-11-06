@@ -1,0 +1,25 @@
+name: XML-CII native rigid component owner guard
+on:
+  push:
+    branches:
+      - guard/xml-cii-native-rigid-owner-20261107
+  pull_request:
+    paths:
+      - 'converters/scripts/xml_to_cii2019.py'
+      - 'tests/test_xml_cii_native_rigid_owner_guard.py'
+      - '.github/workflows/xml-cii-native-owner-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-writer-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check native writer syntax and exact guarded records
+        run: |
+          python3 -m py_compile converters/scripts/xml_to_cii2019.py
+          python3 tests/test_xml_cii_native_rigid_owner_guard.py
