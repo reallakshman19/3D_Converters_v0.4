@@ -9,6 +9,8 @@ on:
       - 'tabs/empirical-weight-tuning-tab.js'
       - 'tests/empirical-weight-*.test.*'
       - 'docs/EmpiricalWeightAPI.md'
+      - 'scripts/verify-empirical-nearest-browser.mjs'
+      - 'tests/fixtures/empirical-weight-nearest-browser.html'
       - '.github/workflows/empirical-weight-nearest-interpolation.yml'
   workflow_dispatch:
 
@@ -40,3 +42,29 @@ jobs:
           node --test tests/empirical-weight-tuning.test.mjs
           node --test tests/empirical-weight-sandbox-ui-static.test.mjs
           node tests/empirical-weight-validation-report.test.js
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start static Sandbox app server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/empirical-nearest-server.log 2>&1 &
+          node -e "const u='http://127.0.0.1:4173'; let n=0; const p=async()=>{try{const r=await fetch(u); if(r.ok)return;}catch{}if(++n>60)process.exit(1);setTimeout(p,500)};p();"
+
+      - name: Chromium Sandbox manual NS5 interpolation and screenshot
+        env:
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+          EMPIRICAL_BROWSER_ARTIFACT_DIR: artifacts/empirical-nearest-browser
+        run: node scripts/verify-empirical-nearest-browser.mjs
+
+      - name: Upload browser screenshot and qualification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: empirical-nearest-browser-${{ github.sha }}
+          path: |
+            artifacts/empirical-nearest-browser/**
+            /tmp/empirical-nearest-server.log
+          if-no-files-found: warn
