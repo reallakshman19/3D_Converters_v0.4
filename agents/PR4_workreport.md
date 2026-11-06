@@ -1,10 +1,10 @@
-# WIP-RIGMASS-R1 — recovery-first work report
+# PR4 — R1 rigid post-split mass witness recovery report
 
 **Task:** XML-CII2019-RIGID-POSTSPLIT-MASS-WITNESS-R1-V04  
 **Decision:** SALVAGE_PARTIAL · R1 HOLD · R2 NO-GO  
 **Baseline SHA:** b856ddd01a66c0dbee8c519bfd0bd8118d1f3979  
 **Branch:** feat/xml-cii-r1-rigid-postsplit-witness-20261106  
-**PR:** pending draft allocation; rename this report to agents/PR<NUMBER>_workreport.md after allocation.  
+**PR:** https://github.com/reallakshman19/3D_Converters_v0.4/pull/4 (DRAFT, HOLD).  
 **Authority:** tool-only, opt-in, read-only. No converter production edits, no local Windows checkout access, no merge.
 
 ## Recovery facts
@@ -21,7 +21,7 @@
 * `tools/rigid_mass_witness_r1.py`: new standalone read-only source/independent CII/reconciliation CLI.
 * `tests/test_rigid_mass_witness_r1.py`: new synthetic adversarial tests.
 * `docs/xml-cii2019/R1_RIGID_POSTSPLIT_MASS_WITNESS.md`: safety, CLI, inputs, gates and next actions.
-* `agents/WIP-RIGMASS-R1_workreport.md`: durable recovery ledger (to rename post-PR allocation).
+* `agents/PR4_workreport.md`: durable recovery ledger.
 
 No existing production modules or tests are edited.
 
