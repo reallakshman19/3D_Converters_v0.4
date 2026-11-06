@@ -144,8 +144,9 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
       });
     } catch (error) {
       audit = {
-        schema: 'xml-cii2019-rigid-empirical-ownership-audit/v1',
+        schema: 'xml-cii2019-rigid-empirical-ownership-audit/v2',
         status: 'NOT_RUN',
+        massVerified: false,
         authority: 'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
         errorCode: String(error?.message || 'RIGID_MASS_AUDIT_UNAVAILABLE').split(':')[0],
       };
