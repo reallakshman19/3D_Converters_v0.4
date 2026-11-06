@@ -13,6 +13,13 @@ const dot = (a,b) => a.reduce((sum,v,i)=>sum+v*b[i],0);
 const len = (a,b) => Math.hypot(...vec(a,b));
 const keyRef = (branch, ref) => branch + '\u0000' + refKey(ref);
 const keyNode = (branch, node) => branch + '\u0000' + node;
+// Fast accidental-staleness guard; NOT a cryptographic source/engineering proof.
+function ciiFingerprint(value) {
+  const content=String(value??'');
+  let hash=2166136261;
+  for(let i=0;i<content.length;i++)hash=Math.imul(hash^content.charCodeAt(i),16777619);
+  return (hash>>>0).toString(16).padStart(8,'0')+':'+content.length;
+}
 
 function positiveInteriorOverlap(a,b,start,end,toleranceMm=0.2) {
   const span=vec(end,start), L=Math.hypot(...span);
@@ -252,7 +259,8 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
     physicalComponentRef:row.physicalComponentRef,code})));
   return {schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',
     authority:'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
-    massVerified:false,elementCount:parsed.elementCount,rigidCount:parsed.rigidCount,
+    massVerified:false,ciiFingerprint:ciiFingerprint(ciiText),
+    elementCount:parsed.elementCount,rigidCount:parsed.rigidCount,
     auditedRigidCount:rows.length,
     summary:{flaggedElements:new Set(flags.map(f=>f.element)).size,
       flagsByCode:Object.fromEntries([...new Set(flags.map(f=>f.code))].sort().map(
@@ -293,6 +301,7 @@ export function holdDuplicateRigidMassOutput(output,audit) {
   const summaryClean=audit?.summary?.flaggedElements===0&&
     audit?.summary?.flagsByCode&&Object.keys(audit.summary.flagsByCode).length===0;
   const complete=typeof output?.ciiText==='string'&&output.ciiText.length>0&&
+    audit?.ciiFingerprint===ciiFingerprint(output.ciiText)&&
     audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
     audit.auditedRigidCount===audit.rigidCount&&audit.massVerified===false&&
     audit.status==='SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'&&
