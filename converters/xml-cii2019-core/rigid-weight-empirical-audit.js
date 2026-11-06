@@ -165,10 +165,14 @@ export function auditRigidWeightOwnership({ ciiText, xmlRows, estimator, kgToNew
       if (positiveWeights.length > 1) row.flags.push('SOURCE_ENDPOINT_WEIGHTS_CONFLICT');
       const request = empiricalRequest(row._to);
       if (request) {
-        const result = (estimator || createEmpiricalWeightEstimator()).estimate(request);
-        row.empirical = result?.ok
-          ? { status: 'API_ESTIMATE', weightKg: result.weightKg, modelId: result.modelId, approach: result.approach, confidence: result.confidence }
-          : { status: 'API_UNAVAILABLE', code: result?.error?.code || 'UNKNOWN' };
+        try {
+          const result = (estimator || createEmpiricalWeightEstimator()).estimate(request);
+          row.empirical = result?.ok
+            ? { status: 'API_ESTIMATE', weightKg: result.weightKg, modelId: result.modelId, approach: result.approach, confidence: result.confidence }
+            : { status: 'API_UNAVAILABLE', code: result?.error?.code || 'UNKNOWN' };
+        } catch {
+          row.empirical = { status: 'API_UNAVAILABLE', code: 'EMPIRICAL_ESTIMATOR_FAILED' };
+        }
       } else {
         row.empirical = { status: 'API_NOT_APPLICABLE_OR_MISSING_INPUT' };
       }
@@ -189,13 +193,21 @@ export function auditRigidWeightOwnership({ ciiText, xmlRows, estimator, kgToNew
   };
 }
 
-export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, estimator } = {}) {
-  const resolvedEstimator = estimator || createEmpiricalWeightEstimator(
-    Array.isArray(weightMasterRows) && weightMasterRows.length ? { masterRows: weightMasterRows } : undefined);
+export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, estimator, kgToNewtonScale = 10 } = {}) {
+  let resolvedEstimator = estimator;
+  if (!resolvedEstimator) {
+    try {
+      resolvedEstimator = createEmpiricalWeightEstimator(
+        Array.isArray(weightMasterRows) && weightMasterRows.length ? { masterRows: weightMasterRows } : undefined);
+    } catch {
+      resolvedEstimator = { estimate: () => ({ ok: false, error: { code: 'EMPIRICAL_MASTER_UNAVAILABLE' } }) };
+    }
+  }
   return auditRigidWeightOwnership({
     ciiText,
     xmlRows: extractXmlRigidAuditRows(xmlText),
     estimator: resolvedEstimator,
+    kgToNewtonScale,
   });
 }
 
