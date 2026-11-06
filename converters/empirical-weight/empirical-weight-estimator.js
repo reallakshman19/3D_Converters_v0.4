@@ -25,7 +25,8 @@ function targetOf(input = {}) {
 }
 
 function fail(code, message, details = {}) {
-  return { ok: false, error: { code, message }, ...details };
+  // Failure state must not be overwritten by normalized request details.ok=true.
+  return { ...details, ok: false, error: { code, message } };
 }
 
 function buildFamilyLookup(model) {
