@@ -132,6 +132,13 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
   // Independently inspect the ACTUAL emitted ELEMENTS/pointers/RIGID records.
   // Empirical API estimates are advisory for recognized valve/flange families;
   // they are never used to manufacture pipe/PCOM mass or change CII weights.
+  if (normalized.ok && ['cii-only', 'both'].includes(engineJob.options?.outputMode) &&
+      !normalized.ciiText) {
+    return holdDuplicateRigidMassOutput(normalized, {
+      schema: 'xml-cii2019-rigid-empirical-ownership-audit/v2',
+      status: 'NOT_RUN', massVerified: false, errorCode: 'CII_OUTPUT_MISSING',
+    });
+  }
   if (normalized.ciiText) {
     let audit;
     try {
