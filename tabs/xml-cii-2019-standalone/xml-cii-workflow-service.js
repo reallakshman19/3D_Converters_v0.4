@@ -140,6 +140,7 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
         ciiText: normalized.ciiText,
         xmlText: engineJob.sourceText,
         weightMasterRows: config?.weight?.masterRows,
+        kgToNewtonScale: engineJob.options?.kgToNewton === false ? 1 : 10,
       });
     } catch (error) {
       audit = {
