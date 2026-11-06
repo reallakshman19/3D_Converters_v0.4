@@ -136,9 +136,16 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
     let audit;
     try {
       const config = parseSupportConfig(engineJob.supportConfigJson);
+      // Audit the exact native CII input, not an earlier XML when a reviewed
+      // TopoFix transaction changed the geometry. Missing transaction custody HOLDS.
+      const ciiSourceIsTopoFix = normalized.ciiInputSource === 'topofix';
+      if (ciiSourceIsTopoFix && (!normalized.topoFixCommitted || !normalized.topoFixXmlText))
+        throw new Error('RIGID_AUDIT_TOPOFIX_INPUT_MISSING');
+      const actualCiiInputXml = ciiSourceIsTopoFix
+        ? normalized.topoFixXmlText : engineJob.sourceText;
       audit = auditRigidWeightFromXml({
         ciiText: normalized.ciiText,
-        xmlText: engineJob.sourceText,
+        xmlText: actualCiiInputXml,
         weightMasterRows: config?.weight?.masterRows,
         kgToNewtonScale: engineJob.options?.kgToNewton === false ? 1 : 10,
       });
