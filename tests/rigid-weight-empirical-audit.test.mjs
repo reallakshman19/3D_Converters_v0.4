@@ -35,6 +35,9 @@ const held = holdDuplicateRigidMassOutput({ok:true,ciiText:cii,ciiName:'GLRD.cii
 assert.equal(held.ok,false);
 assert.equal(held.ciiText,'');
 assert.equal(held.error,'RIGID_MASS_CONSERVATION_HOLD');
+const liveApi = auditRigidWeightOwnership({ ciiText: cii, xmlRows: source });
+assert.equal(liveApi.rows[0].empirical.status, 'API_NOT_APPLICABLE_CONNECTION');
+assert.match(liveApi.rows[1].empirical.status, /^API_(ESTIMATE|UNAVAILABLE)$/);
 const apiUnavailable = auditRigidWeightOwnership({ ciiText: cii, xmlRows: source, estimator: { estimate: () => { throw Error('API offline'); } } });
 assert.equal(apiUnavailable.flags[0].code, 'DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
 assert.equal(apiUnavailable.rows[1].empirical.code, 'EMPIRICAL_ESTIMATOR_FAILED');
@@ -44,4 +47,4 @@ assert.equal(unitOne.flags[0].code, 'DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION
 const clean = cii.replace('150 0\n150 0', '0 0\n150 0');
 assert.equal(auditRigidWeightOwnership({ciiText:clean,xmlRows:source,estimator}).flags.length,0);
 assert.throws(() => parseCiiRigidElementWeights(cii.replace('0 1 0 0 0 0','0 9 0 0 0 0')), /CII_ELEMENT_INVALID/);
-console.log('rigid-weight-empirical-audit: 14 assertions PASS');
+console.log('rigid-weight-empirical-audit: 16 assertions PASS');
