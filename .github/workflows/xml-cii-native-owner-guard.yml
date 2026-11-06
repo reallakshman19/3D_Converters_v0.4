@@ -7,6 +7,7 @@ on:
     paths:
       - 'converters/scripts/xml_to_cii2019.py'
       - 'tests/test_xml_cii_native_rigid_owner_guard.py'
+      - 'tests/test_xml_cii_native_cli_guard.py'
       - '.github/workflows/xml-cii-native-owner-guard.yml'
   workflow_dispatch:
 
@@ -23,3 +24,4 @@ jobs:
         run: |
           python3 -m py_compile converters/scripts/xml_to_cii2019.py
           python3 tests/test_xml_cii_native_rigid_owner_guard.py
+          python3 tests/test_xml_cii_native_cli_guard.py
