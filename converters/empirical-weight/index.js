@@ -5,6 +5,7 @@ export {
   lookupEmpiricalWeight,
   estimateEmpiricalWeightApproach1,
   estimateEmpiricalWeightApproach2,
+  estimateEmpiricalWeightNearestInterpolation,
 } from './empirical-weight-estimator.js';
 export {
   cloneEmpiricalWeightModel,
