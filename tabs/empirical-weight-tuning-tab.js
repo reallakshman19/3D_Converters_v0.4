@@ -115,7 +115,7 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       typeDesc: family,
       rating: sandboxRating,
     });
-    if (!options.sizes.includes(Number(sandboxNs))) sandboxNs = options.sizes[0] ?? null;
+    if (!Number.isFinite(Number(sandboxNs)) || !(Number(sandboxNs) > 0)) sandboxNs = options.sizes[0] ?? null;
     return options;
   }
 
@@ -188,9 +188,11 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
   function sandboxSummaryRows(result) {
     return [
       ['Exact master cell', 'exact'],
+      ['Nearest master bracket · same family/rating', 'nearest'],
       ['Approach 1 · size-band equation', 'approach1'],
       ['Approach 2 · matrix stack', 'approach2'],
-      ['Final API estimate', 'final'],
+      ['Final API estimate · current production', 'final'],
+      ['Final API · nearest-first (review only)', 'finalNearest'],
     ].map(([label, key]) => {
       const activeResult = result.active[key];
       const candidateResult = result.candidate[key];
@@ -283,9 +285,10 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       render();
     }));
     container.querySelector('[data-sandbox="target"]')?.addEventListener('change', (event) => { target = event.target.value; render(); });
-    container.querySelector('[data-sandbox="family"]')?.addEventListener('change', (event) => { family = event.target.value; render(); });
+    container.querySelector('[data-sandbox="family"]')?.addEventListener('change', (event) => { family = event.target.value; sandboxNs = null; render(); });
     container.querySelector('[data-sandbox="rating"]')?.addEventListener('change', (event) => { sandboxRating = Number(event.target.value); sandboxNs = null; render(); });
-    container.querySelector('[data-sandbox="ns"]')?.addEventListener('change', (event) => { sandboxNs = Number(event.target.value); render(); });
+    container.querySelector('[data-sandbox="ns"]')?.addEventListener('change', (event) => { if (event.target.value !== 'custom') { sandboxNs = Number(event.target.value); render(); } });
+    container.querySelector('[data-sandbox="custom-ns"]')?.addEventListener('change', (event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) { sandboxNs = value; render(); } });
     container.querySelector('[data-action="revert"]')?.addEventListener('click', () => { session.revert(); render(); });
     container.querySelector('[data-action="save"]')?.addEventListener('click', () => {
       const model = session.snapshot();
