@@ -3,6 +3,7 @@ import { runXmlCii2019StandaloneEngineJob } from './xml-cii-workflow-engine-clie
 import { createWorkflowDiagnostics, normalizeWorkflowResult } from './xml-cii-workflow-types.js';
 import { applyStandaloneSifFacts } from './xml-cii-standalone-sif-apply.js';
 import { enrichStandaloneXmlForRun } from './xml-cii-standalone-run-parity.js';
+import { auditRigidWeightFromXml, holdDuplicateRigidMassOutput } from '../../converters/xml-cii2019-core/rigid-weight-empirical-audit.js';
 
 function parseSupportConfig(raw) {
   try {
@@ -127,6 +128,28 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
     normalized.diagnostics.runParityEvidence = parity.evidence;
     normalized.diagnostics.converterInputReleased = true;
     normalized.diagnostics.converterInputDigest = parity.evidence.engineInputDigest;
+  }
+  // Independently inspect the ACTUAL emitted ELEMENTS/pointers/RIGID records.
+  // Empirical API estimates are advisory for recognized valve/flange families;
+  // they are never used to manufacture pipe/PCOM mass or change CII weights.
+  if (normalized.ciiText) {
+    let audit;
+    try {
+      const config = parseSupportConfig(engineJob.supportConfigJson);
+      audit = auditRigidWeightFromXml({
+        ciiText: normalized.ciiText,
+        xmlText: engineJob.sourceText,
+        weightMasterRows: config?.weight?.masterRows,
+      });
+    } catch (error) {
+      audit = {
+        schema: 'xml-cii2019-rigid-empirical-ownership-audit/v1',
+        status: 'NOT_RUN',
+        authority: 'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
+        errorCode: String(error?.message || 'RIGID_MASS_AUDIT_UNAVAILABLE').split(':')[0],
+      };
+    }
+    return holdDuplicateRigidMassOutput(normalized, audit);
   }
   return normalized;
 }
