@@ -280,14 +280,27 @@ export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, es
 
 /** Fail-closed output gate. A clean source parity check is not engineering mass approval. */
 export function holdDuplicateRigidMassOutput(output,audit) {
-  const complete=audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
+  // A changed status or empty top-level flags cannot wash out flagged child rows.
+  // A missing/partial/contradictory evidence object is never a qualified result.
+  const evidenceRowsValid=Array.isArray(audit?.rows)&&
+    audit.rows.length===audit.rigidCount&&
+    audit.rows.every(row=>Array.isArray(row.flags)&&row.flags.length===0&&
+      Number.isSafeInteger(row.rigidPointer)&&row.rigidPointer>0&&
+      Number.isFinite(row.weightN)&&row.weightN>=0&&
+      row.ownership==='GEOMETRIC_INTERIOR_OVERLAP'&&
+      row.massAuthority==='XML_CONSISTENT_UNAPPROVED');
+  const summaryClean=audit?.summary?.flaggedElements===0&&
+    audit?.summary?.flagsByCode&&Object.keys(audit.summary.flagsByCode).length===0;
+  const complete=typeof output?.ciiText==='string'&&output.ciiText.length>0&&
+    audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
     audit.auditedRigidCount===audit.rigidCount&&audit.massVerified===false&&
     audit.status==='SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'&&
-    Array.isArray(audit.flags)&&audit.flags.length===0;
+    Array.isArray(audit.flags)&&audit.flags.length===0&&
+    evidenceRowsValid&&summaryClean;
   const diagnostics={...(output?.diagnostics||{}),rigidMassAudit:audit||{
     schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',status:'NOT_RUN',massVerified:false},
     rigidMassEngineeringQualified:false};
-  if(complete)return {...output,diagnostics};
+  if(complete)return {...output,diagnostics,logs:[...(output?.logs||[]),'RIGID_MASS_SOURCE_PARITY_ONLY_NOT_ENGINEERING_APPROVED']};
   const error='RIGID_MASS_CONSERVATION_HOLD';
   return {...output,ok:false,error,ciiText:'',ciiName:'',
     diagnostics:{...diagnostics,rigidMassCiiReleaseAuthorized:false},
