@@ -3,6 +3,8 @@ import test from 'node:test';
 import { DEFAULT_WEIGHT_MASTER_ROWS } from '../converters/xml-cii2019-core/default-weight-master-rows.js';
 import { rankXmlCiiWeightCandidates } from '../converters/xml-cii2019-core/weight-valve-hints.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../converters/xml-cii2019-core/flange-weight-fallback.js';
+import { modeARigidCandidateMarkup } from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js';
+import { isSingleOrAttaRigidReviewDialog } from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js';
 import { isApprovedPhysicalMassCandidate } from '../converters/xml-cii2019-core/physical-mass-approval.js';
 
 const config = { weight: { masterRows: DEFAULT_WEIGHT_MASTER_ROWS } };
@@ -88,4 +90,52 @@ test('unknown route-only length remains held, not a synthesized mass', () => {
   assert.deepEqual(after.candidates, []);
   assert.equal(after.ranking.best, null);
   assert.equal(after.massSuggestionHold, true);
+});
+
+test('single/ATTA dashboard must not attach to a consolidated nine-column Mode A dialog', () => {
+  const normal = { querySelector: sel =>
+    sel === '.mc-rigid-review-input[data-rigid-review-key]' ? {} : null };
+  const modeA = { querySelector: sel =>
+    sel === '[data-mode-a-rigid-body]' ? {} : null };
+  const mixed = { querySelector: sel =>
+    ['.mc-rigid-review-input[data-rigid-review-key]', '[data-mode-a-rigid-body]'].includes(sel) ? {} : null };
+  assert.equal(isSingleOrAttaRigidReviewDialog(normal), true);
+  assert.equal(isSingleOrAttaRigidReviewDialog(modeA), false);
+  assert.equal(isSingleOrAttaRigidReviewDialog(mixed), false);
+  assert.equal(isSingleOrAttaRigidReviewDialog(null), false);
+});
+
+test('Mode A known flange shows ranked source family and method, never clickable estimate', () => {
+  const before = rankedIssue({ dtxr: 'WELDING NECK FLANGE SCH 80S 900#', componentType: 'RIGID' });
+  const after = applyXmlCiiFlangeWeightFallbackToIssue(before, config);
+  const markup = modeARigidCandidateMarkup(after, 0);
+  assert.match(markup, /data-mode-a-rigid-advisory/);
+  assert.match(markup, /Weldneck Flange/);
+  assert.match(markup, /advisory only/);
+  assert.doesNotMatch(markup, /data-mode-a-rigid-candidate=/);
+  assert.doesNotMatch(markup, /data-mode-a-unknown-weight-suggestion/);
+});
+
+test('Mode A PCOM Unknown displays one passive length-rule sidecar instead of legacy ranking', () => {
+  const before = rankedIssue({ componentType: 'PCOM', reviewCategory: 'UNKNOWN',
+    dtxr: 'VALVE TRUNN FB FLGD 900#', lengthMm: 19.1 });
+  const after = applyXmlCiiFlangeWeightFallbackToIssue(before, config);
+  const markup = modeARigidCandidateMarkup(after, 0);
+  assert.equal((markup.match(/data-mode-a-unknown-weight-suggestion/g) || []).length, 1);
+  assert.match(markup, /Weldneck Flange/);
+  assert.match(markup, /2\.628 kg/);
+  assert.doesNotMatch(markup, /data-mode-a-rigid-candidate=/);
+});
+
+test('Mode A approved source mass remains the only clickable candidate', () => {
+  const base = { candidates: [{ weight: 15, selectedWeight: 15,
+    massAuthority: 'APPROVED_SOURCE_MASS', engineeringMassApproved: true,
+    acceptedForCii: true, preferred: true, weightMethod: 'source-verified' }] };
+  const approved = modeARigidCandidateMarkup(base, 2);
+  assert.match(approved, /data-mode-a-rigid-approved="true"/);
+  assert.match(approved, /data-mode-a-rigid-candidate="2"/);
+  const unapproved = modeARigidCandidateMarkup({ ...base,
+    candidates: [{ ...base.candidates[0], acceptedForCii: false }] }, 2);
+  assert.match(unapproved, /data-mode-a-rigid-advisory/);
+  assert.doesNotMatch(unapproved, /data-mode-a-rigid-candidate=/);
 });
