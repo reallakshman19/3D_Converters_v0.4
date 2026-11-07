@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
@@ -35,6 +35,7 @@ export async function collectModeARigidWeightReviewIssues(state = {}, config = {
       branchRating: issue.rating,
       candidates: ranking.candidates.slice(0, 5),
       rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
+      comparisonReferences:comparisonWeightMasterReferences({...issue,rating},config),
     }, config);
   }).filter((issue) => !issue.mapped);
 }
