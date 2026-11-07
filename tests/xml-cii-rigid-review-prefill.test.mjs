@@ -6,6 +6,7 @@ import { applyXmlCiiFlangeWeightFallbackToIssue } from '../converters/xml-cii201
 import {
   proposedRigidReviewWeight,stageRigidReviewProposal,clearRigidReviewProposal,
   rigidReviewProposalNeedsVerification,
+  isRigidWeightReviewEligibleIssue,
 } from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js';
 import {readFileSync} from 'node:fs';
 
@@ -82,5 +83,14 @@ test('both standalone variants and Mode A expose bulk drafts and fail-closed rev
     assert.match(src,/rigidReviewProposalNeedsVerification\(input\)/,file);
     assert.match(src,/stageRigidReviewProposal\(input/,file);
     assert.doesNotMatch(src,/massAuthority:\s*'APPROVED_SOURCE_MASS'/,file);
+  }
+});
+
+test('physical rigid review excludes OLET/TEE/GASK despite valve-like DTXR text',()=>{
+  for(const componentType of ['OLET','TEE','GASK','ELBO','BRAN','REDU']){
+    assert.equal(isRigidWeightReviewEligibleIssue({componentType,dtxr:'VALVE FLANGED'}),false,componentType);
+  }
+  for(const componentType of ['FLAN','RIGID','PCOM','VALV','INST']){
+    assert.equal(isRigidWeightReviewEligibleIssue({componentType}),true,componentType);
   }
 });
