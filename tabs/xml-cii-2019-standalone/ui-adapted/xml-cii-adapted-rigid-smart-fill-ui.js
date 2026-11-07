@@ -15,6 +15,7 @@ function writePolicy(policy) { try { localStorage.setItem(POLICY_KEY, JSON.strin
 function valueState(dialog) { return dialog._rigidSmartValues ||= {}; }
 
 function candidateFrom(button) {
+  if (button?.dataset?.rigidReviewApproved !== 'true') return null;
   const title = text(button.title);
   const scoreMatch = title.match(/Score\s+(\d+(?:\.\d+)?)%/i);
   return {
@@ -43,7 +44,7 @@ function rawRow(tr, values) {
     lengthMm: numeric(text(cells[5]?.textContent).replace(/[^0-9.]/g, '')),
     manualWeight: entry?.source === 'manual' ? entry.value : '',
     selectedSource: entry?.source || '', weightInput, ratingInput,
-    candidates: [...tr.querySelectorAll('[data-rigid-review-candidate]')].map(candidateFrom),
+    candidates: [...tr.querySelectorAll('[data-rigid-review-candidate][data-rigid-review-approved="true"]')].map(candidateFrom).filter(Boolean),
   };
 }
 
