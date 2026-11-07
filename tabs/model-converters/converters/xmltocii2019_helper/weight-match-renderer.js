@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260626-weight-review-2';
+import { collectXmlCiiWeightMatchRows, reconcileXmlCiiWeightMatchSourceBores } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
 import {
@@ -14,7 +14,7 @@ import {
   specialValveFactorRows,
   valveHintLengthToleranceMm,
   valveHintMappingRows,
-} from '../../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20260626-weight-factor-1';
+} from '../../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2';
 import { getXmlCiiPreviewRuntimeConfig } from '../../shared/preview-filldown.js?v=20260620-rating-runtime-1';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
@@ -174,7 +174,7 @@ function emptyRanking() { return { nodeHint: null, semanticSource: null, candida
 function rerankWithRating(row, config, { ratingMode = 'preview', snapshot = readXmlCiiPreviewRatingSnapshot() } = {}) {
   const authority = resolveXmlCiiWeightMatchRating(row, { mode: ratingMode, snapshot });
   const rating = authority.rating;
-  const ranking = rating
+  const ranking = rating && !row.sourceBoreHold
     ? rankXmlCiiWeightCandidates({ boreMm: row.boreMm, rating, lengthMm: row.lengthMm, nodeName: row.nodeName, componentType: row.componentType, componentRefNo: row.componentRefNo, dtxr: row.dtxr }, config, { includeRejected: true })
     : emptyRanking();
   const derivedValveHint = formatValveHint(ranking.nodeHint) || (() => {
@@ -289,7 +289,7 @@ export function xmlCiiRenderWeightMatchPhase() {
   return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
 }
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v3-nearest-family-20261107';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v4-glrd-source-bore-family-20261107';
 const PV_CACHE_KEY = 'xml-cii-pv-cache-v2';
 const CACHE_MAX_BYTES = 2_500_000;
 function wmCacheFingerprint(file, jsonLen, masterLen, overrides, ratingMode, snapshotRevision) { return `${file?.name || ''}:${file?.size || 0}|j${jsonLen}|m${masterLen}|o${JSON.stringify(overrides || {})}|rm${ratingMode}|pr${snapshotRevision || ''}`; }
@@ -381,7 +381,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const cfg = await ensureWeightMasterRows(mergeRuntimeOverrides(mergeRuntimeOverrides(enrichedConfig, liveConfig), getXmlCiiPreviewRuntimeConfig()));
       if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
       const geometryXml = applyXmlCiiStagedGeometryAuthority(enriched.xmlText || xmlText, jsonText, { config: cfg }).xmlText;
-      localIssues = applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg, { ratingMode, snapshot }), cfg));
+      localIssues = reconcileXmlCiiWeightMatchSourceBores(applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml), xmlText).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg, { ratingMode, snapshot }), cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
       const flange = localIssues.filter((row) => row.candidates?.[0]?.flangeWeightFallback).length;
