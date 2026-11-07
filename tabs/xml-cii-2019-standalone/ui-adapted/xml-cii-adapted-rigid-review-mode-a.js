@@ -335,6 +335,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       updateReviewCounts();
     };
     const draw = (preserve = new Map(), skipped = new Set()) => {
+      hideBulkReview();
+      reviewOnly=false;
+      missingOnly=false;
       rows = flattenModeARigidReviewEntries(workingEntries);
       if (body) body.innerHTML = rows.map(rowMarkup).join('');
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
@@ -349,9 +352,53 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     };
     bindCandidateButtons(overlay, rows);
     filter(); // Show accurate missing-row count and source-ref trace immediately.
+    reviewButton?.addEventListener('click',()=>{
+      reviewOnly=!reviewOnly;
+      if(reviewOnly)missingOnly=false;
+      filter();
+      if(reviewOnly)pendingReviewRows()[0]?.scrollIntoView?.({block:'nearest'});
+    });
+    openBulkButton?.addEventListener('click',showBulkReview);
+    reviewAttest?.addEventListener('change',()=>{
+      if(reviewConfirm)reviewConfirm.disabled=!reviewAttest.checked || !pendingReviewRows().length;
+    });
+    overlay.querySelector('[data-mode-a-rigid-close-bulk-review]')?.addEventListener('click',hideBulkReview);
+    reviewConfirm?.addEventListener('click',()=>{
+      if(!reviewAttest?.checked){
+        setStatus('Independent mass verification acknowledgment is required. No values have been approved.',true);
+        return;
+      }
+      const pending=pendingReviewRows();
+      if(!pending.length){hideBulkReview();filter();return;}
+      for(const tr of pending){
+        const input=tr.querySelector('.mc-rigid-review-input');
+        const verified=tr.querySelector('[data-rigid-suggestion-verified]');
+        if(!input || !verified)continue;
+        verified.checked=true;
+        input.dataset.rigidReviewMethod='EXPLICIT_BULK_OWNER_ATTESTATION';
+      }
+      hideBulkReview();
+      reviewOnly=false;
+      filter();
+      setStatus('Explicit independent review acknowledged for '+pending.length+
+        ' estimated physical-component masses. Click Apply Weights and Run All Models to continue. '+
+        'No output has been produced yet.',false);
+    });
     overlay.addEventListener('change',event=>{
+      if(event.target?.matches?.('[data-rigid-suggestion-verified]')){
+        const input=event.target.closest('tr')?.querySelector('.mc-rigid-review-input');
+        if(input){
+          if(event.target.checked && input.dataset.rigidSuggestionDraft==='estimate')
+            input.dataset.rigidReviewMethod='EXPLICIT_INDIVIDUAL_OWNER_REVIEW';
+          else delete input.dataset.rigidReviewMethod;
+        }
+        filter();
+      }
       if(event.target?.matches?.('[data-mode-a-rigid-choice]') ||
-         event.target?.matches?.('.mc-rigid-review-input')) refreshMissingList();
+         event.target?.matches?.('.mc-rigid-review-input')){
+        hideBulkReview(); // any changed candidate invalidates a previous blanket confirmation
+        filter();
+      }
     });
     overlay.addEventListener('click',event=>{
       if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]'))
@@ -362,11 +409,14 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         clearRigidReviewProposal(event.target);
         delete event.target.dataset.rigidSkippedZero;
         delete event.target.dataset.rigidChoiceIndex;
-        refreshMissingList();
+        delete event.target.dataset.rigidReviewMethod;
+        hideBulkReview();
+        filter();
       }
     });
     missingButton?.addEventListener('click',()=>{
       missingOnly=!missingOnly;
+      if(missingOnly)reviewOnly=false;
       filter();
       if(missingOnly)missingRows()[0]?.scrollIntoView?.({block:'nearest'});
     });
@@ -382,8 +432,10 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         input.style.borderColor='#fbbf24';
       }
       const count=missing.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.rigidSkippedZero==='true').length;
-      setStatus(count+' blank row(s) marked 0 kg SKIPPED. These remain zero mass; they are not approved source weights.',false);
       filter();
+      setStatus(count+' blank row(s) marked 0 kg SKIPPED. '+pendingReviewRows().length+
+        ' estimated masses still require independent Reviewed confirmation. '+
+        'No skipped zero is an approved physical source mass.',false);
     });
     overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
       let filled=0,skipped=0;
@@ -393,7 +445,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         if(!input || !proposal || (input.value && !input.dataset.rigidSuggestionDraft)) {skipped++;return;}
         if(stageRigidReviewProposal(input,proposal))filled++; else skipped++;
       });
-      setStatus(`Prefilled ${filled} review draft(s); ${skipped} unavailable or entered manually. Verify each estimated mass before Apply.`,filled===0);
+      hideBulkReview();
+      filter();
+      setStatus(`Prefilled ${filled} review draft(s), ${missingRows().length} blank(s) remaining. `+
+        `${pendingReviewRows().length} estimated masses require explicit independent review. `+
+        'Use Show pending reviews, or Review draft weights after checking the source. No values saved.',filled===0);
     });
     search?.addEventListener('input', filter);
     source?.addEventListener('change', filter);
