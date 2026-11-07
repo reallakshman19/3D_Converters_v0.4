@@ -187,6 +187,41 @@ try {
  assert.ok(Object.values(fiveUpdates.weightsByKey).every(v=>Number(v)>0));
  assert.equal(Object.values(fiveUpdates.weightsByKey).filter(v=>Number(v)===0).length,0);
 
+ // Simulated explicit Owner review must also cross the exact standalone
+ // run-parity handoff, not merely close a popup. Do not describe the browser
+ // simulator's attestation as authentic engineering mass approval.
+ const nativeHandoff=await page.evaluate(async ({xml,stage,fiveUpdates})=>{
+   const {applyModeAConsolidatedRigidReviewUpdates}=
+     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js');
+   const {enrichStandaloneXmlForRun}=
+     await import('/tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js');
+   const entry=window.__glrdReviewEntries[0];
+   const state={sourceBatch:{activeSourceId:entry.sourceId,sources:[{
+     sourceId:entry.sourceId,supportConfigJson:JSON.stringify(entry.config)
+   }]}};
+   const updated=applyModeAConsolidatedRigidReviewUpdates(state,{
+     [entry.sourceId]:fiveUpdates
+   });
+   const supportConfigJson=updated.sourceBatch.sources[0].supportConfigJson;
+   const result=await enrichStandaloneXmlForRun({
+     sourceText:xml,stagedJsonText:stage,supportConfigJson,options:{}
+   });
+   return {applied:result.applied,error:result.error||'',
+     comparisons:result.evidence?.comparisons??0,
+     mismatches:result.evidence?.mismatches?.length??0,
+     fields:result.appliedFields??0,
+     xmlText:result.xmlText||'',supportConfigJson};
+ },{xml,stage,fiveUpdates});
+ assert.equal(nativeHandoff.applied,true,'simulated reviewed weights must be accepted by run parity: '+nativeHandoff.error);
+ assert.ok(nativeHandoff.xmlText.length>0,'actual enriched XML must reach native handoff');
+ assert.equal(nativeHandoff.mismatches,0,'browser run parity must not mismatch accepted source weights');
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-engine-input.xml'),nativeHandoff.xmlText);
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-config.json'),nativeHandoff.supportConfigJson);
+ console.log('GLRD_BULK_REVIEW_PARITY_HANDOFF_PASS',JSON.stringify({
+   comparisons:nativeHandoff.comparisons,fields:nativeHandoff.fields,
+   xmlBytes:nativeHandoff.xmlText.length,accepted:109,skipped:5,mismatches:0
+ }));
+
  assert.deepEqual(errors,[]);
  const receipt={schema:'GLRD-CHOICE-SKIP-TRACE-UI-R1',
    glrdRows:census.count,draftPrefills:drafts,
@@ -200,7 +235,10 @@ try {
      skippedZeroCount:Object.keys(fiveUpdates.skippedByKey).length,
      receiptCount:Object.keys(fiveUpdates.reviewReceiptsByKey).length,
      approvedZeroMassCount:0,
-     completedAfterExplicitAttestation:true
+     completedAfterExplicitAttestation:true,
+     runParityAccepted:nativeHandoff.applied,
+     runParityComparisons:nativeHandoff.comparisons,
+     runParityMismatches:nativeHandoff.mismatches
    },
    engineeringMassApproval:'NO_AUTOMATIC_APPROVAL_FROM_ESTIMATE',errors};
  await writeFile(resolve(output,'glrd-choice-skip-trace-receipt.json'),JSON.stringify(receipt,null,2));
