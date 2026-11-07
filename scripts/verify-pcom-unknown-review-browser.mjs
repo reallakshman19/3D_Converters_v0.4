@@ -45,7 +45,7 @@ try {
     'physical PCOM length is 12.7 mm, not 19.1 mm route edge');
   assert.equal(row.weight,0);
   assert.equal(row.mapped,false);
-  assert.ok(result.flange.length>0);
+  assert.equal(result.flange.length,0, 'flange endpoint 1 is not a review endpoint; its endpoint 2 is RIGID');
   assert.ok(result.preservedXml);
   console.log('PCOM->UNKNOWN review routing PASS: 12.7mm source span, 0 mass, intact reference');
 }finally{await browser.close();}
