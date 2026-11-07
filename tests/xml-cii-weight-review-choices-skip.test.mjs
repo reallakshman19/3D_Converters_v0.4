@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  availableWeightReviewChoices,preferredWeightReviewDraft,weightReviewChoiceLabel
+  availableWeightReviewChoices,preferredWeightReviewDraft,weightReviewChoiceLabel,comparisonWeightMasterReferences
 } from '../converters/xml-cii2019-core/weight-review-choices.js';
 import {applyModeAConsolidatedRigidReviewUpdates} from
   '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js';
@@ -25,6 +25,26 @@ test('multiple same-family master lengths remain visible as distinct selectable 
   assert.equal(choices[2].rejected,true);
   assert.match(weightReviewChoiceLabel(choices[2]),/LENGTH MISMATCH/);
   assert.equal(preferredWeightReviewDraft(sample).weight,47);
+});
+test('real 1595-row master exposes full-bore same-family alternate lengths without changing qualified candidate',()=>{
+  const rows=JSON.parse(readFileSync(new URL('../docs/Masters/wtValveweights.json',import.meta.url),'utf8'));
+  const issue={componentType:'VALV',dtxr:'BALL VALVE TRUNN FB FLGD 900#',boreMm:50,rating:900,lengthMm:368};
+  const references=comparisonWeightMasterReferences(issue,{weight:{masterRows:rows}});
+  assert.ok(references.length>=2,'a DN50 Class900 Full Bore valve has legitimate comparative refs');
+  assert.ok(references.every(r=>/FULL BORE/i.test(r.typeDesc)),
+    'Reduced Bore cannot appear even as a nearby comparison');
+  assert.ok(references.some(r=>r.rowBore!==50&&r.rowRating==='900'&&r.rowLength!==368),
+    'neighbor DN retains actual master face-to-face length');
+  assert.ok(references.some(r=>r.rowBore===50&&r.rowRating!=='900'),
+    'same-DN different rating is clearly exposed, never ranked');
+  assert.ok(references.every(r=>r.referenceOnly && /COMPARISON ONLY/.test(r.rejectedReason)));
+  const choices=availableWeightReviewChoices({...issue,
+    candidates:[{selectedWeight:56,typeDesc:'Flanged Ball Valve -Full Bore',rowLength:368,lengthDelta:0}],
+    comparisonReferences:references});
+  assert.ok(choices.length>2);
+  assert.equal(preferredWeightReviewDraft({...issue,candidates:[{selectedWeight:56,typeDesc:'Flanged Ball Valve -Full Bore'}],
+    comparisonReferences:references}).weight,56,'comparisons may not prefill');
+  assert.ok(choices.slice(1).every(c=>c.rejected&&c.comparison&&!c.approved));
 });
 test('no out-of-tolerance candidate automatically preprefilled',()=>{
   const row={...sample,candidates:[]};
