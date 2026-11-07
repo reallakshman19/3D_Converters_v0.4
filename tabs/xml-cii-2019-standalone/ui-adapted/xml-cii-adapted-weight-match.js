@@ -112,6 +112,7 @@ function renderWeightMasterBlocked(contentEl) {
 }
 
 function methodLabel(candidate) {
+  if (candidate?.flangeWeightFallback && candidate?.atFlangeToleranceBoundary) return 'Flange master +6mm';
   if (candidate?.flangeWeightFallback) return 'Flange extrapolated';
   if (candidate?.specialFactorRule) return candidate?.oddEntry ? 'Factor odd' : 'Factor';
   if (candidate?.weightMethod === 'length-interpolated') return 'Interpolated';
