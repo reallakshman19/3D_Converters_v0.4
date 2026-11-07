@@ -17,9 +17,10 @@ ART=ROOT/'artifacts/glrd-review-choices'
 NATIVE=ROOT/'converters/scripts/xml_to_cii2019_runtime_custody.py'
 ENGINE=ART/'glrd-109-reviewed-five-skipped-engine-input.xml'
 CONFIG=ART/'glrd-109-reviewed-five-skipped-config.json'
-BASE=ROOT/'artifacts/glrd-native-parity/after.cii'
+BASE_INPUT=ART/'glrd-109-reviewed-five-skipped-baseline-engine-input.xml'
+BASE=ART/'glrd-109-reviewed-five-skipped-baseline.cii'
 AFTER=ART/'glrd-109-reviewed-five-skipped.cii'
-assert ENGINE.is_file() and CONFIG.is_file() and BASE.is_file(),     'Missing exact GLRD browser review/parity artifacts'
+assert ENGINE.is_file() and CONFIG.is_file() and BASE_INPUT.is_file(),     'Missing exact GLRD browser review/parity artifacts'
 config=json.loads(CONFIG.read_text())
 weights=config['overrides']['rigidWeight']
 skips=config['overrides']['rigidWeightSkipped']
@@ -32,17 +33,25 @@ assert all(r['reviewMethod']=='EXPLICIT_BULK_OWNER_ATTESTATION' and
            r['reviewed'] is True and
            math.isclose(float(r['weightKg']),float(weights[k]),abs_tol=1e-8)
            for k,r in receipts.items())
-cmd=[sys.executable,str(NATIVE),'--input',str(ENGINE),'--output',str(AFTER),
-     '--weight-scale','10','--coords-mode','first',
-     '--split-condensed-valve-flange',
-     '--support-config-json',json.dumps(config,separators=(',',':'))]
-r=subprocess.run(cmd,cwd=ROOT,capture_output=True,text=True,timeout=200)
-if r.returncode!=0:
-    (ART/'glrd-reviewed-native-failure.log').write_text(r.stderr[-12000:])
-    raise RuntimeError('Native GLRD reviewed CII conversion failed: '+r.stderr[-3800:])
-assert AFTER.is_file()
-witnesses=[json.loads(line.partition('PCOM_EXPLICIT_CII_RIGID_OWNER ')[2])
-  for line in r.stderr.splitlines() if line.startswith('PCOM_EXPLICIT_CII_RIGID_OWNER ')]
+def convert(source_path, out_path, saved_masses):
+    # Both inputs already passed the same browser-enrichment route.
+    # Pass only explicit PCOM mass ownership, not 1595 master rows on CLI.
+    native_config={'overrides':{'rigidWeight':saved_masses}} if saved_masses else {}
+    cmd=[sys.executable,str(NATIVE),'--input',str(source_path),
+         '--output',str(out_path),'--weight-scale','10','--coords-mode','first',
+         '--split-condensed-valve-flange',
+         '--support-config-json',json.dumps(native_config,separators=(',',':'))]
+    run=subprocess.run(cmd,cwd=ROOT,capture_output=True,text=True,timeout=200)
+    if run.returncode!=0 or not out_path.is_file():
+        (ART/'glrd-reviewed-native-failure.log').write_text(run.stderr[-12000:])
+        raise RuntimeError('Native CII conversion failed: '+run.stderr[-3800:])
+    return [json.loads(line.partition('PCOM_EXPLICIT_CII_RIGID_OWNER ')[2])
+            for line in run.stderr.splitlines()
+            if line.startswith('PCOM_EXPLICIT_CII_RIGID_OWNER ')]
+
+baseline_witnesses=convert(BASE_INPUT,BASE,{})
+assert baseline_witnesses==[],'no PCOM source mass is approved in baseline'
+witnesses=convert(ENGINE,AFTER,weights)
 assert len(witnesses)==14,(len(witnesses),r.stderr[-5000:])
 assert len({w['rigidPointer'] for w in witnesses})==14,'all 14 PCOM owners must have unique pointers'
 
@@ -75,7 +84,11 @@ assert len(changed)==109,('109 accepted physical source owners must affect exact
                          len(changed),list(changed.items())[:12])
 assert all(a==0 and b>0 for a,b in changed.values()),     'no existing positive RIGID mass may be overwritten by an empirical estimate'
 assert all(w['rigidPointer'] in changed for w in witnesses),     'all 14 explicit PCOM source masses must reach actual emitted CII RIGID pointers'
-assert sum(1 for m in after_mass if m<=0)==144-109,     'native RIGID census must retain zero masses for unreviewed/skipped components'
+initial_positive=sum(1 for m in before_mass if m>0)
+final_positive=sum(1 for m in after_mass if m>0)
+assert final_positive==initial_positive+109,(initial_positive,final_positive)
+assert sum(1 for m in after_mass if m<=0)==sum(1 for m in before_mass if m<=0)-109, \
+    'unreviewed or skipped physical masses must remain unweighted'
 receipt={
   'schema':'GLRD-EXPLICIT-BULK-REVIEW-NATIVE-PARITY-R1',
   'mode':'SIMULATED_OWNER_ATTESTATION_TEST_ONLY',
