@@ -286,7 +286,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         updates[sourceId].ratingsByKey[key] = text(input.value);
       });
       if(missing.length || unreviewed.length){
-        setStatus(`${missing.length} missing mass(es); ${unreviewed.length} unreviewed suggestion draft(s). No updates applied. Verify each estimated mass or enter approved source weight.`,true);
+        setStatus(`Enter a positive weight for ${missing.length} missing row(s). Independently review ${unreviewed.length} estimate draft(s) before Apply. No updates applied.`,true);
         return;
       }
       overlay.remove();
