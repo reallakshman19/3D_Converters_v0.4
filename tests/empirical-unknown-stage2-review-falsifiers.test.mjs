@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 import {DEFAULT_WEIGHT_MASTER_ROWS} from '../converters/xml-cii2019-core/default-weight-master-rows.js';
 import {rankXmlCiiWeightCandidates} from '../converters/xml-cii2019-core/weight-valve-hints.js';
@@ -102,4 +103,40 @@ test('F02 native helper: actual parity mass planner rejects inferred 23.803kg, k
     weightMatch:{...nodes[0].weightMatch,weight:150}}];
   assert.equal(mappedNodeWeights(changedRoute,{overrides:{rigidWeight:{}}}).size,0,
     'route-gap perturbation cannot alter source weight');
+});
+
+test('F04 executable UI falsifier: both real fillBest bodies refuse unapproved mass',()=>{
+  const paths=[
+    'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js',
+    'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js',
+  ];
+  for(const path of paths) {
+    const src=readFileSync(new URL('../'+path,import.meta.url),'utf8');
+    const anchor='const fillBest = () => {';
+    const start=src.indexOf(anchor);
+    assert.ok(start>=0,path);
+    const end=src.indexOf('return count;',start);
+    assert.ok(end>start,path);
+    const body=src.slice(start+'const fillBest = '.length,end+'return count;'.length)+' }';
+    for(const [candidate,expected] of [
+      [{selectedWeight:15,preferred:false},0],
+      [{selectedWeight:15,preferred:true},0],
+      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',
+        inferredWeight:true},0],
+      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS'},1],
+    ]) {
+      let writes=0;
+      const input={value:'',getAttribute:()=> 'B1::10020'};
+      const sandbox={
+        localIssues:[{candidates:[candidate]}],
+        contentEl:{querySelectorAll:()=>[input]},
+        selectedWeight:v=>v?.selectedWeight??v?.weight??0,
+        saveInput:()=>{writes++;},
+        Number,String,
+      };
+      const fill=runInNewContext('('+body+')',sandbox);
+      assert.equal(fill(),expected,path+' candidate '+JSON.stringify(candidate));
+      assert.equal(writes,expected,'must persist only explicitly authorized values');
+    }
+  }
 });
