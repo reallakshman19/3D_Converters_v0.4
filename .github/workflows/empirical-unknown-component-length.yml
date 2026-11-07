@@ -9,6 +9,10 @@ on:
       - 'converters/xml-cii2019-core/flange-weight-fallback.js'
       - 'converters/xml-cii2019-core/weight-valve-hints.js'
       - 'converters/xml-cii2019-core/weight-match-model.js'
+      - 'converters/xml-cii2019-core/weight-review-choices.js'
+      - 'tests/xml-cii-weight-review-choices-skip.test.mjs'
+      - 'scripts/verify-glrd-review-choices-browser.mjs'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js'
       - 'tests/xml-cii-glrd-bore-family-integration.test.mjs'
       - 'tests/xml-cii-glrd-release-cache-chain.test.mjs'
       - 'scripts/verify-glrd-bore-family-integration-browser.mjs'
@@ -62,6 +66,9 @@ jobs:
           node --check converters/xml-cii2019-core/flange-weight-fallback.js
           node --check converters/xml-cii2019-core/weight-valve-hints.js
           node --check converters/xml-cii2019-core/weight-match-model.js
+          node --check converters/xml-cii2019-core/weight-review-choices.js
+          node --check scripts/verify-glrd-review-choices-browser.mjs
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js
           node --check scripts/verify-glrd-bore-family-integration-browser.mjs
           node --check converters/xml-cii2019-core/rigid-weight-auto-apply.js
           node --check tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js
@@ -99,6 +106,7 @@ jobs:
           node --test tests/xml-cii-rigid-review-prefill.test.mjs
           node --test tests/xml-cii-glrd-bore-family-integration.test.mjs
           node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
+          node --test tests/xml-cii-weight-review-choices-skip.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
           node --test tests/empirical-weight-nearest-interpolation.test.mjs
@@ -147,6 +155,12 @@ jobs:
           EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
         run: node scripts/verify-glrd-bore-family-integration-browser.mjs
 
+      - name: Browser GLRD multiple master-length choices and explicit 5-to-3-to-0 skips
+        env:
+          GLRD_INPUT_DIR: /tmp/glrd-inputs
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+        run: node scripts/verify-glrd-review-choices-browser.mjs
+
       - name: Chromium real GLRD full review census + standalone/ATTA/Mode A draft/approval
         env:
           GLRD_INPUT_DIR: /tmp/glrd-inputs
@@ -168,6 +182,7 @@ jobs:
           path: |
             artifacts/empirical-unknown-browser/**
             artifacts/glrd-bore-family/**
+            artifacts/glrd-review-choices/**
             artifacts/glrd-native-parity/**
             /tmp/empirical-unknown-browser.log
           if-no-files-found: warn
