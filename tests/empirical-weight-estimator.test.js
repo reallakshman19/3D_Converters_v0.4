@@ -28,7 +28,8 @@ const masterRows = [
 ];
 
 (async () => {
-  const api = await import(pathToFileURL(path.join(tempRoot, 'converters/empirical-weight/index.js')).href);
+  const api = await import(pathToFileURL(path.join(tempRoot, 'converters/empirical-weight/empirical-weight-estimator.js')).href);
+  const { EMPIRICAL_WEIGHT_MODEL } = await import(pathToFileURL(path.join(tempRoot, 'converters/empirical-weight/empirical-weight-model.js')).href);
   const estimator = api.createEmpiricalWeightEstimator({ masterRows });
 
   const exact = estimator.estimate({ typeDesc: 'flanged gate valve', ns: 2, rating: 150, target: 'RF' });
@@ -63,7 +64,7 @@ const masterRows = [
   assert.strictEqual(unknown.ok, false);
   assert.strictEqual(unknown.error.code, 'UNKNOWN_TYPE_DESC');
 
-  assert.strictEqual(api.EMPIRICAL_WEIGHT_MODEL.approach1.models.length, 270, 'all Approach 1 models must be published');
+  assert.strictEqual(EMPIRICAL_WEIGHT_MODEL.approach1.models.length, 270, 'all Approach 1 models must be published');
   console.log('Empirical weight API checks passed.');
 })().catch((error) => {
   console.error(error);

@@ -115,7 +115,7 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       typeDesc: family,
       rating: sandboxRating,
     });
-    if (!options.sizes.includes(Number(sandboxNs))) sandboxNs = options.sizes[0] ?? null;
+    if (!Number.isFinite(Number(sandboxNs)) || !(Number(sandboxNs) > 0)) sandboxNs = options.sizes[0] ?? null;
     return options;
   }
 
@@ -188,9 +188,11 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
   function sandboxSummaryRows(result) {
     return [
       ['Exact master cell', 'exact'],
+      ['Nearest master bracket · same family/rating', 'nearest'],
       ['Approach 1 · size-band equation', 'approach1'],
       ['Approach 2 · matrix stack', 'approach2'],
-      ['Final API estimate', 'final'],
+      ['Final API estimate · current production', 'final'],
+      ['Final API · nearest-first (review only)', 'finalNearest'],
     ].map(([label, key]) => {
       const activeResult = result.active[key];
       const candidateResult = result.candidate[key];
@@ -221,6 +223,16 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
     </div>`;
   }
 
+  function nearestDetail(outcome) {
+    const interp = outcome?.interpolation;
+    if (!interp) return outcome?.ok ? 'Exact master cell' : 'No two bracketing master entries';
+    const lo = interp.lower;
+    const hi = interp.upper;
+    return 'NS ' + lo.ns + ' (' + Number(lo.weightKg).toFixed(3) + ' kg) to NS ' +
+      hi.ns + ' (' + Number(hi.weightKg).toFixed(3) + ' kg), fraction ' +
+      Number(interp.fraction).toFixed(3) + ', ' + interp.method;
+  }
+
   function sandboxHtml() {
     const options = sandboxOptions();
     const result = sandboxResult();
@@ -229,10 +241,12 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
         <label>Target <select class="engineering-master-select" data-sandbox="target">${options.targets.map((value) => `<option value="${esc(value)}" ${value === target ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
         <label>Type <select class="engineering-master-select" data-sandbox="family">${options.types.map((value) => `<option value="${esc(value)}" ${value === family ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
         <label>Rating <select class="engineering-master-select" data-sandbox="rating">${options.ratings.map((value) => `<option value="${value}" ${Number(value) === Number(sandboxRating) ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
-        <label>Size NS <select class="engineering-master-select" data-sandbox="ns">${options.sizes.map((value) => `<option value="${value}" ${Number(value) === Number(sandboxNs) ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
+        <label>Known NS <select class="engineering-master-select" data-sandbox="ns">${options.sizes.map((value) => `<option value="${value}" ${Number(value) === Number(sandboxNs) ? 'selected' : ''}>${value}</option>`).join('')}${options.sizes.includes(Number(sandboxNs)) ? '' : '<option value="custom" selected>Custom NS</option>'}</select></label><label>Estimate NS <input class="engineering-master-input" type="number" min="0.01" step="any" data-sandbox="custom-ns" value="${esc(sandboxNs)}" aria-label="Estimate NS" /></label>
       </div></div>
+      <div class="engineering-master-banner warn">Bracket interpolation is advisory and uses only the same family, rating and target. No extrapolation or cross-component substitution. Current production final routing is unchanged.</div>
       <h3>Arrived weights</h3>
       <div class="engineering-master-table-wrap"><table class="engineering-master-table"><thead><tr><th>Path</th><th>Active kg</th><th>Candidate kg</th><th>Candidate Δ</th><th>Active status</th><th>Candidate status</th></tr></thead><tbody>${sandboxSummaryRows(result)}</tbody></table></div>
+      <div class="engineering-master-card"><h3>Nearest master anchors</h3><div>Active: ${esc(nearestDetail(result.active.nearest))}</div><div>Candidate: ${esc(nearestDetail(result.candidate.nearest))}</div></div>
       <div class="engineering-master-preview">${a2DetailHtml('Active', result.active)}${a2DetailHtml('Candidate', result.candidate)}</div>
       <details class="engineering-master-card"><summary>Raw Sandbox result</summary><pre class="engineering-master-json">${esc(JSON.stringify(result, null, 2))}</pre></details>`;
   }
@@ -283,9 +297,10 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       render();
     }));
     container.querySelector('[data-sandbox="target"]')?.addEventListener('change', (event) => { target = event.target.value; render(); });
-    container.querySelector('[data-sandbox="family"]')?.addEventListener('change', (event) => { family = event.target.value; render(); });
+    container.querySelector('[data-sandbox="family"]')?.addEventListener('change', (event) => { family = event.target.value; sandboxNs = null; render(); });
     container.querySelector('[data-sandbox="rating"]')?.addEventListener('change', (event) => { sandboxRating = Number(event.target.value); sandboxNs = null; render(); });
-    container.querySelector('[data-sandbox="ns"]')?.addEventListener('change', (event) => { sandboxNs = Number(event.target.value); render(); });
+    container.querySelector('[data-sandbox="ns"]')?.addEventListener('change', (event) => { if (event.target.value !== 'custom') { sandboxNs = Number(event.target.value); render(); } });
+    container.querySelector('[data-sandbox="custom-ns"]')?.addEventListener('change', (event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) { sandboxNs = value; render(); } });
     container.querySelector('[data-action="revert"]')?.addEventListener('click', () => { session.revert(); render(); });
     container.querySelector('[data-action="save"]')?.addEventListener('click', () => {
       const model = session.snapshot();

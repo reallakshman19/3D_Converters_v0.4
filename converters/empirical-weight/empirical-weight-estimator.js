@@ -4,6 +4,7 @@ import {
   buildEmpiricalWeightCatalog,
   estimateCollaborativeRatio,
   estimateCrossRatio,
+  interpolateNearestCatalogWeight,
   lookupExactCatalogWeight,
 } from './empirical-weight-matrix.js';
 
@@ -24,7 +25,8 @@ function targetOf(input = {}) {
 }
 
 function fail(code, message, details = {}) {
-  return { ok: false, error: { code, message }, ...details };
+  // Failure state must not be overwritten by normalized request details.ok=true.
+  return { ...details, ok: false, error: { code, message } };
 }
 
 function buildFamilyLookup(model) {
@@ -153,6 +155,28 @@ export function createEmpiricalWeightEstimator({
       : fail('EXACT_CELL_NOT_FOUND', 'No exact master cell exists.', request);
   }
 
+  function nearestInterpolation(input = {}) {
+    const request = normalize(input);
+    if (!request.ok) return request;
+    const exactWeight = lookupExactCatalogWeight(
+      catalog, request.target, request.typeDesc, request.size, request.rating);
+    if (POSITIVE(exactWeight)) {
+      return { ...request, ok: true, weightKg: exactWeight,
+        approach: 'EXACT', confidence: 'EXACT', modelId: 'MASTER_CELL' };
+    }
+    const match = interpolateNearestCatalogWeight(
+      catalog, request.target, request.typeDesc, request.size, request.rating);
+    if (!match) return fail('NEAREST_BRACKET_UNAVAILABLE',
+      'Two qualified master sizes bracketing NS within the same family, rating and target are required; extrapolation is not allowed.',
+      request);
+    return {
+      ...request, ok: true, weightKg: match.weightKg,
+      approach: 'NEAREST_INTERPOLATED', confidence: 'INTERPOLATED',
+      modelId: 'MASTER_BRACKET_LINEAR_NS', interpolation: match,
+      authority: 'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS',
+    };
+  }
+
   function approach2(input = {}) {
     const request = normalize(input);
     if (!request.ok) return request;
@@ -198,6 +222,13 @@ export function createEmpiricalWeightEstimator({
       if (exactResult.ok) return exactResult;
       if (!['EXACT_CELL_NOT_FOUND'].includes(exactResult.error?.code)) return exactResult;
     }
+    // Explicit opt-in only. Active published routing remains unchanged until
+    // the interpolation method is independently qualified for production.
+    if (options.allowNearestInterpolation === true) {
+      const nearest = nearestInterpolation(input);
+      if (nearest.ok) return nearest;
+      if (nearest.error?.code !== 'NEAREST_BRACKET_UNAVAILABLE') return nearest;
+    }
     const matrixResult = approach2(input);
     if (matrixResult.ok) return matrixResult;
     if (!['NO_MATRIX_SUPPORT', 'A2_WEIGHTS_NOT_FOUND'].includes(matrixResult.error?.code)) return matrixResult;
@@ -209,7 +240,7 @@ export function createEmpiricalWeightEstimator({
     });
   }
 
-  return Object.freeze({ estimate, exact, approach1, approach2, model, masterRows });
+  return Object.freeze({ estimate, exact, approach1, approach2, nearestInterpolation, model, masterRows });
 }
 
 const DEFAULT_ESTIMATOR = createEmpiricalWeightEstimator();
@@ -217,3 +248,4 @@ export const estimateEmpiricalWeight = (input, options) => DEFAULT_ESTIMATOR.est
 export const lookupEmpiricalWeight = (input) => DEFAULT_ESTIMATOR.exact(input);
 export const estimateEmpiricalWeightApproach1 = (input, options) => DEFAULT_ESTIMATOR.approach1(input, options);
 export const estimateEmpiricalWeightApproach2 = (input) => DEFAULT_ESTIMATOR.approach2(input);
+export const estimateEmpiricalWeightNearestInterpolation = (input) => DEFAULT_ESTIMATOR.nearestInterpolation(input);

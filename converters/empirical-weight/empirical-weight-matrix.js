@@ -244,6 +244,34 @@ export function estimateCrossRatio(catalog, target, typeDesc, size, rating, cons
   return POSITIVE(prediction) ? { prediction, rectangleCount: selected.length, method: 'cross-ratio' } : null;
 }
 
+/**
+ * Interpolate ONLY between the nearest two actual same-family, same-rating,
+ * same-target master cells that bracket an unknown nominal size.
+ * No one-sided extrapolation, rating substitution, or cross-family inference.
+ * The master values have already been median-collapsed by the catalog.
+ */
+export function interpolateNearestCatalogWeight(catalog, target, typeDesc, size, rating) {
+  if (!POSITIVE(size) || !POSITIVE(rating)) return null;
+  const matrix = matrixFor(catalog, target, typeDesc);
+  if (!matrix) return null;
+  const points = sortedSizes(matrix)
+    .map((ns) => ({ ns, weightKg: cell(matrix, ns, rating) }))
+    .filter((item) => POSITIVE(item.weightKg));
+  const lower = points.filter((item) => item.ns < size).at(-1);
+  const upper = points.find((item) => item.ns > size);
+  if (!lower || !upper) return null;
+  const fraction = (size - lower.ns) / (upper.ns - lower.ns);
+  const weightKg = lower.weightKg + fraction * (upper.weightKg - lower.weightKg);
+  if (!POSITIVE(weightKg)) return null;
+  return {
+    weightKg,
+    method: 'LINEAR_NS_BRACKET',
+    lower: { ...lower, rating, typeDesc, target },
+    upper: { ...upper, rating, typeDesc, target },
+    fraction,
+  };
+}
+
 export function lookupExactCatalogWeight(catalog, target, typeDesc, size, rating) {
   return cell(matrixFor(catalog, target, typeDesc), size, rating);
 }

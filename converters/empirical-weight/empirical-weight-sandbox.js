@@ -111,6 +111,8 @@ function compactResult(result) {
     configuredWeights: result.configuredWeights || null,
     weights: result.weights || null,
     support: result.support || null,
+    interpolation: result.interpolation || null,
+    authority: result.authority || null,
     coefficients: result.coefficients || null,
     validatedRange: result.validatedRange || null,
     bandRange: result.bandRange || null,
@@ -120,9 +122,11 @@ function compactResult(result) {
 function evaluateOne(estimator, input) {
   return {
     exact: compactResult(estimator.exact(input)),
+    nearest: compactResult(estimator.nearestInterpolation(input)),
     approach1: compactResult(estimator.approach1(input)),
     approach2: compactResult(estimator.approach2(input)),
     final: compactResult(estimator.estimate(input)),
+    finalNearest: compactResult(estimator.estimate(input, { allowNearestInterpolation: true })),
   };
 }
 
@@ -162,9 +166,11 @@ export function evaluateEmpiricalWeightSandbox({
     candidate,
     delta: {
       exact: delta(active.exact, candidate.exact),
+      nearest: delta(active.nearest, candidate.nearest),
       approach1: delta(active.approach1, candidate.approach1),
       approach2: delta(active.approach2, candidate.approach2),
       final: delta(active.final, candidate.final),
+      finalNearest: delta(active.finalNearest, candidate.finalNearest),
     },
   };
 }
