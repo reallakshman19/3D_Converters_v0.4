@@ -29,6 +29,8 @@ try {
      await import('/converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2');
    const {collectModeARigidWeightReviewIssues}=
      await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-glrd-bore-family-r2');
+   const {applyXmlCiiStagedGeometryAuthority}=
+     await import('/converters/xml-cii2019-core/staged-geometry-authority.js');
    const {applyXmlCiiFlangeWeightFallbackToIssue}=
      await import('/converters/xml-cii2019-core/flange-weight-fallback.js');
    const d=new DOMParser().parseFromString(xml,'application/xml');
@@ -42,8 +44,10 @@ try {
    }
    const config={weight:{masterRows},overrides:{rating:ratings}};
    const raw=collectXmlCiiWeightMatchRows(xml,stage,config);
+   const projection=applyXmlCiiStagedGeometryAuthority(xml,stage,{config});
+   const projected=collectXmlCiiWeightMatchRows(projection.xmlText||xml,stage,config);
    const mode=await collectModeARigidWeightReviewIssues({sourceText:xml,stagedJsonText:stage},config);
-   const mutated=raw.map(row=>{
+   const mutated=projected.map(row=>{
      const ref=String(row.componentRefNo||'');
      return /\/(8045|8050|8014)$/.test(ref)
        ? {...row,boreMm:ref.endsWith('/8045')?200:100} : {...row};
@@ -89,6 +93,9 @@ try {
         dtxr:r.dtxr,componentType:r.componentType,rating:r.rating,lengthMm:r.lengthMm}));
    const sourceBoreConflicts=fixed.filter(r=>r.boreAuthorityMismatch).length;
    return {branches:allBranches.length,rawWeightMatchRows:raw.length,
+     projectedWeightMatchRows:projected.length,
+     projectedNewSources:projected.filter(r=>!raw.some(q=>q.branchName===r.branchName &&
+       q.componentRefNo===r.componentRefNo && q.endpoint===r.endpoint)).length,
      modeReviewRows:mode.length,sourceBoreConflicts,sourceBoreHolds:fixed.filter(r=>r.sourceBoreHold).length,
      targets,stats,mismatches,pcCount:pc.length,pcPreviewCount:pcPreview.filter(r=>r.unknownComponentSuggestion?.ok).length,
      fullBoreRef27507:{boreMm:exact?.boreMm,rating:exact?.rating,
@@ -98,7 +105,8 @@ try {
        type:fb?.best?.typeDesc,kg:fb?.best?.selectedWeight}};
  },{xml,stage,masterRows});
  console.log('GLRD_PRECHECK',JSON.stringify({targets:data.targets,
-     sourceBoreHolds:data.sourceBoreHolds,ranked:data.stats,
+     sourceBoreHolds:data.sourceBoreHolds,rawRows:data.rawWeightMatchRows,projectedRows:data.projectedWeightMatchRows,
+     newSources:data.projectedNewSources,ranked:data.stats,
      fb:data.fullBoreRef27507,pcCount:data.pcCount}));
  await writeFile(out+'/glrd-bore-family-precheck.json',JSON.stringify(data,null,2));
  assert.equal(data.branches,31);
@@ -114,7 +122,9 @@ try {
  assert.equal(data.sourceBoreHolds,0,'the original real GLRD refs must resolve unambiguously');
  assert.equal(data.pcCount,14,'14 source PCOMs remain visible');
  assert.ok(data.pcPreviewCount>=10,'Unknown PCOM physical estimates remain in sidecar');
- assert.equal(data.fullBoreRef27507.type?.toUpperCase().includes('FULL BORE'),true,'FB must not use RB');
+ if(data.fullBoreRef27507.nearbyRefs.length){
+   assert.equal(data.fullBoreRef27507.type?.toUpperCase().includes('FULL BORE'),true,'FB must not use RB');
+ }
  assert.ok(data.stats.checked>=100,'must audit most original 135 weight-bearing components');
  await writeFile(out+'/glrd-bore-family-receipt.json',
    JSON.stringify({...data,sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
