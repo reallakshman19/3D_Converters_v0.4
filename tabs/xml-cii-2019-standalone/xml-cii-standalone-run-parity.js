@@ -77,8 +77,10 @@ function mappedNodeWeights(nodeRows, config) {
   for (const nr of nodeRows || []) {
     if (!WEIGHT_BEARING_TYPES.has(text(nr.componentType).toUpperCase())) continue;
     const override = Number(config?.overrides?.rigidWeight?.[nr.key]);
-    const auto = nr.weightMatch && !nr.weightMatch.zeroFallback ? Number(nr.weightMatch.weight) : NaN;
-    const weight = Number.isFinite(override) && override > 0 ? override : (Number.isFinite(auto) && auto > 0 ? auto : null);
+    // Rank/preview candidates are NOT physical-mass authority. Only a
+    // persisted explicit Owner override can enter the enriched XML here.
+    // Never take a zero-source node's Weight from ranking.best / auto guess.
+    const weight = Number.isFinite(override) && override > 0 ? override : null;
     if (weight !== null) weights.set(`${text(nr.branchName)}|${text(nr.nodeNumber)}`, weight);
   }
   return weights;
