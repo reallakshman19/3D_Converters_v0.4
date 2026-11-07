@@ -556,7 +556,8 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         if(unreviewed.length && !missing.length) showBulkReview();
         const first=missing.length?missingRows()[0]:pendingReviewRows()[0];
         setStatus(
-          (missing.length?missing.length+' physical weight(s) still blank: Show missing / Skip blank. '
+          (missing.length?'Enter a positive weight for '+missing.length+
+              ' missing row(s) or choose explicit Skip blank; Show missing locates the source. '
             :'No blank weights remain. ')+
           (unreviewed.length?unreviewed.length+' estimate draft(s) are NOT independently reviewed. '+
             'Check Reviewed for each or use the explicit Review draft weights confirmation. ':'')+
