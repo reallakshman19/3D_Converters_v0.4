@@ -189,12 +189,23 @@ try {
        candidateButtons:td[12]?.querySelectorAll('[data-wm-candidate]').length||0,
        advisoryChips:td[12]?.querySelectorAll('[data-advisory-weight]').length||0};
    };
+   const draftRows=rows.filter(tr=>{
+     const input=tr.querySelector('.mc-rigid-review-input[data-wm-proposal-draft="estimate"]');
+     return input && Number(input.value)>0;
+   });
+   const multipleChoiceRows=rows.filter(tr=>tr.querySelectorAll('[data-wm-choice]').length>1);
    return {rows:rows.length,summary:panel.querySelector('#mc-wm-status')?.textContent||'',
+     draftPreloaded: draftRows.length,
+     multipleChoiceRows: multipleChoiceRows.length,
+     sourceMassAutoCommitted:false,
      noSourceWrites:panel.querySelectorAll('[data-wm-candidate]').length===0,
      targetRefs:['8045','8050','8014','27507'].map(read)};
  });
  console.log('GLRD_ACTUAL_WEIGHT_MATCH_UI',JSON.stringify(rendered));
  assert.equal(rendered.rows,149,'real Weight Match must include original 135 components plus 14 PCOM');
+ assert.ok(rendered.draftPreloaded>=135,'Weight Match must actually prefill most source rows as REVIEW-ONLY drafts');
+ assert.ok(rendered.multipleChoiceRows>0,'Weight Match must show multiple physical-length master alternatives');
+ assert.equal(rendered.noSourceWrites,true,'no approved-source mass via prior direct candidate buttons');
  assert.match(rendered.summary,/0 unresolved/,'rows with advisory candidates are not unresolved');
  assert.ok(rendered.targetRefs.every(r=>r.status!=='Unresolved'),'display valid proposals as Review candidate');
  for(const ref of ['8045','8050','8014']){
