@@ -1,5 +1,5 @@
 import { enrichInputXmlDocument } from './xml-cii-inputxml-enrichment.js';
-import { runXmlCii2019StandaloneEngineJob } from './xml-cii-workflow-engine-client.js';
+import { runXmlCii2019StandaloneEngineJob } from './xml-cii-workflow-engine-client.js?v=20261107-weights-pyodide-fix-1';
 import { createWorkflowDiagnostics, normalizeWorkflowResult } from './xml-cii-workflow-types.js';
 import { applyStandaloneSifFacts } from './xml-cii-standalone-sif-apply.js';
 import { enrichStandaloneXmlForRun } from './xml-cii-standalone-run-parity.js';
