@@ -1,4 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
+import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues } from '../../../converters/xml-cii2019-core/weight-match-model.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -10,7 +11,7 @@ const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
 export async function collectModeARigidWeightReviewIssues(state = {}, config = {}) {
-  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).map((issue) => {
+  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const authority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = authority.rating;
     const ranking = rating
@@ -47,21 +48,47 @@ function ratingInfo(issue) {
   return { ...info, title };
 }
 
-function candidateButtons(issue, rowIndex) {
-  return (issue.candidates || []).map((candidate) => {
+export function modeARigidCandidateMarkup(issue, rowIndex) {
+  // Ranked catalog candidates and the Unknown physical-length sidecar are
+  // evidence only. Never manufacture approved mass from a master match.
+  const ranked = issue.massSuggestionOnly ? [] : (issue.candidates || []);
+  const chips = ranked.map((candidate) => {
     const weight = candidate.suggestedWeight ?? candidate.selectedWeight ?? candidate.weight;
-    const rawScore = Number(candidate.totalScore ?? candidate.score ?? 0);
-    const score = Math.round((rawScore <= 1 ? rawScore * 100 : rawScore));
-    const method = candidate.preferred ? 'exact' : (candidate.weightMethod || (candidate.inferredWeight ? 'inferred' : 'review'));
+    const label = candidate.referenceFamily || candidate.typeDesc || candidate.valveType || 'Unknown reference';
+    const method = candidate.preferred ? 'exact-length master' : (candidate.weightMethod || 'ranked master');
     const sourceApproved = isApprovedPhysicalMassCandidate(candidate, weight);
-    if (!sourceApproved) return `<span data-mode-a-rigid-advisory="true"
-      title="Estimate only; no approved physical-component mass"
-      style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · review only</span>`;
+    if (!sourceApproved) {
+      const evidence = [
+        'ESTIMATE ONLY: no approved physical-component mass',
+        'Family: ' + label,
+        'Method: ' + method,
+        'Rating: ' + (issue.rating || '-'),
+        'Length delta: ' + (candidate.lengthDelta ?? 'n/a') + ' mm',
+        candidate.weightWarning || '',
+      ].filter(Boolean).join(' | ');
+      return `<span data-mode-a-rigid-advisory="true"
+        title="${attr(evidence)}"
+        style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(label)} · ${esc(method)} · advisory only</span>`;
+    }
     return `<button type="button" class="mc-rigid-review-candidate"
       data-mode-a-rigid-approved="true"
       data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}"
       title="Approved physical source mass" style="font-size:11px;padding:3px 6px;cursor:pointer;">${esc(weight)} kg · approved</button>`;
   }).join('');
+  const unknown = issue.unknownComponentSuggestion;
+  const unknownEvidence = unknown?.ok
+    ? `<span data-mode-a-unknown-weight-suggestion="true" title="${attr([
+        'Unknown physical-component length rule — ADVISORY ONLY',
+        'Family: ' + unknown.referenceFamily,
+        'Physical length: ' + unknown.componentLengthMm + ' mm',
+        'Reference length: ' + unknown.referenceLengthMm + ' mm',
+        'Reference weight: ' + unknown.referenceWeightKg + ' kg',
+        'Threshold: ' + unknown.thresholdMm + ' mm',
+        'Mass is NOT approved or automatically applied',
+      ].join(' | '))}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Length-rule ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily)} · advisory only</span>`
+    : unknown ? `<span data-mode-a-unknown-weight-hold="true" title="${attr(unknown.reason || unknown.code)}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Unknown length-rule HOLD · ${esc(unknown.code)}</span>`
+      : '';
+  return [chips, unknownEvidence].filter(Boolean).join(' ') ;
 }
 
 function rowMarkup(issue, rowIndex) {
@@ -79,8 +106,13 @@ function rowMarkup(issue, rowIndex) {
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</td>
     <td title="${attr(issue.dtxrSourcePath || '')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="" placeholder="kg" style="width:78px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
-    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${candidateButtons(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}</td>
+    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">
+       <input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="" placeholder="kg" style="width:92px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;">
+       <label style="display:block;font-size:10px;color:#e9c875;white-space:nowrap;" title="Verify the physical-component mass independently before accepting an unapproved suggestion."><input type="checkbox" data-rigid-suggestion-verified> Reviewed</label>
+    </td>
+    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${modeARigidCandidateMarkup(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}
+      ${proposedRigidReviewWeight(issue) && !proposedRigidReviewWeight(issue).approved ? `<button type="button" data-mode-a-rigid-propose="${rowIndex}" style="margin-left:4px;cursor:pointer;border:1px solid #8c6f2e;background:#342609;color:#ffe7a3;border-radius:4px;">Use draft</button>` : ''}
+      </td>
   </tr>`;
 }
 
@@ -91,11 +123,12 @@ function popupMarkup(rows, entries) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review — Consolidated</div><div data-mode-a-rigid-summary style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) across ${entries.length} XML file(s).</div></div>
       <button type="button" data-mode-a-rigid-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;">Cancel Batch Run</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates remain read-only. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg for independent per-row review; unapproved values require Reviewed confirmation before committing. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output.</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input type="search" data-mode-a-rigid-search placeholder="Search source / branch / node..." style="min-width:250px;padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;">
       <select data-mode-a-rigid-source style="padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;"><option value="">All XML files</option>${sourceOptions}</select>
       <button type="button" data-mode-a-rigid-refresh style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:7px 12px;">Refresh Suggestions</button>
+      <button type="button" data-mode-a-rigid-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:7px 12px;">Apply All Suggestions</button>
       <button type="button" data-mode-a-rigid-fill-exact style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:7px 12px;">Use All Exact Suggestions</button>
       <span data-mode-a-rigid-status style="font-size:12px;color:#94a3b8;"></span>
     </div>
@@ -109,7 +142,8 @@ function collectCurrentValues(overlay) {
   const ratings = new Map();
   overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
     const numeric = Number(input.value);
-    if (Number.isFinite(numeric) && numeric > 0) weights.set(input.dataset.reviewId || '', numeric);
+    if (Number.isFinite(numeric) && numeric > 0 && input.dataset.rigidSuggestionDraft !== 'estimate')
+      weights.set(input.dataset.reviewId || '', numeric);
   });
   overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
     if (text(input.value)) ratings.set(input.dataset.reviewId || '', text(input.value));
@@ -117,11 +151,19 @@ function collectCurrentValues(overlay) {
   return { weights, ratings };
 }
 
-function bindCandidateButtons(overlay) {
+function bindCandidateButtons(overlay, rows) {
   overlay.querySelectorAll('[data-mode-a-rigid-candidate]').forEach((button) => button.addEventListener('click', () => {
-    const inputs = [...overlay.querySelectorAll('.mc-rigid-review-input')];
-    const input = inputs[Number(button.dataset.modeARigidCandidate)];
-    if (input) input.value = button.dataset.modeARigidWeight || '';
+    const index=Number(button.dataset.modeARigidCandidate);
+    const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+    const weight=Number(button.dataset.modeARigidWeight);
+    if(input && button.dataset.modeARigidApproved==='true' &&
+       Number.isFinite(weight) && weight>0)
+      stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
+  }));
+  overlay.querySelectorAll('[data-mode-a-rigid-propose]').forEach(button=>button.addEventListener('click',()=>{
+    const index=Number(button.dataset.modeARigidPropose);
+    const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+    if(input)stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index]));
   }));
 }
 
@@ -139,6 +181,8 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const summary = overlay.querySelector('[data-mode-a-rigid-summary]');
     const search = overlay.querySelector('[data-mode-a-rigid-search]');
     const source = overlay.querySelector('[data-mode-a-rigid-source]');
+    const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
+      .map(input=>[input.dataset.reviewId||'',text(input.value)]));
     const setStatus = (message, bad = false) => { if (status) { status.textContent = message; status.style.color = bad ? '#ef4444' : '#10b981'; } };
     const filter = () => {
       const q = text(search?.value).toLowerCase();
@@ -153,10 +197,23 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       if (body) body.innerHTML = rows.map(rowMarkup).join('');
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => { if (preserve.has(input.dataset.reviewId || '')) input.value = preserve.get(input.dataset.reviewId || ''); });
       if (summary) summary.textContent = `${rows.length} rigid node(s) across ${new Set(rows.map((row) => row.sourceId)).size} XML file(s).`;
-      bindCandidateButtons(overlay);
+      bindCandidateButtons(overlay, rows);
       filter();
     };
-    bindCandidateButtons(overlay);
+    bindCandidateButtons(overlay, rows);
+    overlay.addEventListener('input', event=>{
+      if(event.target?.matches?.('.mc-rigid-review-input')) clearRigidReviewProposal(event.target);
+    });
+    overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
+      let filled=0,skipped=0;
+      rows.forEach((row,index)=>{
+        const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+        const proposal=proposedRigidReviewWeight(row);
+        if(!input || !proposal || (input.value && !input.dataset.rigidSuggestionDraft)) {skipped++;return;}
+        if(stageRigidReviewProposal(input,proposal))filled++; else skipped++;
+      });
+      setStatus(`Prefilled ${filled} review draft(s); ${skipped} unavailable or entered manually. Verify each estimated mass before Apply.`,filled===0);
+    });
     search?.addEventListener('input', filter);
     source?.addEventListener('change', filter);
 
@@ -167,7 +224,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         const value = Number(best?.suggestedWeight ?? best?.selectedWeight ?? best?.weight);
         if (!best?.preferred || !isApprovedPhysicalMassCandidate(best, value)) return;
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
-        if (input) { input.value = String(value); count += 1; }
+        if (input && stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
       });
       setStatus(`Filled ${count} preferred exact suggestion(s). Review remaining rows manually.`, false);
     });
@@ -205,7 +262,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
 
     overlay.querySelector('[data-mode-a-rigid-apply]')?.addEventListener('click', () => {
       const updates = {};
-      const missing = [];
+      const missing = [], unreviewed = [];
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
@@ -215,6 +272,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
           input.style.borderColor = '#ef4444';
           return;
         }
+        if(rigidReviewProposalNeedsVerification(input)){
+          unreviewed.push(`${sourceId}:${key}`);
+          input.style.borderColor='#d9a441';
+          return;
+        }
         input.style.borderColor = '#31455f';
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].weightsByKey[key] = numeric;
@@ -222,12 +284,12 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
-        if (!text(input.value)) return;
+        if (!text(input.value) || text(input.value) === initialRatings.get(input.dataset.reviewId || '')) return;
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].ratingsByKey[key] = text(input.value);
       });
-      if (missing.length) {
-        setStatus(`Enter a positive weight for all ${missing.length} remaining row(s), or cancel the batch run.`, true);
+      if(missing.length || unreviewed.length){
+        setStatus(`Enter a positive weight for ${missing.length} missing row(s). Independently review ${unreviewed.length} estimate draft(s) before Apply. No updates applied.`,true);
         return;
       }
       overlay.remove();

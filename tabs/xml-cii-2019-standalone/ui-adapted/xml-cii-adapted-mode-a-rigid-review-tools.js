@@ -1,4 +1,5 @@
 import { extractXmlCiiRatingFromDtxr } from '../../../converters/xml-cii2019-core/dtxr-rating-resolver.js';
+import { stageRigidReviewProposal } from './xml-cii-adapted-rigid-review-prefill.js';
 
 function text(value) { return value === undefined || value === null ? '' : String(value).trim(); }
 function styleButton(button) {
@@ -75,7 +76,7 @@ function enhance(dialog) {
       const weight = Number(candidate?.dataset?.modeARigidWeight);
       if (!input || candidate?.dataset?.modeARigidApproved !== 'true' ||
           !Number.isFinite(weight) || weight <= 0) continue;
-      input.value = String(weight);
+      stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass'});
       count += 1;
     }
     setStatus(count

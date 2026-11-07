@@ -1,4 +1,5 @@
 import { createUnknownComponentLengthWeightSuggester } from '../empirical-weight/unknown-component-length-suggestion.js';
+import { classifyWeightMasterCandidate } from './weight-valve-hints.js';
 
 // Sidecar evidence only. No candidate promotion or persisted Weight overrides.
 const unknownSuggesterCache = new WeakMap();
@@ -98,9 +99,32 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
       subtype:proposed.selector==='FLANGE_REFERENCE'?'FLANGE':'BALL'},
   };
 }
+// The PR #8 length selector is only for UNKNOWN physical-component families.
+// A zero-mass recognized valve or flange still uses the normal same-family
+// master ranking. This gate is presentation/selection only: it grants NO mass
+// approval and does not edit source ComponentType (including source PCOM).
+function isKnownFamilyWeightIssue(issue) {
+  const type = clean(issue?.componentType).toUpperCase();
+  const category = clean(issue?.reviewCategory).toUpperCase();
+  if (category === 'UNKNOWN' || type === 'PCOM' || type === 'UNKNOWN') return false;
+  if (type.startsWith('FLAN') || type.startsWith('VALV') ||
+      type === 'VLV' || type.startsWith('INST')) return true;
+  const candidateClass = classifyWeightMasterCandidate({
+    type, typeDesc: clean(issue?.dtxr) + ' ' + clean(issue?.nodeName),
+  });
+  return ['FLANGE', 'VALVE', 'BLIND'].includes(candidateClass.family);
+}
+
 export function applyXmlCiiFlangeWeightFallbackToIssue(issue, config) {
   if (!issue) return issue;
-  const withHint=attachUnknownComponentSuggestion(ensureIssueValveHint(issue),config);
+  const normalized = ensureIssueValveHint(issue);
+  if (isKnownFamilyWeightIssue(normalized)) {
+    // Old local Weight Match caches may contain the obsolete Unknown sidecar.
+    // Remove it without disturbing freshly reranked, same-family candidates.
+    const { unknownComponentSuggestion, massSuggestionOnly, massSuggestionHold, ...known } = normalized;
+    return known;
+  }
+  const withHint=attachUnknownComponentSuggestion(normalized,config);
   if (issue.mapped || Number(issue.weight)>0 || Number(issue.overrideWeight)>0)
     return withHint;
   // Ranking is never authoritative for an unknown component and must not

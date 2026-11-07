@@ -1,4 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
+import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api.js';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
 import { buildXmlCiiWorkflowJobFromUiState } from '../xml-cii-workflow-ui-adapter.js';
@@ -35,7 +36,8 @@ function ratingInfo(issue) {
 }
 
 function rigidCandidateButtons(issue, index) {
-  return (issue.candidates || []).map((candidate) => {
+  const ranked = issue.massSuggestionOnly ? [] : (issue.candidates || []);
+  const chips = ranked.map((candidate) => {
     const value = candidate.suggestedWeight ?? candidate.weight;
     const scoreValue = Math.round((candidate.totalScore || candidate.score || 0) * 100);
     const sourceApproved = isApprovedPhysicalMassCandidate(candidate, value);
@@ -49,6 +51,11 @@ function rigidCandidateButtons(issue, index) {
       title="Approved source mass: ${scoreValue}%"
       style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">${esc(value)} kg · approved</button>`;
   }).join('');
+  const unknown = issue.unknownComponentSuggestion;
+  const sidecar = unknown?.ok
+    ? `<span data-rigid-review-unknown-advisory="true" title="${attr('Length-rule physical component estimate; source mass is not approved. Reference: '+unknown.referenceFamily+' '+unknown.referenceLengthMm+'mm, '+unknown.referenceWeightKg+'kg.')}">Length-rule ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily)} · review only</span>`
+    : unknown ? `<span data-rigid-review-unknown-hold="true" title="${attr(unknown.reason || unknown.code)}">Length-rule HOLD · ${esc(unknown.code)}</span>` : '';
+  return [chips, sidecar].filter(Boolean).join(' ');
 }
 
 function rigidReviewRow(issue, index) {
@@ -64,8 +71,14 @@ function rigidReviewRow(issue, index) {
     <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</td>
     <td class="mc-rigid-review-dtxr" title="${attr([issue.dtxrSourcePath, info.dtxrRating ? `DTXR rating ${info.dtxrRating}# (evidence only)` : ''].filter(Boolean).join(' · '))}" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-    <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-rigid-review-key="${attr(issue.key)}" value="" placeholder="kg" style="width:72px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
-    <td class="mc-rigid-review-candidates" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${rigidCandidateButtons(issue, index) || '<span style="color:#64748b;">No suggestion</span>'}</td>
+    <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">
+      <input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-rigid-review-key="${attr(issue.key)}" value="" placeholder="kg" style="width:84px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;">
+      <label style="display:block;font-size:10px;color:#e9c875;white-space:nowrap;" title="Required only for an unapproved suggested mass; checking confirms independent engineering review."><input type="checkbox" data-rigid-suggestion-verified> Reviewed</label>
+    </td>
+    <td class="mc-rigid-review-candidates" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">
+      ${rigidCandidateButtons(issue, index) || '<span style="color:#64748b;">No suggestion</span>'}
+      ${proposedRigidReviewWeight(issue) && !proposedRigidReviewWeight(issue).approved ? `<button type="button" data-rigid-review-propose="${index}" style="margin-left:4px;cursor:pointer;border:1px solid #8c6f2e;background:#342609;color:#ffe7a3;border-radius:4px;">Use draft</button>` : ''}
+    </td>
   </tr>`;
 }
 
@@ -75,12 +88,13 @@ function rigidReviewMarkup(rows) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review</div><div style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) have zero weight and length greater than 6 mm.</div></div>
       <button type="button" data-rigid-review-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;font-size:12px;">Cancel</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:10px;border-radius:6px;font-size:12px;margin-bottom:16px;">Enter missing weights in kg before conversion. When kg→N is enabled, CII export converts kg to N (×10). Empirical suggestions are read-only and never prefill source weight. Enter approved physical-component mass manually. Suggestions use the resolved Rating from explicit overrides, Piping Class master, or Regex extraction. DTXR Rating is comparison evidence only unless explicitly fetched in Preview.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:10px;border-radius:6px;font-size:12px;margin-bottom:16px;">Enter missing weights in kg before conversion. When kg→N is enabled, CII export converts kg to N (×10). Suggestions can be copied as <strong>review drafts</strong> using Apply All Suggestions. Unapproved suggestions require per-row independent review (Reviewed checkbox) before committing any source weight. No suggestion is engineering approval by itself. Enter approved physical-component mass manually. Suggestions use the resolved Rating from explicit overrides, Piping Class master, or Regex extraction. DTXR Rating is comparison evidence only unless explicitly fetched in Preview.</div>
     <div style="overflow:auto;max-height:45vh;border:1px solid rgba(148,163,184,0.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:rgba(30,41,59,0.3);color:#fff;border-bottom:1px solid rgba(148,163,184,0.15);"><th style="padding:8px;">Branch</th><th style="padding:8px;">Bore</th><th style="padding:8px;">Rating</th><th style="padding:8px;">Node</th><th style="padding:8px;">DTXR</th><th style="padding:8px;">Length</th><th style="padding:8px;">Manual Weight (kg)</th><th style="padding:8px;">Nearest Suggestions</th></tr></thead><tbody>${rows.map(rigidReviewRow).join('')}</tbody></table></div>
     <div data-rigid-review-status style="font-size:12px;margin-top:8px;"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;border-top:1px solid #253a55;padding-top:16px;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;margin-top:20px;border-top:1px solid #253a55;padding-top:16px;">
       <button type="button" data-rigid-review-refresh style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Refresh Suggestions</button>
-      <div style="display:flex;gap:12px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:100%;">
+        <button type="button" data-rigid-review-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:8px 16px;font-size:12px;">Apply All Suggestions</button>
         <button type="button" data-rigid-review-fill-best style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Use All Approved Source Weights</button>
         <button type="button" data-rigid-review-skip style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Skip Review</button>
         <button type="button" data-rigid-review-apply style="cursor:pointer;background:#1e4ed8;border:none;color:#fff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;">Apply Weights and Continue</button>
@@ -104,6 +118,8 @@ export function openStandaloneRigidWeightReviewPopup(issues, stateRef, config) {
 function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
   const finish = (result) => { overlay.remove(); resolve(result); };
   const statusValue = overlay.querySelector('[data-rigid-review-status]');
+  const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
+    .map(input=>[input.getAttribute('data-rigid-review-key')||'',String(input.value||'').trim()]));
   const setStatus = (message, bad) => {
     if (!statusValue) return;
     statusValue.textContent = message;
@@ -112,9 +128,38 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
   const bindCandidates = () => {
     overlay.querySelectorAll('[data-rigid-review-candidate]').forEach((button) => button.addEventListener('click', () => {
       const input = overlay.querySelectorAll('.mc-rigid-review-input')[Number(button.getAttribute('data-rigid-review-candidate'))];
-      if (input) input.value = button.getAttribute('data-rigid-review-weight') || '';
+      if (input) {
+        // Every approved chip has its own candidate weight. Preserve the
+        // specific clicked choice, not the first approved item in the row.
+        const weight=Number(button.getAttribute('data-rigid-review-weight'));
+        if (button.getAttribute('data-rigid-review-approved')==='true' &&
+            Number.isFinite(weight) && weight>0)
+          stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
+      }
+    }));
+    overlay.querySelectorAll('[data-rigid-review-propose]').forEach(button=>button.addEventListener('click',()=>{
+      const index=Number(button.dataset.rigidReviewPropose);
+      const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+      if(input) stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index]));
     }));
   };
+  // Programmatic draft fills do not fire 'input'. A real edit is deliberately
+  // treated as a new manual value and resets the draft's unverified provenance.
+  overlay.addEventListener('input', event=>{
+    if(event.target?.matches?.('.mc-rigid-review-input')) clearRigidReviewProposal(event.target);
+  });
+  const fillSuggestions=()=>{
+    let count=0,skipped=0;
+    const inputs=[...overlay.querySelectorAll('.mc-rigid-review-input')];
+    rows.forEach((row,index)=>{
+      const input=inputs[index],proposal=proposedRigidReviewWeight(row);
+      if(!input || !proposal) {skipped++;return;}
+      if(input.value && !input.dataset.rigidSuggestionDraft) {skipped++;return;}
+      if(stageRigidReviewProposal(input,proposal)) count++; else skipped++;
+    });
+    setStatus(`Prefilled ${count} review draft(s); ${skipped} without a qualified suggestion or already entered. Verify each estimated mass before Apply.`,count===0);
+  };
+  overlay.querySelector('[data-rigid-review-apply-suggestions]')?.addEventListener('click',fillSuggestions);
   bindCandidates();
 
   overlay.querySelector('[data-rigid-review-refresh]')?.addEventListener('click', async () => {
@@ -127,24 +172,20 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
       const key = input.getAttribute('data-rigid-review-key') || '';
       if (value && key) newRatings[key] = value;
     });
-    if (Object.keys(newRatings).length > 0) {
-      config.overrides = { ...(config.overrides || {}) };
-      config.overrides.rating = { ...(config.overrides.rating || {}), ...newRatings };
-      if (stateRef?.current) {
-        stateRef.current.supportConfigJson = JSON.stringify(config, null, 2);
-        if (stateRef.current.masterContext) {
-          stateRef.current.masterContext.config = config;
-          saveMasterContextToLocalStorage(stateRef.current.masterContext);
-        }
-      }
-    }
+    // Preview rerank only: do not persist Rating into source/config until Apply.
+    const refreshConfig = { ...(config || {}), overrides: {
+      ...(config?.overrides || {}),
+      rating: { ...(config?.overrides?.rating || {}), ...newRatings },
+    } };
     const currentWeights = {};
     overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
       const numeric = Number(input.value);
-      if (Number.isFinite(numeric) && numeric > 0) currentWeights[input.getAttribute('data-rigid-review-key') || ''] = numeric;
+      if (Number.isFinite(numeric) && numeric > 0 &&
+          input.dataset.rigidSuggestionDraft !== 'estimate')
+        currentWeights[input.getAttribute('data-rigid-review-key') || ''] = numeric;
     });
     if (stateRef?.current) {
-      const newIssues = await unresolvedRigidIssues(stateRef.current, config);
+      const newIssues = await unresolvedRigidIssues(stateRef.current, refreshConfig);
       const tbody = overlay.querySelector('tbody');
       if (tbody) {
         tbody.innerHTML = newIssues.map(rigidReviewRow).join('');
@@ -166,24 +207,30 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
       const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
       const best = issue.candidates?.[0] || null;
       if (input && isApprovedPhysicalMassCandidate(best,
-          best?.suggestedWeight ?? best?.weight))
-        input.value = String(best.suggestedWeight ?? best.weight ?? '');
+          best?.selectedWeight ?? best?.suggestedWeight ?? best?.weight))
+        stageRigidReviewProposal(input,proposedRigidReviewWeight(issue));
     });
     setStatus('Only approved source masses may be copied; empirical estimates remain read-only.', false);
   });
   overlay.querySelector('[data-rigid-review-cancel]')?.addEventListener('click', () => finish({ cancelled: true, skipped: false, weightsByKey: {} }));
   overlay.querySelector('[data-rigid-review-skip]')?.addEventListener('click', () => finish({ cancelled: false, skipped: true, weightsByKey: {} }));
-  overlay.querySelector('[data-rigid-review-apply]')?.addEventListener('click', () => applyRigidReviewWeights(overlay, finish, setStatus));
+  overlay.querySelector('[data-rigid-review-apply]')?.addEventListener('click', () => applyRigidReviewWeights(overlay, finish, setStatus, initialRatings));
 }
 
-function applyRigidReviewWeights(overlay, finish, setStatus) {
+function applyRigidReviewWeights(overlay, finish, setStatus, initialRatings = new Map()) {
   const weightsByKey = {};
   const missing = [];
+  const unreviewed = [];
   overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
     const numeric = Number(input.value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       missing.push(input.getAttribute('data-rigid-review-key') || '');
       input.style.borderColor = '#ef4444';
+      return;
+    }
+    if (rigidReviewProposalNeedsVerification(input)) {
+      unreviewed.push(input.getAttribute('data-rigid-review-key') || '');
+      input.style.borderColor = '#d9a441';
       return;
     }
     input.style.borderColor = '';
@@ -193,14 +240,24 @@ function applyRigidReviewWeights(overlay, finish, setStatus) {
     setStatus('Enter a positive weight for every listed rigid component, or click Skip Review.', true);
     return;
   }
-  finish({ cancelled: false, skipped: false, weightsByKey });
+  if (unreviewed.length) {
+    setStatus(`${unreviewed.length} suggested estimate(s) need independent Reviewed confirmation or manual source mass. No overrides applied.`, true);
+    return;
+  }
+  const ratingsByKey = {};
+  overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach(input=>{
+    const value=String(input.value||'').trim();
+    const key=input.getAttribute('data-rigid-review-key')||'';
+    if(value && value!==initialRatings.get(key))ratingsByKey[key]=value;
+  });
+  finish({ cancelled: false, skipped: false, weightsByKey, ratingsByKey });
 }
 
 async function unresolvedRigidIssues(state, config) {
   const { collectXmlCiiZeroRigidWeightIssues } = await import('../../../converters/xml-cii2019-core/weight-match-model.js');
   const { applyXmlCiiFlangeWeightFallbackToIssue } = await import('../../../converters/xml-cii2019-core/flange-weight-fallback.js');
   const { rankXmlCiiWeightCandidates } = await import('../../../converters/xml-cii2019-core/weight-valve-hints.js');
-  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).map((issue) => {
+  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const ratingAuthority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = ratingAuthority.rating;
     const ranking = rating
@@ -223,8 +280,11 @@ async function reviewRigidWeights(stateRef, config) {
   try {
     const result = await openStandaloneRigidWeightReviewPopup(await unresolvedRigidIssues(stateRef.current, config), stateRef, config);
     if (result.cancelled) return false;
-    if (result.weightsByKey && Object.keys(result.weightsByKey).length > 0) {
-      config.overrides = { ...(config.overrides || {}), rigidWeight: { ...(config.overrides?.rigidWeight || {}), ...result.weightsByKey } };
+    if ((result.weightsByKey && Object.keys(result.weightsByKey).length > 0) ||
+        (result.ratingsByKey && Object.keys(result.ratingsByKey).length > 0)) {
+      config.overrides = { ...(config.overrides || {}),
+        rigidWeight: { ...(config.overrides?.rigidWeight || {}), ...(result.weightsByKey || {}) },
+        rating: { ...(config.overrides?.rating || {}), ...(result.ratingsByKey || {}) } };
       stateRef.current.supportConfigJson = JSON.stringify(config, null, 2);
       if (stateRef.current.masterContext) {
         stateRef.current.masterContext.config = config;

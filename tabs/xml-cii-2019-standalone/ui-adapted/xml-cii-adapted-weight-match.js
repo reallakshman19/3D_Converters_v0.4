@@ -125,7 +125,17 @@ function methodLabel(candidate) {
 function renderAcceptedChip(candidate, rowIndex, issue) {
   if (!isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate))) {
     const amount = selectedWeight(candidate);
-    return `<span data-advisory-weight="true" title="Estimate only; cannot be applied as approved component mass" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · advisory only</span>`;
+    const label = desc(candidate);
+    const method = candidate?.preferred ? 'Exact-length master match' : (methodLabel(candidate) || 'Master candidate');
+    const evidence = [
+      'Advisory only, not approved physical-component mass',
+      'TypeDesc: ' + label,
+      'Rating: ' + (issue.rating || '-'),
+      'Weight: ' + amount + ' kg',
+      'Length delta: ' + nfmt(candidate.lengthDelta) + ' mm',
+      candidate?.weightWarning || '',
+    ].filter(Boolean).join(' | ');
+    return `<span data-advisory-weight="true" title="${attr(evidence)}" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · ${esc(label)} · ${esc(method)} · advisory only</span>`;
   }
   const value = selectedWeight(candidate);
   const label = desc(candidate);
@@ -498,8 +508,8 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
       const initial = issue.weight && issue.weight > 0 ? issue.weight : (Number(issue.overrideWeight) > 0 ? issue.overrideWeight : '');
       const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
       const inputStyle = `width:86px;padding:4px;border-radius:4px;font-size:12px;color:#e6edf5;background:#0f172a;border:1px solid #334155;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
-      const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
-      const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
+      const accepted = issue.massSuggestionOnly ? '' : (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
+      const rejected = issue.massSuggestionOnly ? '' : (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
       const unknown = issue.unknownComponentSuggestion;
       const unknownText = unknown?.ok
         ? `<span data-unknown-weight-suggestion="true" title="${attr('Advisory only · ' + unknown.referenceFamily + ' master ' + unknown.referenceLengthMm + 'mm / ' + unknown.referenceWeightKg + 'kg · threshold ' + unknown.thresholdMm + 'mm · no automatic XML/CII edit')}" style="font-size:11px;line-height:1.2;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;white-space:nowrap;">Length-rule ≈ ${esc(Number(unknown.suggestedKg).toFixed(3))} kg · ${esc(unknown.referenceFamily)}</span>`
