@@ -116,93 +116,75 @@ function ensureIssueValveHint(issue) {
 }
 
 export function buildXmlCiiFlangeWeightFallback(issue, config) {
-  const rows = Array.isArray(config?.weight?.masterRows) ? config.weight.masterRows : [];
-  const targetLength = Number(issue?.lengthMm);
-  const bore = Number(issue?.boreMm);
-  const rating = normalizedRating(issue?.rating);
-  if (!rows.length || !Number.isFinite(targetLength) || targetLength <= 0 || !Number.isFinite(bore) || !rating) return null;
-
-  const matches = rows
-    .map((row) => rowToCandidate(row, config, targetLength))
-    .filter(Boolean)
-    .filter((candidate) => {
-      const boreDelta = Math.abs(Number(candidate.rowBore) - bore);
-      return Number.isFinite(boreDelta)
-        && boreDelta < 1
-        && candidate.rowRating === rating
-        && Number(candidate.rowLength) > 0
-        && Number(candidate.weight) > 0
-        && isFlangeCandidate(candidate);
-    })
-    .sort((a, b) => Math.abs(Number(a.rowLength) - targetLength) - Math.abs(Number(b.rowLength) - targetLength));
-
-  const reference = matches[0];
-  if (!reference) return null;
-
-  const ratio = targetLength / Number(reference.rowLength);
-  const minRatio = Number(config?.weight?.extrapolationMinRatio ?? 0.65);
-  const maxRatio = Number(config?.weight?.extrapolationMaxRatio ?? 1.6);
-  if (!Number.isFinite(minRatio) || !Number.isFinite(maxRatio) ||
-      minRatio <= 0 || maxRatio < minRatio || ratio < minRatio || ratio > maxRatio) return null;
-  // Owner's 6 mm tolerance boundary: a 115 mm unknown matched to an
-  // exact 109 mm / 15 kg flange master uses the FULL 15 kg unchanged.
-  // Do not apply proportional length scaling at this exact boundary.
-  const atFlangeToleranceBoundary =
-    Math.abs(targetLength - (Number(reference.rowLength) + 6)) <= 1e-7;
-  const proposedWeight = atFlangeToleranceBoundary
-    ? roundWeight(Number(reference.weight))
-    : roundWeight(Number(reference.weight) * ratio);
-  if (!Number.isFinite(proposedWeight) || proposedWeight <= 0) return null;
-
-  const lengthDelta = Math.abs(Number(reference.rowLength) - targetLength);
+  // Compat adapter for older UI callers. Use the ONE strict physical-family
+  // selector rather than regex-matching "FLANGED" (a swing check valve!).
+  // This candidate is always advisory and can NEVER qualify automatic weights.
+  const rows = config?.weight?.masterRows;
+  if (!Array.isArray(rows) || !rows.length ||
+      config?.weight?.convertSmallLengthsInToMm === true) return null;
+  const proposed = createUnknownComponentLengthWeightSuggester({
+    masterRows: rows
+  }).suggest({
+    componentLengthMm: issue?.lengthMm,boreMm:issue?.boreMm,
+    rating:issue?.rating,componentRefNo:issue?.componentRefNo
+  });
+  if (!proposed.ok) return null;
+  const ratio = proposed.lengthRatio;
+  const minRatio=Number(config?.weight?.extrapolationMinRatio??0.65);
+  const maxRatio=Number(config?.weight?.extrapolationMaxRatio??1.6);
+  if (!Number.isFinite(minRatio)||!Number.isFinite(maxRatio)||
+      minRatio<=0||maxRatio<minRatio||ratio<minRatio||ratio>maxRatio) return null;
+  const mass=proposed.suggestedKg;
+  const atBoundary=proposed.atFlangeToleranceBoundary === true;
   return {
-    ...reference,
-    masterWeight: Number(reference.weight),
-    selectedWeight: proposedWeight,
-    suggestedWeight: proposedWeight,
-    weight: proposedWeight,
-    weightMethod: atFlangeToleranceBoundary ? 'flange-master-at-6mm-tolerance' : 'flange-length-extrapolated',
-    atFlangeToleranceBoundary,
-    weightWarning: atFlangeToleranceBoundary
-      ? `Flange full master weight at +6 mm tolerance: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm; NO length interpolation or scaling.`
-      : `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`,
-    inferredWeight: true,
-    fallbackSuggestion: true,
-    zeroFallback: false,
-    rowBore: bore,
-    rowRating: rating,
-    lengthDelta,
-    boreDelta: 0,
-    ratingExact: true,
-    ratingScore: 1,
-    score: 0.45,
-    candidateClass: { family: 'FLANGE', subtype: 'FLANGE' },
-    lengthQualified: false,
-    lengthToleranceMm: Number(config?.weight?.valveHintLengthToleranceMm) || 0,
-    nodeValveHint: issue?.nodeHint || null,
-    valveHintLabel: formatIssueValveHint(issue),
-    semanticTier: 0,
-    semanticPotentialTier: 0,
-    semanticReason: atFlangeToleranceBoundary ? 'Weldneck Flange full master weight at +6mm tolerance' : 'Flange WT extrapolated by element length',
-    semanticSource: '',
-    rejectedReason: '',
-    preferred: false,
-    type: reference.type || 'FLANGE',
-    valveType: reference.valveType || 'FLANGE',
-    typeDesc: atFlangeToleranceBoundary ? 'Weldneck Flange full master at +6mm tolerance' : 'Flange WT scaled to ElementLength',
+    type:proposed.referenceFamily, valveType:proposed.referenceFamily,
+    typeDesc:proposed.referenceFamily,
+    masterWeight:proposed.referenceWeightKg,
+    rowLength:proposed.referenceLengthMm,
+    rowBore:proposed.boreMm,rowRating:String(proposed.rating),
+    weight:mass,selectedWeight:mass,suggestedWeight:mass,
+    weightMethod:atBoundary?'flange-master-at-6mm-tolerance'
+      :'unknown-reference-length-proportional',
+    atFlangeToleranceBoundary:atBoundary,
+    referenceFamily:proposed.referenceFamily,
+    referenceEvidence:proposed.reference,
+    massAuthority:'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS',
+    engineeringMassApproved:false,acceptedForCii:false,
+    weightWarning:atBoundary
+      ? 'Weldneck Flange original exact master weight at +6mm tolerance. No scaling.'
+      : 'Advisory length-scaled '+proposed.referenceFamily+' reference, not source mass authority.',
+    inferredWeight:true,fallbackSuggestion:true,
+    flangeWeightFallback:proposed.selector==='FLANGE_REFERENCE',
+    preferred:false,zeroFallback:false,
+    ratingExact:true,ratingScore:1,boreDelta:0,
+    lengthDelta:Math.abs(proposed.componentLengthMm-proposed.referenceLengthMm),
+    lengthQualified:false,score:0.45,
+    semanticSource:'',semanticReason:'Unknown physical-component reference estimate',
+    candidateClass:{family:proposed.selector==='FLANGE_REFERENCE'?'FLANGE':'VALVE',
+      subtype:proposed.selector==='FLANGE_REFERENCE'?'FLANGE':'BALL'},
   };
 }
-
 export function applyXmlCiiFlangeWeightFallbackToIssue(issue, config) {
-  const withHint = attachUnknownComponentSuggestion(ensureIssueValveHint(issue), config);
-  if (!withHint || !shouldAddFlangeFallback(withHint)) return withHint;
-  const fallback = buildXmlCiiFlangeWeightFallback(withHint, config);
-  if (!fallback) return withHint;
+  if (!issue) return issue;
+  const withHint=attachUnknownComponentSuggestion(ensureIssueValveHint(issue),config);
+  if (issue.mapped || Number(issue.weight)>0 || Number(issue.overrideWeight)>0)
+    return withHint;
+  // Ranking is never authoritative for an unknown component and must not
+  // preserve an already-preferred but length-scaled/wrong-family candidate.
+  // A route/forward-derived CII span is NOT a physical component span.
+  const trustedSpan=['component-ref-endpoint-span','ElementLengthMm']
+    .includes(withHint.elementLengthSource);
+  const result = trustedSpan &&
+    withHint.unknownComponentSuggestion?.ok===true
+      ? buildXmlCiiFlangeWeightFallback(withHint,config) : null;
+  const candidates=result?[result]:[];
   return {
-    ...withHint,
-    candidates: [fallback],
-    ranking: { ...(withHint.ranking || {}), best: fallback, candidates: [fallback] },
-    flangeWeightFallback: true,
+    ...withHint, candidates,
+    ranking:{...(withHint.ranking||{}),best:result,candidates},
+    // No legacy auto-apply authority is attached to a low-trust suggestion.
+    flangeWeightFallback:false,
+    massSuggestionOnly:true,
+    massSuggestionHold:!result,
   };
 }
 
