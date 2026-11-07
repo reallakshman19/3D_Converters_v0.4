@@ -34,6 +34,16 @@ function sourceQualified(candidate, issue, wanted) {
   return true;
 }
 
+// The engine can classify an OLET/TEE as a keyword-related valve, but those
+// connection components do not become physical rigid masses. Keep the popup
+// scope aligned with the Weight Match UI; do not alter native topology.
+export function isRigidWeightReviewEligibleIssue(issue) {
+  const type=name(issue?.componentType).toUpperCase();
+  return type==='RIGID' || type==='PCOM' || type==='VLV' ||
+    type.startsWith('FLAN') || type.startsWith('VALV') ||
+    type.startsWith('INST');
+}
+
 export function proposedRigidReviewWeight(issue) {
   if (!issue || issue.mapped) return null;
   const expected = family(issue);
