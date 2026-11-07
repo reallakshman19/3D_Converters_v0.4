@@ -38,9 +38,10 @@ try {
      ref:issue.componentRefNo,node:issue.nodeNumberDisplay||issue.nodeNumber,
      choices:availableWeightReviewChoices(issue)
    })).filter(x=>x.choices.length>1);
-   window.__glrdReviewPromise=openModeAConsolidatedRigidWeightReviewPopup([
+   window.__glrdReviewEntries=[
      {sourceId:'GLRD-BM2',fileName:'GLRD-1000-PI-01 - BM2.xml',state,config,issues}
-   ]);
+   ];
+   window.__glrdReviewPromise=openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
    return {count:issues.length,alternatives:alternatives.map(({ref,node,choices})=>
      ({ref,node,count:choices.length,weights:choices.map(x=>x.weight),
        lengths:choices.map(x=>x.referenceLengthMm)}))};
@@ -150,6 +151,42 @@ try {
      zeroMassInOverrides:Object.values(cfg.overrides.rigidWeight||{}).filter(x=>Number(x)===0).length};
  },updates);
  assert.deepEqual(verifiedState,{massCount:111,skipCount:3,reviewReceiptCount:109,zeroMassInOverrides:0});
+
+ // Exact reproduction of Owner's third screenshot: 109 estimated draft
+ // weights, 5 zero skips, 0 missing, Apply blocked on 109 Reviewed flags.
+ // Only an explicit independent review acknowledgment unlocks the modal.
+ await page.evaluate(async()=>{
+   const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-bulk-review-gate-1');
+   window.__glrdFiveSkipPromise=m.openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
+ });
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
+ await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count(),109);
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (5)');
+ await page.locator('[data-mode-a-rigid-skip-blanks]').click();
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-skipped-zero="true"]').count(),5);
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (0)');
+ await page.locator('[data-mode-a-rigid-apply]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true);
+ assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
+ assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/No blank weights remain/);
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114,
+   'unreviewed masses must still block run without silently continuing');
+ await page.screenshot({path:resolve(output,'glrd-109-unreviewed-five-skipped-real-screenshot-repro.png')});
+ await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+ await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-show-unreviewed]').innerText(),'Show pending reviews (0)');
+ await page.locator('[data-mode-a-rigid-apply]').click();
+ const fiveOutcome=await page.evaluate(async()=>await window.__glrdFiveSkipPromise);
+ assert.equal(fiveOutcome.cancelled,false);
+ const fiveUpdates=fiveOutcome.updates?.['GLRD-BM2'];
+ assert.ok(fiveUpdates);
+ assert.equal(Object.keys(fiveUpdates.weightsByKey||{}).length,109);
+ assert.equal(Object.keys(fiveUpdates.skippedByKey||{}).length,5);
+ assert.equal(Object.keys(fiveUpdates.reviewReceiptsByKey||{}).length,109);
+ assert.ok(Object.values(fiveUpdates.weightsByKey).every(v=>Number(v)>0));
+ assert.equal(Object.values(fiveUpdates.weightsByKey).filter(v=>Number(v)===0).length,0);
+
  assert.deepEqual(errors,[]);
  const receipt={schema:'GLRD-CHOICE-SKIP-TRACE-UI-R1',
    glrdRows:census.count,draftPrefills:drafts,
@@ -158,10 +195,18 @@ try {
    alternativeSelectors:alternativeSelectors,
    reviewGateBeforeCheckbox:'BLOCKED',simulatedReviewedMasses:111,
    explicitZeroSkips:3,verifiedState,
+   ownerExactScreenshotRepro:{
+     reviewedMassCount:Object.keys(fiveUpdates.weightsByKey).length,
+     skippedZeroCount:Object.keys(fiveUpdates.skippedByKey).length,
+     receiptCount:Object.keys(fiveUpdates.reviewReceiptsByKey).length,
+     approvedZeroMassCount:0,
+     completedAfterExplicitAttestation:true
+   },
    engineeringMassApproval:'NO_AUTOMATIC_APPROVAL_FROM_ESTIMATE',errors};
  await writeFile(resolve(output,'glrd-choice-skip-trace-receipt.json'),JSON.stringify(receipt,null,2));
  console.log('GLRD_CHOICE_SKIP_TRACE_PASS',JSON.stringify({
    rows:114,drafts,initialMissing:missingStart.length,afterManualMissing:3,afterSkipMissing:0,
    alternatives:census.alternatives.length,alternativeSelectors,
-   zeroOverrides:verifiedState.zeroMassInOverrides}));
+   zeroOverrides:verifiedState.zeroMassInOverrides,
+   screenshotFiveSkips:5,screenshotReviewed:109,screenshotCompleted:true}));
 } finally {await browser.close()}
