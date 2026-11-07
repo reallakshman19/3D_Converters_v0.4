@@ -154,7 +154,9 @@ try {
    const file=new File([xml],'GLRD-1000-PI-01 - BM2.xml',{type:'application/xml'});
    bindXmlCiiWeightMatchPhase(section,{
      xmlFile:file,stagedJsonText:stage,config,
-     enrichXmlForCii2019:async()=>({xmlText:projected.xmlText||xml,config}),
+     // The renderer itself applies staged geometry exactly once. Feeding an
+     // already projected XML here would double-apply that same transform.
+     enrichXmlForCii2019:async()=>({xmlText:xml,config}),
      onSaveConfig:()=>{},
      ensureOverrides:c=>(c.overrides||={}),
      resolveStagedJsonText:async()=>({text:stage,label:'Owner pinned stage'}),
