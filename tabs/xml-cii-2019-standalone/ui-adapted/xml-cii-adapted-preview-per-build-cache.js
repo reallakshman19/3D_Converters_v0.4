@@ -9,16 +9,28 @@ import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core
 function primitiveSignature(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const parts = [];
-  for (const [key, item] of Object.entries(value)) {
-    const kind = item === null ? 'null' : typeof item;
-    if (!['null', 'undefined', 'string', 'boolean', 'number'].includes(kind)) return null;
-    const exact = kind === 'number'
-      ? (Object.is(item, -0) ? '-0' : Number.isNaN(item) ? 'NaN'
-        : item === Infinity ? '+Infinity' : item === -Infinity ? '-Infinity' : String(item))
-      : kind === 'null' || kind === 'undefined' ? '' : item;
-    parts.push([key, kind, exact]);
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string') return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      // No hidden, accessor-backed, or inherited field can be trusted as
+      // identical across calls: fail open to a fresh ranking calculation.
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      const item = descriptor.value;
+      const kind = item === null ? 'null' : typeof item;
+      if (!['null', 'undefined', 'string', 'boolean', 'number'].includes(kind)) return null;
+      const exact = kind === 'number'
+        ? (Object.is(item, -0) ? '-0' : Number.isNaN(item) ? 'NaN'
+          : item === Infinity ? '+Infinity' : item === -Infinity ? '-Infinity' : String(item))
+        : kind === 'null' || kind === 'undefined' ? '' : item;
+      parts.push([key, kind, exact]);
+    }
+    return JSON.stringify(parts);
+  } catch {
+    return null;
   }
-  return JSON.stringify(parts);
 }
 
 /**

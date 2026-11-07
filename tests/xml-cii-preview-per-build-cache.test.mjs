@@ -175,3 +175,35 @@ test('non-enumerable ranking inputs fail open rather than reusing stale results'
   );
   assert.equal(cache.stats.rankHits, 0);
 });
+
+test('hidden or accessor-backed context fields fail open to fresh rankings', () => {
+  const config = { weight: { masterRows: masterRows() } };
+  const hidden = { ...context };
+  Object.defineProperty(hidden, 'boreMm', {
+    value: 50, enumerable: false, writable: true, configurable: true,
+  });
+  const hiddenCache = createPreviewPerBuildCache();
+  const before = hiddenCache.rankWeight(hidden, config, { includeRejected: true });
+  hidden.boreMm = 80;
+  const after = hiddenCache.rankWeight(hidden, config, { includeRejected: true });
+  assert.notDeepStrictEqual(after, before);
+  assert.deepStrictEqual(
+    after, rankXmlCiiWeightCandidates(hidden, config, { includeRejected: true }),
+  );
+  assert.equal(hiddenCache.stats.rankHits, 0);
+
+  let bore = 50;
+  const computed = { ...context };
+  Object.defineProperty(computed, 'boreMm', {
+    enumerable: true, configurable: true, get() { return bore; },
+  });
+  const getterCache = createPreviewPerBuildCache();
+  const first = getterCache.rankWeight(computed, config, { includeRejected: true });
+  bore = 80;
+  const second = getterCache.rankWeight(computed, config, { includeRejected: true });
+  assert.notDeepStrictEqual(second, first);
+  assert.deepStrictEqual(
+    second, rankXmlCiiWeightCandidates(computed, config, { includeRejected: true }),
+  );
+  assert.equal(getterCache.stats.rankHits, 0);
+});
