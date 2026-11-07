@@ -402,7 +402,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       if(missing.length || unreviewed.length){
         missingOnly=missing.length>0;
         filter();
-        setStatus(`Missing ${missing.length} row(s) (source references listed below). Review ${unreviewed.length} estimated draft(s) before Apply. ${skipped.length} intentional 0 kg skip(s). No updates applied.`,true);
+        setStatus(`Enter a positive weight for ${missing.length} missing row(s) or choose explicit Skip blank (0 kg). Source references listed below. Independently review ${unreviewed.length} estimated draft(s) before Apply. ${skipped.length} intentional 0 kg skip(s). No updates applied.`,true);
         const first=missingRows()[0];
         first?.scrollIntoView?.({block:'nearest'});
         return;
