@@ -247,7 +247,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const filter = () => {
       const q = text(search?.value).toLowerCase();
       const sourceId = source?.value || '';
-      const missingSet=new Set(missingOnly?missingRows():[]);
+      const missing=missingRows();
+      if(missingOnly && !missing.length)missingOnly=false; // zero missing must not hide every row
+      const missingSet=new Set(missingOnly?missing:[]);
       overlay.querySelectorAll('[data-mode-a-rigid-review-row]').forEach((tr) => {
         const show = (!sourceId || tr.dataset.sourceId === sourceId) &&
           (!q || (tr.dataset.search || '').includes(q)) &&
