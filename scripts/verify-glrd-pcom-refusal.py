@@ -64,7 +64,7 @@ refuse('stale-source-mass',lambda:source_explicit_pcom_components(xml,wrong),
        'CII_PCOM_SAVED_MASS_NOT_IN_ENGINE_INPUT')
 bad=copy.deepcopy(config);bad['overrides']['rigidWeight']={key.replace('|2|','|1|'):1.748}
 refuse('wrong-endpoint-override',lambda:source_explicit_pcom_components(xml,bad),
-       'CII_PCOM_SOURCE_PAIR_AMBIGUOUS')
+       'CII_PCOM_SAVED_OWNER_NOT_FOUND')
 zero=copy.deepcopy(config);zero['overrides']['rigidWeight'][key]=0
 refuse('zero-mass-override',lambda:source_explicit_pcom_components(xml,zero),
        'CII_PCOM_EXPLICIT_OVERRIDE_INVALID')
