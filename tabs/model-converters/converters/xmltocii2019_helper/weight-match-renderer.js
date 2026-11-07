@@ -427,7 +427,7 @@ export async function computeXmlCiiWeightIssues({ xmlFile, resolveStagedJsonText
     if (!hasWeightMasterRows(cfg)) return null;
     const geometryXml = applyXmlCiiStagedGeometryAuthority(enriched.xmlText || xmlText, jsonText, { config: cfg }).xmlText;
     const snapshot = readXmlCiiPreviewRatingSnapshot();
-    const issues = applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg, { ratingMode: 'preview', snapshot }), cfg));
+    const issues = reconcileXmlCiiWeightMatchSourceBores(applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml), xmlText).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg, { ratingMode: 'preview', snapshot }), cfg));
     return { issues, masterRows: cfg.weight?.masterRows || [], config: cfg, previewRatingSnapshot: snapshot };
   } catch (error) {
     console.warn('XML→CII standalone weight computation failed:', error);
