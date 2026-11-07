@@ -47,13 +47,30 @@ test('long 371.2mm unknown uses 368mm / 47kg reduced bore ball valve',()=>{
   assert.equal(r.isExtrapolatedBeyondReferenceLength,true);
   assert.equal(r.acceptedForCii,false);
 });
-test('strict 115mm equality is unassigned; 114.999/115.001 use separate sides',()=>{
+test('exact 115mm tolerance boundary uses 109mm / 15kg flange AS-IS, no interpolation',()=>{
   const boundary=suggest(115);
-  assert.equal(boundary.ok,false);
-  assert.equal(boundary.code,'LENGTH_AT_DECISION_BOUNDARY');
+  assert.equal(boundary.ok,true);
+  assert.equal(boundary.selector,'FLANGE_REFERENCE');
   assert.equal(boundary.thresholdMm,115);
-  assert.equal(suggest(114.999).selector,'FLANGE_REFERENCE');
-  assert.equal(suggest(115.001).selector,'REDUCED_BORE_BALL_VALVE_REFERENCE');
+  assert.equal(boundary.referenceFamily,'Weldneck Flange');
+  assert.equal(boundary.reference.status,'EXACT_MASTER');
+  assert.equal(boundary.referenceLengthMm,109);
+  assert.equal(boundary.referenceWeightKg,15);
+  assert.equal(boundary.suggestedKg,15);
+  assert.equal(boundary.suggestedKgUnrounded,15);
+  assert.equal(boundary.lengthRatio,1);
+  assert.equal(boundary.method,'FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE');
+  assert.equal(boundary.atFlangeToleranceBoundary,true);
+  assert.equal(boundary.isExtrapolatedBeyondReferenceLength,false);
+  assert.equal(boundary.engineeringMassApproved,false);
+  assert.equal(boundary.acceptedForCii,false);
+  const shorter=suggest(114.999);
+  assert.equal(shorter.selector,'FLANGE_REFERENCE');
+  assert.equal(shorter.atFlangeToleranceBoundary,false);
+  assert.equal(shorter.method,'REFERENCE_LENGTH_PROPORTIONAL_HEURISTIC');
+  const longer=suggest(115.001);
+  assert.equal(longer.selector,'REDUCED_BORE_BALL_VALVE_REFERENCE');
+  assert.equal(longer.atFlangeToleranceBoundary,false);
 });
 test('unknown DN interpolates BOTH reference weight and length across nearest DN master cells',()=>{
   const rows=[
