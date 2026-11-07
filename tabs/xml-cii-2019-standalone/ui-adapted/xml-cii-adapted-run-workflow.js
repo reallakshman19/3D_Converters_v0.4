@@ -93,7 +93,7 @@ function rigidReviewMarkup(rows) {
     <div data-rigid-review-status style="font-size:12px;margin-top:8px;"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;border-top:1px solid #253a55;padding-top:16px;">
       <button type="button" data-rigid-review-refresh style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Refresh Suggestions</button>
-      <div style="display:flex;gap:12px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:100%;">
         <button type="button" data-rigid-review-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:8px 16px;font-size:12px;">Apply All Suggestions</button>
         <button type="button" data-rigid-review-fill-best style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Use All Approved Source Weights</button>
         <button type="button" data-rigid-review-skip style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Skip Review</button>
