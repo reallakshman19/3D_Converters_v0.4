@@ -1,0 +1,29 @@
+name: GLRD R1 pinned source export (no engineering inputs)
+on:
+  push:
+    branches:
+      - audit/source-export-pinned-glrd-r1-20261107
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 17e178bf79173a49df445625515f810e40a6e9c4
+          persist-credentials: false
+      - name: Validate exact source SHA and archive source only
+        run: |
+          test "$(git rev-parse HEAD)" = "17e178bf79173a49df445625515f810e40a6e9c4"
+          mkdir -p glrd-export
+          git archive --format=zip --output=glrd-export/source-pinned-17e178bf.zip HEAD
+          sha256sum glrd-export/source-pinned-17e178bf.zip | tee glrd-export/SHA256SUMS.txt
+          git rev-parse HEAD | tee glrd-export/SOURCE_COMMIT.txt
+          unzip -t glrd-export/source-pinned-17e178bf.zip | tail -2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glrd-r1-pinned-source-only
+          path: glrd-export/*
+          retention-days: 3
