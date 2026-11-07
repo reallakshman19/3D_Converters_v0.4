@@ -30,6 +30,10 @@ on:
       - 'tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js'
       - 'tests/empirical-unknown-*.test.mjs'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
+      - 'tests/xml-cii-rigid-review-prefill.test.mjs'
       - 'scripts/verify-empirical-nearest-browser.mjs'
       - '.github/workflows/empirical-unknown-component-length.yml'
   workflow_dispatch:
@@ -56,6 +60,9 @@ jobs:
           node --check tabs/empirical-weight-tuning-tab.js
           node --check tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js
           node --check scripts/verify-empirical-nearest-browser.mjs
           node --check scripts/verify-empirical-ir-r2-browser.mjs
           node --check tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js
@@ -80,6 +87,7 @@ jobs:
           node tests/xml-cii-smart-ui-preflight.test.mjs
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
           node --test tests/xml-cii-weight-nearest-known-family-regression.test.mjs
+          node --test tests/xml-cii-rigid-review-prefill.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
           node --test tests/empirical-weight-nearest-interpolation.test.mjs
