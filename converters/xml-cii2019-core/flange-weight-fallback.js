@@ -144,7 +144,14 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
   const maxRatio = Number(config?.weight?.extrapolationMaxRatio ?? 1.6);
   if (!Number.isFinite(minRatio) || !Number.isFinite(maxRatio) ||
       minRatio <= 0 || maxRatio < minRatio || ratio < minRatio || ratio > maxRatio) return null;
-  const proposedWeight = roundWeight(Number(reference.weight) * ratio);
+  // Owner's 6 mm tolerance boundary: a 115 mm unknown matched to an
+  // exact 109 mm / 15 kg flange master uses the FULL 15 kg unchanged.
+  // Do not apply proportional length scaling at this exact boundary.
+  const atFlangeToleranceBoundary =
+    Math.abs(targetLength - (Number(reference.rowLength) + 6)) <= 1e-7;
+  const proposedWeight = atFlangeToleranceBoundary
+    ? roundWeight(Number(reference.weight))
+    : roundWeight(Number(reference.weight) * ratio);
   if (!Number.isFinite(proposedWeight) || proposedWeight <= 0) return null;
 
   const lengthDelta = Math.abs(Number(reference.rowLength) - targetLength);
@@ -154,8 +161,11 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
     selectedWeight: proposedWeight,
     suggestedWeight: proposedWeight,
     weight: proposedWeight,
-    weightMethod: 'flange-length-extrapolated',
-    weightWarning: `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`,
+    weightMethod: atFlangeToleranceBoundary ? 'flange-master-at-6mm-tolerance' : 'flange-length-extrapolated',
+    atFlangeToleranceBoundary,
+    weightWarning: atFlangeToleranceBoundary
+      ? `Flange full master weight at +6 mm tolerance: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm; NO length interpolation or scaling.`
+      : `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`
     inferredWeight: true,
     fallbackSuggestion: true,
     zeroFallback: false,
