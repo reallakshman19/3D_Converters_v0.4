@@ -21,7 +21,10 @@ function candidateFrom(button) {
   return {
     suggestedWeight: numeric(button.getAttribute('data-rigid-review-weight')),
     totalScore: scoreMatch ? Number(scoreMatch[1]) / 100 : (button.classList.contains('best') ? .9 : 0),
-    preferred: button.classList.contains('best'), title,
+    preferred: true, title,
+    massAuthority:'APPROVED_SOURCE_MASS',
+    engineeringMassApproved:true,acceptedForCii:true,
+    inferredWeight:false,fallbackSuggestion:false,zeroFallback:false,
     weightMethod: /extrapolat/i.test(title) ? 'length-extrapolated' : /interpolat/i.test(title) ? 'length-interpolated' : 'exact',
     oddEntry: /odd/i.test(title),
   };
