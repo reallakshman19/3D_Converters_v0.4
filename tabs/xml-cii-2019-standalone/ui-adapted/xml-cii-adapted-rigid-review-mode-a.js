@@ -372,6 +372,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         const numeric = input.value==='' ? NaN : Number(input.value);
         if(input.dataset.rigidSkippedZero==='true' && input.value==='0'){
           updates[sourceId] ||= {ratingsByKey:{},weightsByKey:{},skippedByKey:{}};
+          updates[sourceId].skippedByKey ||= {};
           updates[sourceId].skippedByKey[key]={
             skipped:true,weightKg:0,reason:'EXPLICIT_ZERO_MASS_SKIP_NO_SOURCE_AUTHORITY',
           };
