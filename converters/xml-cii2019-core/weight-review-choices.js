@@ -121,7 +121,7 @@ export function preferredWeightReviewDraft(issue) {
 
 export function weightReviewChoiceLabel(choice) {
   const length = choice.referenceLengthMm === null ? '' : ' · master L=' + choice.referenceLengthMm + 'mm';
-  const delta = choice.lengthDeltaMm === null ? '' : ' · Δ' + choice.lengthDeltaMm + 'mm';
+  const delta = choice.lengthDeltaMm === null ? '' : ' · Δ' + Number(choice.lengthDeltaMm.toFixed(3)) + 'mm';
   const scope=choice.comparison
     ? ' · REF DN'+choice.referenceBoreMm+'/Class'+choice.referenceRating+
       ' vs SOURCE DN'+choice.sourceBoreMm+'/Class'+choice.sourceRating
