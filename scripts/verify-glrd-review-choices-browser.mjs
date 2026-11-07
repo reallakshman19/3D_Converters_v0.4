@@ -19,9 +19,9 @@ try {
    '/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
  const census=await page.evaluate(async ({xml,stage,masterRows})=>{
    const {collectModeARigidWeightReviewIssues,openModeAConsolidatedRigidWeightReviewPopup}=
-     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-choice-skip-trace-1');
+     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-bulk-review-gate-1');
    const {availableWeightReviewChoices}=
-     await import('/converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1');
+     await import('/converters/xml-cii2019-core/weight-review-choices.js?v=20261107-bulk-review-gate-1');
    const d=new DOMParser().parseFromString(xml,'application/xml');
    const ratingByBranch={};
    for(const branch of d.getElementsByTagName('Branch')){
