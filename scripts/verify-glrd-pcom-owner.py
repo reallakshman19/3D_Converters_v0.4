@@ -96,7 +96,7 @@ assert len(configs['all']['overrides']['rigidWeight'])==14
 expected={w['rigidPointer'] for w in allWitness}
 assert set(deltas)==expected,(set(deltas),expected)
 for w in allWitness:
-    assert w['sourcePhysicalSpanMm']==12.7,w
+    assert abs(w['sourcePhysicalSpanMm']-12.7)<0.001,w
     assert abs(w['elementLengthMm']-19.1)<0.001,w
     assert abs(w['overlapMm']-12.7)<0.001,w
     assert math.isclose(w['massKg'],1.748,abs_tol=1e-9)
