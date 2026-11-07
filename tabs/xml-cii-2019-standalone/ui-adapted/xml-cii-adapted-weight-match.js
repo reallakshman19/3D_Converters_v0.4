@@ -400,7 +400,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     }
     const rows = issues.map((issue, rowIndex) => {
       const best = issue.candidates?.[0];
-      const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : '');
+      const initial = issue.weight && issue.weight > 0 ? issue.weight : (Number(issue.overrideWeight) > 0 ? issue.overrideWeight : '');
       const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
       const inputStyle = `width:86px;padding:4px;border-radius:4px;font-size:12px;color:#e6edf5;background:#0f172a;border:1px solid #334155;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
       const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
