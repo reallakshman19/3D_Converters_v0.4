@@ -226,11 +226,14 @@ try {
  assert.doesNotMatch(fbRow.suggestion,/47\.001\s*kg/,'must not show reduced-bore mass');
  await page.screenshot({path:resolve(out,'glrd-actual-weight-match-reconciled.png')});
 
- // Critical UI authority check: an alternative Class/DN master reference is
- // only a draft until a reviewer explicitly ticks Reviewed AND clicks Save.
+ // Real Weight Match must not expose per-row Reviewed / Save reviewed controls.
+ // The page only saves selected empirical drafts after a separate explicit
+ // bulk verification checkbox and confirmation. No catalog score is authority.
  const row=page.locator('#glrd-actual-weight-match-panel .mc-rigid-review-table tbody tr')
    .filter({hasText:'/27507_2'}).first();
  assert.equal(await row.count(),1,'real Owner full-bore source row exists');
+ assert.equal(await page.locator('#glrd-actual-weight-match-panel [data-wm-verified], #glrd-actual-weight-match-panel [data-wm-save-reviewed]').count(),0,
+   'repeated qualification widgets removed from actual Weight Match UI');
  const preSave=await page.evaluate(()=>({
    saves:window.__glrdWeightMatchSaveCount,
    sourceMassEntries:Object.keys(window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}).length
@@ -239,19 +242,36 @@ try {
    '149 prefilled Weight Match values must not save any source mass');
  await row.locator('[data-wm-choice-index="1"]').click();
  assert.equal(await row.locator('.mc-rigid-review-input').getAttribute('data-wm-proposal-draft'),'estimate');
- assert.equal(await row.locator('[data-wm-verified]').isChecked(),false);
- await row.locator('[data-wm-save-reviewed]').click();
+ assert.equal(await page.evaluate(()=>window.__glrdWeightMatchSaveCount),0);
+ // Isolate one candidate for an exact single-source acceptance witness.
+ await page.evaluate(()=>{
+   const selected=[...document.querySelectorAll('#glrd-actual-weight-match-panel .mc-rigid-review-table tbody tr')]
+      .find(tr=>tr.textContent?.includes('/27507_2'));
+   document.querySelectorAll('#glrd-actual-weight-match-panel .mc-rigid-review-input')
+      .forEach(input=>{
+        if(input.closest('tr')===selected)return;
+        input.value='';
+        delete input.dataset.wmProposalDraft;
+        delete input.dataset.wmProposalReference;
+      });
+ });
+ await page.locator('#glrd-actual-weight-match-panel #mc-wm-accept-drafts').click();
+ assert.equal(await page.locator('#glrd-actual-weight-match-panel #mc-wm-batch-confirm').isDisabled(),true);
+ assert.match(await page.locator('#glrd-actual-weight-match-panel #mc-wm-batch-summary').innerText(),/1 positive estimate/);
  assert.equal(await page.evaluate(()=>window.__glrdWeightMatchSaveCount),0,
-   'unreviewed comparison-only candidate must NOT persist');
- await row.locator('[data-wm-verified]').check();
- await row.locator('[data-wm-save-reviewed]').click();
+   'opening summary is not mass approval');
+ await page.locator('#glrd-actual-weight-match-panel #mc-wm-batch-attest').check();
+ await page.locator('#glrd-actual-weight-match-panel #mc-wm-batch-confirm').click();
  const reviewedSaved=await page.evaluate(()=>({
    saves:window.__glrdWeightMatchSaveCount,
-   weights:window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}
+   weights:window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{},
+   receipts:window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeightReviewReceipts||{}
  }));
- assert.equal(reviewedSaved.saves,1,'only explicit Reviewed + Save may persist physical kg');
+ assert.equal(reviewedSaved.saves,1,'only explicit bulk attestation commits physical kg');
  assert.equal(Object.keys(reviewedSaved.weights).length,1,
-   'reviewed single component must never approve 148 other preloads');
+   'single tested component must never approve the other 148 preloads');
+ assert.equal(Object.keys(reviewedSaved.receipts).length,1,
+   'saved empirical mass requires one explicit verification receipt');
 
  await writeFile(out+'/glrd-bore-family-receipt.json',
    JSON.stringify({...data,renderedWeightMatch:rendered,reviewedSingleSave:{
