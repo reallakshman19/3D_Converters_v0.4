@@ -70,6 +70,27 @@ export function applyModeAConsolidatedRigidReviewUpdates(state = {}, updates = {
         if (text(key) && Number.isFinite(numeric) && numeric > 0) bucket[key] = numeric;
       }
     }
+    const receipts=patch.reviewReceiptsByKey && typeof patch.reviewReceiptsByKey==='object'
+      ? patch.reviewReceiptsByKey : {};
+    if(Object.keys(receipts).length){
+      const bucket=object(overrides,'rigidWeightReviewReceipts');
+      for(const [key,receipt] of Object.entries(receipts)){
+        const mass=Number(weights[key]);
+        const recorded=Number(receipt?.weightKg);
+        const method=text(receipt?.reviewMethod);
+        const allowed=['EXPLICIT_BULK_OWNER_ATTESTATION','EXPLICIT_INDIVIDUAL_OWNER_REVIEW'];
+        if(!text(key)||receipt?.reviewed!==true || !allowed.includes(method) ||
+           !(Number.isFinite(mass)&&mass>0) ||
+           !Number.isFinite(recorded)||Math.abs(mass-recorded)>1e-9)
+          throw new Error('Invalid physical mass review receipt: '+key);
+        bucket[key]={
+          reviewed:true,reviewMethod:method,weightKg:mass,
+          sourceComponentRef:text(receipt.sourceComponentRef),
+          sourceEndpoint:text(receipt.sourceEndpoint),
+          statement:'Reviewer confirms independent physical-component mass verification',
+        };
+      }
+    }
     return { ...source, supportConfigJson: JSON.stringify(config, null, 2) };
   });
   const active = sources.find((source) => source.sourceId === batch.activeSourceId) || null;
