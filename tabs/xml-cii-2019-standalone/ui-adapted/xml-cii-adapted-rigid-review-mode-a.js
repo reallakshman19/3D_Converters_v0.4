@@ -119,7 +119,7 @@ function rowMarkup(issue, rowIndex) {
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">
        <input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="" placeholder="kg" style="width:92px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;">
-       <label style="display:block;font-size:10px;color:#e9c875;white-space:nowrap;" title="Verify the physical-component mass independently before accepting an unapproved suggestion."><input type="checkbox" data-rigid-suggestion-verified> Reviewed</label>
+
     </td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${modeARigidCandidateMarkup(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}
       ${proposedRigidReviewWeight(issue) && !proposedRigidReviewWeight(issue).approved ? `<button type="button" data-mode-a-rigid-propose="${rowIndex}" style="margin-left:4px;cursor:pointer;border:1px solid #8c6f2e;background:#342609;color:#ffe7a3;border-radius:4px;">Use draft</button>` : ''}
@@ -155,12 +155,12 @@ function popupMarkup(rows, entries) {
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;margin:8px 0;">
         <input type="checkbox" data-mode-a-rigid-bulk-attest style="margin-top:3px;">
         <span><strong>I confirm I independently verified the physical-component masses for every pending draft listed above.</strong>
-        Marking reviewed is an engineering acceptance of those values for this conversion; the catalog score alone is not approval.
+        Confirming the batch is an engineering acceptance of those values for this conversion; the catalog score alone is not approval.
         All unverified/incorrect masses must be corrected or excluded before I confirm.</span>
       </label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" data-mode-a-rigid-confirm-bulk-review disabled style="padding:8px 13px;background:#2563eb;border:1px solid #60a5fa;color:white;border-radius:6px;cursor:pointer;">Confirm independently reviewed drafts</button>
-        <button type="button" data-mode-a-rigid-close-bulk-review style="padding:8px 13px;background:transparent;border:1px solid #475569;color:#cbd5e1;border-radius:6px;cursor:pointer;">Return to individual review</button>
+        <button type="button" data-mode-a-rigid-close-bulk-review style="padding:8px 13px;background:transparent;border:1px solid #475569;color:#cbd5e1;border-radius:6px;cursor:pointer;">Return to weight table</button>
       </div>
     </div>
     <div style="overflow:auto;max-height:55vh;border:1px solid rgba(148,163,184,.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;z-index:2;"><th style="padding:7px;background:#1e293b;">Source XML</th><th style="padding:7px;">Branch</th><th style="padding:7px;">Bore</th><th style="padding:7px;">Rating</th><th style="padding:7px;">Node</th><th style="padding:7px;">DTXR</th><th style="padding:7px;">Length</th><th style="padding:7px;">Manual Weight (kg)</th><th style="padding:7px;">Nearest Suggestions</th></tr></thead><tbody data-mode-a-rigid-body>${rows.map(rowMarkup).join('')}</tbody></table></div>
@@ -372,9 +372,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       if(!pending.length){hideBulkReview();filter();return;}
       for(const tr of pending){
         const input=tr.querySelector('.mc-rigid-review-input');
-        const verified=tr.querySelector('[data-rigid-suggestion-verified]');
-        if(!input || !verified)continue;
-        verified.checked=true;
+        if(!input || !rigidReviewProposalNeedsVerification(input))continue;
         input.dataset.rigidReviewMethod='EXPLICIT_BULK_OWNER_ATTESTATION';
       }
       hideBulkReview();
@@ -385,15 +383,6 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         'No output has been produced yet.',false);
     });
     overlay.addEventListener('change',event=>{
-      if(event.target?.matches?.('[data-rigid-suggestion-verified]')){
-        const input=event.target.closest('tr')?.querySelector('.mc-rigid-review-input');
-        if(input){
-          if(event.target.checked && input.dataset.rigidSuggestionDraft==='estimate')
-            input.dataset.rigidReviewMethod='EXPLICIT_INDIVIDUAL_OWNER_REVIEW';
-          else delete input.dataset.rigidReviewMethod;
-        }
-        filter();
-      }
       if(event.target?.matches?.('[data-mode-a-rigid-choice]') ||
          event.target?.matches?.('.mc-rigid-review-input')){
         hideBulkReview(); // any changed candidate invalidates a previous blanket confirmation
@@ -436,7 +425,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       const count=missing.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.rigidSkippedZero==='true').length;
       filter();
       setStatus(count+' blank row(s) marked 0 kg SKIPPED. '+pendingReviewRows().length+
-        ' estimated masses still require independent Reviewed confirmation. '+
+        ' estimated masses still require a single explicit batch confirmation. '+
         'No skipped zero is an approved physical source mass.',false);
     });
     overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
@@ -532,13 +521,12 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].weightsByKey[key] = numeric;
         if(input.dataset.rigidSuggestionDraft==='estimate'){
-          const verified=input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
-          if(!verified?.checked)throw new Error('Unreviewed estimated mass passed review gate: '+key);
+          if(input.dataset.rigidReviewMethod!=='EXPLICIT_BULK_OWNER_ATTESTATION')
+            throw new Error('Unconfirmed estimated mass passed batch review gate: '+key);
           updates[sourceId].reviewReceiptsByKey ||= {};
           const issue=rows.find(row=>row.reviewId===input.dataset.reviewId);
           updates[sourceId].reviewReceiptsByKey[key]={
-            reviewed:true,reviewMethod:input.dataset.rigidReviewMethod==='EXPLICIT_BULK_OWNER_ATTESTATION'
-              ? 'EXPLICIT_BULK_OWNER_ATTESTATION' : 'EXPLICIT_INDIVIDUAL_OWNER_REVIEW',
+            reviewed:true,reviewMethod:'EXPLICIT_BULK_OWNER_ATTESTATION',
             weightKg:numeric,
             sourceComponentRef:issue?.componentRefNo||'',
             sourceEndpoint:issue?.endpoint||'',
@@ -564,7 +552,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
               ' missing row(s) or choose explicit Skip blank; Show missing locates the source. '
             :'No blank weights remain. ')+
           (unreviewed.length?unreviewed.length+' estimate draft(s) are NOT independently reviewed. '+
-            'Check Reviewed for each or use the explicit Review draft weights confirmation. ':'')+
+            'Use the explicit Review draft weights confirmation. ':'')+
           skipped.length+' intentional 0 kg skip(s). Nothing was applied.',true);
         // After a 0-missing/109-unreviewed Apply, keep the explicit
         // confirmation panel in view rather than scrolling past it to row 1.
