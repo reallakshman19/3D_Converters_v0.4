@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
 import { collectXmlCiiWeightMatchRows, reconcileXmlCiiWeightMatchSourceBores } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
@@ -195,6 +195,7 @@ function rerankWithRating(row, config, { ratingMode = 'preview', snapshot = read
     nodeHint: ranking.nodeHint,
     candidates: ranking.candidates.slice(0, 5),
     rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
+    comparisonReferences:comparisonWeightMasterReferences({...row,rating},config),
     ranking,
   };
 }
