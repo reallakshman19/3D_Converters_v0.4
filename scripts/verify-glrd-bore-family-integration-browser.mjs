@@ -84,13 +84,23 @@ try {
    const pcPreview=pc.map(row=>applyXmlCiiFlangeWeightFallbackToIssue(row,config));
    const exact=byRef(fixed,'27507');
    const fb=exact&&rankXmlCiiWeightCandidates(exact,config,{includeRejected:true});
+   const nearbyRefs=fixed.filter(r=>String(r.componentRefNo||'').includes('/27507'))
+      .map(r=>({ref:r.componentRefNo,endpoint:r.endpoint,boreMm:r.boreMm,
+        dtxr:r.dtxr,componentType:r.componentType,rating:r.rating,lengthMm:r.lengthMm}));
    const sourceBoreConflicts=fixed.filter(r=>r.boreAuthorityMismatch).length;
    return {branches:allBranches.length,rawWeightMatchRows:raw.length,
      modeReviewRows:mode.length,sourceBoreConflicts,sourceBoreHolds:fixed.filter(r=>r.sourceBoreHold).length,
      targets,stats,mismatches,pcCount:pc.length,pcPreviewCount:pcPreview.filter(r=>r.unknownComponentSuggestion?.ok).length,
      fullBoreRef27507:{boreMm:exact?.boreMm,rating:exact?.rating,
+       componentType:exact?.componentType,dtxr:exact?.dtxr,
+       sourceFamily:fb?.physicalFamily,nearbyRefs,
+       lengthMm:exact?.lengthMm,
        type:fb?.best?.typeDesc,kg:fb?.best?.selectedWeight}};
  },{xml,stage,masterRows});
+ console.log('GLRD_PRECHECK',JSON.stringify({targets:data.targets,
+     sourceBoreHolds:data.sourceBoreHolds,ranked:data.stats,
+     fb:data.fullBoreRef27507,pcCount:data.pcCount}));
+ await writeFile(out+'/glrd-bore-family-precheck.json',JSON.stringify(data,null,2));
  assert.equal(data.branches,31);
  assert.equal(data.targets.length,3);
  for(const t of data.targets){
