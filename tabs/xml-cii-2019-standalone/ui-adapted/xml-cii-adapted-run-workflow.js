@@ -129,9 +129,12 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
     overlay.querySelectorAll('[data-rigid-review-candidate]').forEach((button) => button.addEventListener('click', () => {
       const input = overlay.querySelectorAll('.mc-rigid-review-input')[Number(button.getAttribute('data-rigid-review-candidate'))];
       if (input) {
-        const row = rows[Number(button.getAttribute('data-rigid-review-candidate'))];
-        const proposal = proposedRigidReviewWeight(row);
-        if (proposal?.approved) stageRigidReviewProposal(input, proposal);
+        // Every approved chip has its own candidate weight. Preserve the
+        // specific clicked choice, not the first approved item in the row.
+        const weight=Number(button.getAttribute('data-rigid-review-weight'));
+        if (button.getAttribute('data-rigid-review-approved')==='true' &&
+            Number.isFinite(weight) && weight>0)
+          stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
       }
     }));
     overlay.querySelectorAll('[data-rigid-review-propose]').forEach(button=>button.addEventListener('click',()=>{
