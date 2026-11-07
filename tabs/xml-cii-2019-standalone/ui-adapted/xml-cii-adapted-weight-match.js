@@ -601,7 +601,6 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
 
       localIssues = nodeRows.map((nr) => {
         return applyXmlCiiFlangeWeightFallbackToIssue(standaloneWeightIssueFromDryRunNode(nr,liveConfig,originalFacts),liveConfig);
-        return currentIssue;
       });
 
       const mapped = localIssues.filter((row) => row.mapped).length;
