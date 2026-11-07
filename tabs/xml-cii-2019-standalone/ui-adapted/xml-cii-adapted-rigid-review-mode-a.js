@@ -48,20 +48,46 @@ function ratingInfo(issue) {
 }
 
 function candidateButtons(issue, rowIndex) {
-  return (issue.candidates || []).map((candidate) => {
+  // Ranked catalog candidates and the Unknown physical-length sidecar are
+  // evidence only. Never manufacture approved mass from a master match.
+  const ranked = issue.massSuggestionOnly ? [] : (issue.candidates || []);
+  const chips = ranked.map((candidate) => {
     const weight = candidate.suggestedWeight ?? candidate.selectedWeight ?? candidate.weight;
-    const rawScore = Number(candidate.totalScore ?? candidate.score ?? 0);
-    const score = Math.round((rawScore <= 1 ? rawScore * 100 : rawScore));
-    const method = candidate.preferred ? 'exact' : (candidate.weightMethod || (candidate.inferredWeight ? 'inferred' : 'review'));
+    const label = candidate.referenceFamily || candidate.typeDesc || candidate.valveType || 'Unknown reference';
+    const method = candidate.preferred ? 'exact-length master' : (candidate.weightMethod || 'ranked master');
     const sourceApproved = isApprovedPhysicalMassCandidate(candidate, weight);
-    if (!sourceApproved) return `<span data-mode-a-rigid-advisory="true"
-      title="Estimate only; no approved physical-component mass"
-      style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · review only</span>`;
+    if (!sourceApproved) {
+      const evidence = [
+        'ESTIMATE ONLY: no approved physical-component mass',
+        'Family: ' + label,
+        'Method: ' + method,
+        'Rating: ' + (issue.rating || '-'),
+        'Length delta: ' + (candidate.lengthDelta ?? 'n/a') + ' mm',
+        candidate.weightWarning || '',
+      ].filter(Boolean).join(' | ');
+      return `<span data-mode-a-rigid-advisory="true"
+        title="${attr(evidence)}"
+        style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(label)} · ${esc(method)} · advisory only</span>`;
+    }
     return `<button type="button" class="mc-rigid-review-candidate"
       data-mode-a-rigid-approved="true"
       data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}"
       title="Approved physical source mass" style="font-size:11px;padding:3px 6px;cursor:pointer;">${esc(weight)} kg · approved</button>`;
   }).join('');
+  const unknown = issue.unknownComponentSuggestion;
+  const unknownEvidence = unknown?.ok
+    ? `<span data-mode-a-unknown-weight-suggestion="true" title="${attr([
+        'Unknown physical-component length rule — ADVISORY ONLY',
+        'Family: ' + unknown.referenceFamily,
+        'Physical length: ' + unknown.componentLengthMm + ' mm',
+        'Reference length: ' + unknown.referenceLengthMm + ' mm',
+        'Reference weight: ' + unknown.referenceWeightKg + ' kg',
+        'Threshold: ' + unknown.thresholdMm + ' mm',
+        'Mass is NOT approved or automatically applied',
+      ].join(' | '))}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Length-rule ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily)} · advisory only</span>`
+    : unknown ? `<span data-mode-a-unknown-weight-hold="true" title="${attr(unknown.reason || unknown.code)}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Unknown length-rule HOLD · ${esc(unknown.code)}</span>`
+      : '';
+  return [chips, unknownEvidence].filter(Boolean).join(' ') ;
 }
 
 function rowMarkup(issue, rowIndex) {
