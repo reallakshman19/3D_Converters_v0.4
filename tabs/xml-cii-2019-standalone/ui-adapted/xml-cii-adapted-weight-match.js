@@ -398,7 +398,11 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
       const inputStyle = `width:86px;padding:4px;border-radius:4px;font-size:12px;color:#e6edf5;background:#0f172a;border:1px solid #334155;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
       const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
       const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
-      const chips = accepted || rejected || '<span style="color:#64748b;">No suggestion</span>';
+      const unknown = issue.unknownComponentSuggestion;
+      const unknownText = unknown?.ok
+        ? `<span data-unknown-weight-suggestion="true" title="${attr('Advisory only · ' + unknown.referenceFamily + ' master ' + unknown.referenceLengthMm + 'mm / ' + unknown.referenceWeightKg + 'kg · threshold ' + unknown.thresholdMm + 'mm · no automatic XML/CII edit')}" style="font-size:11px;line-height:1.2;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;white-space:nowrap;">Length-rule ≈ ${esc(Number(unknown.suggestedKg).toFixed(3))} kg · ${esc(unknown.referenceFamily)}</span>`
+        : '';
+      const chips = [accepted, unknownText, rejected].filter(Boolean).join('') || '<span style="color:#64748b;">No suggestion</span>';
       const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (methodLabel(best) || 'Unresolved');
       return `<tr style="${rowStyle}">
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(statusText)}</td>
