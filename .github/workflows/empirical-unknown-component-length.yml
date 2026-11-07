@@ -8,6 +8,9 @@ on:
       - 'converters/empirical-weight/**'
       - 'converters/xml-cii2019-core/flange-weight-fallback.js'
       - 'converters/xml-cii2019-core/weight-valve-hints.js'
+      - 'converters/xml-cii2019-core/weight-match-model.js'
+      - 'tests/xml-cii-glrd-bore-family-integration.test.mjs'
+      - 'scripts/verify-glrd-bore-family-integration-browser.mjs'
       - 'converters/xml-cii2019-core/rigid-weight-auto-apply.js'
       - 'tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js'
       - 'tabs/empirical-weight-tuning-tab.js'
@@ -57,6 +60,8 @@ jobs:
           node --check converters/empirical-weight/unknown-component-length-suggestion.js
           node --check converters/xml-cii2019-core/flange-weight-fallback.js
           node --check converters/xml-cii2019-core/weight-valve-hints.js
+          node --check converters/xml-cii2019-core/weight-match-model.js
+          node --check scripts/verify-glrd-bore-family-integration-browser.mjs
           node --check converters/xml-cii2019-core/rigid-weight-auto-apply.js
           node --check tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js
           node --check tabs/empirical-weight-tuning-tab.js
@@ -91,6 +96,7 @@ jobs:
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
           node --test tests/xml-cii-weight-nearest-known-family-regression.test.mjs
           node --test tests/xml-cii-rigid-review-prefill.test.mjs
+          node --test tests/xml-cii-glrd-bore-family-integration.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
           node --test tests/empirical-weight-nearest-interpolation.test.mjs
@@ -133,6 +139,12 @@ jobs:
           echo "6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151  GLRD-1000-PI-01 - BM2.xml" | sha256sum -c -
           echo "1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746  STF_2026Nov03-0839_managed_stage.json" | sha256sum -c -
           echo "73496a1277cd1f39de823d57180ee0d8c4b1d72241923f1e558af2c7c805d007  LL_BM2.xlsx" | sha256sum -c -
+      - name: Browser original-source DN parity + master family audit (GLRD)
+        env:
+          GLRD_INPUT_DIR: /tmp/glrd-inputs
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+        run: node scripts/verify-glrd-bore-family-integration-browser.mjs
+
       - name: Chromium real GLRD full review census + standalone/ATTA/Mode A draft/approval
         env:
           GLRD_INPUT_DIR: /tmp/glrd-inputs
@@ -153,6 +165,7 @@ jobs:
           name: empirical-unknown-component-${{ github.sha }}
           path: |
             artifacts/empirical-unknown-browser/**
+            artifacts/glrd-bore-family/**
             artifacts/glrd-native-parity/**
             /tmp/empirical-unknown-browser.log
           if-no-files-found: warn
