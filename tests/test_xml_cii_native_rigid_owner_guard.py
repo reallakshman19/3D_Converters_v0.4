@@ -35,6 +35,20 @@ class NativeRigidPhysicalOwnerTests(unittest.TestCase):
                 "CII_RIGID_FLANGE_ENTRY_MASS_OWNER_UNVERIFIED"):
             base._rigid_weight_for_edge(edge(self.valve, self.flange_start))
 
+    def test_actual_pcom_to_foreign_flange_cannot_inherit_mass(self):
+        """Source PCOM/28062 is an independent 12.7mm component.
+        Its incoming CII route edge into FLAN/28064 cannot carry flange mass.
+        """
+        pcom = node("=134234934/28062", "PCOM", 2, None, 0)
+        flange = node("=134234934/28064", "FLAN", 1, 2, 15)
+        with self.assertRaisesRegex(ValueError,
+                "CII_RIGID_FLANGE_ENTRY_MASS_OWNER_UNVERIFIED"):
+            base._rigid_weight_for_edge(edge(pcom, flange))
+        flange_without_approval = node("=134234934/28064", "FLAN", 1, 2, 0)
+        self.assertEqual(
+            base._rigid_weight_for_edge(edge(pcom, flange_without_approval)), 0
+        )
+
     def test_109_mm_physical_flange_keeps_15kg(self):
         self.assertEqual(base._rigid_weight_for_edge(
             edge(self.flange_start, self.flange_end)), 15)
