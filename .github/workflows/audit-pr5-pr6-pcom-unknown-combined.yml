@@ -1,0 +1,54 @@
+name: Combined PR5 PR6 PR8 PCOM safety qualification
+on:
+  push:
+    branches:
+      - audit/pr5-pr6-pcom-unknown-combined-20261107
+permissions:
+  contents: read
+jobs:
+  exact-merged-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm production source identical to merged main
+        run: |
+          test "$(git merge-base HEAD 7e09f75a075edbf2016d86a1399bc8019c88e9ea)" = "7e09f75a075edbf2016d86a1399bc8019c88e9ea"
+          test "$(git diff --name-only 7e09f75a075edbf2016d86a1399bc8019c88e9ea HEAD -- . ':!scripts/audit-pr5-pr6-pcom-pr8-combined-browser.mjs' ':!.github/workflows/audit-pr5-pr6-pcom-unknown-combined.yml' | wc -l)" -eq 0
+          git rev-parse HEAD
+      - name: Native writer guard and original matching tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_xml_cii_native_*guard.py' -v
+      - name: Node combined mass-audit, F13 and cache suites
+        run: |
+          node tests/rigid-weight-empirical-audit.test.mjs
+          node tests/rigid-weight-run-gate.integration.test.mjs
+          node --test tests/xml-cii-preview-run-parity-closure.test.mjs
+          node --test tests/empirical-unknown-component-length-suggestion.test.mjs
+          node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
+          node --test tests/xml-cii-weight-match-content-cache.test.mjs
+          node tests/xml-cii-node460-flange-weight.test.mjs
+          node tests/xml-cii-mode-a-easy-weight.test.mjs
+      - name: Install Playwright
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start static app
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/combined-glrd-http.log 2>&1 &
+          node -e "const u='http://127.0.0.1:4173'; let n=0; const p=async()=>{try{const r=await fetch(u); if(r.ok)return;}catch{}if(++n>60)process.exit(1);setTimeout(p,500)};p();"
+      - name: Chromium real panels and PCOM unknown advisory authority
+        run: |
+          node scripts/verify-xml-cii-rigid-browser.mjs
+          node scripts/verify-pcom-unknown-review-browser.mjs
+          node scripts/audit-pr5-pr6-pcom-pr8-combined-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: combined-pr5-pr6-pr8-pcom-safety
+          path: |
+            artifacts/xml-cii-rigid-mass-browser/**
+          if-no-files-found: warn
