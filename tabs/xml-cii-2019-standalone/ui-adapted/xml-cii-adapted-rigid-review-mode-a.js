@@ -178,6 +178,8 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const summary = overlay.querySelector('[data-mode-a-rigid-summary]');
     const search = overlay.querySelector('[data-mode-a-rigid-search]');
     const source = overlay.querySelector('[data-mode-a-rigid-source]');
+    const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
+      .map(input=>[input.dataset.reviewId||'',text(input.value)]));
     const setStatus = (message, bad = false) => { if (status) { status.textContent = message; status.style.color = bad ? '#ef4444' : '#10b981'; } };
     const filter = () => {
       const q = text(search?.value).toLowerCase();
@@ -279,7 +281,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
-        if (!text(input.value)) return;
+        if (!text(input.value) || text(input.value) === initialRatings.get(input.dataset.reviewId || '')) return;
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].ratingsByKey[key] = text(input.value);
       });
