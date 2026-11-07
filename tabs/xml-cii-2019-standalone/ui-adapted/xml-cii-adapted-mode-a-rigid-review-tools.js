@@ -36,8 +36,8 @@ function enhance(dialog) {
   const all = document.createElement('button');
   all.type = 'button';
   all.dataset.modeARigidFillAllSuggestions = 'true';
-  all.textContent = 'Use All Suggestions';
-  all.title = 'Fill each visible review row with its first available suggestion. This is a review aid only; no weight is committed until Apply Weights and Run All Models.';
+  all.textContent = 'Use All Approved Source Weights';
+  all.title = 'Copy only explicitly approved source masses. Empirical estimates never populate editable weights.';
   styleButton(all);
 
   const status = dialog.querySelector('[data-mode-a-rigid-status]');
@@ -73,12 +73,13 @@ function enhance(dialog) {
       const input = row.querySelector('.mc-rigid-review-input');
       const candidate = row.querySelector('[data-mode-a-rigid-candidate]');
       const weight = Number(candidate?.dataset?.modeARigidWeight);
-      if (!input || !Number.isFinite(weight) || weight <= 0) continue;
+      if (!input || candidate?.dataset?.modeARigidApproved !== 'true' ||
+          !Number.isFinite(weight) || weight <= 0) continue;
       input.value = String(weight);
       count += 1;
     }
     setStatus(count
-      ? `Filled ${count} first suggestion(s). Review all values before applying.`
+      ? `Filled ${count} approved source mass(es).`
       : 'No visible positive suggestions are available.',
       count === 0);
   });
