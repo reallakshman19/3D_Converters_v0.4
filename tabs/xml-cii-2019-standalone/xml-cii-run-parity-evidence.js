@@ -37,6 +37,9 @@ function authorityKey(entry) {
     entry?.scope || '',
     entry?.branchName || '',
     entry?.nodeNumber || '',
+    entry?.componentRefNo || '',
+    entry?.endpoint || '',
+    entry?.position || '',
     ...(Array.isArray(entry?.path) ? entry.path : []),
   ].join('\u0000');
 }
@@ -86,7 +89,14 @@ export function extractXmlCiiParityAuthorityEntries(xmlText, expectedEntries = [
     if (!branch) return { ...entry, actual: '', found: false, missing: 'branch' };
     let owner = branch;
     if (entry?.scope === 'node') {
-      owner = childrenByName(branch, 'Node').find((node) => childText(node, 'NodeNumber') === text(entry?.nodeNumber)) || null;
+      const identity = childrenByName(branch,'Node').filter(node =>
+        childText(node,'NodeNumber') === text(entry?.nodeNumber) &&
+        (!entry?.componentRefNo || childText(node,'ComponentRefNo') === text(entry.componentRefNo)) &&
+        (!entry?.endpoint || childText(node,'Endpoint') === text(entry.endpoint)) &&
+        (!entry?.position || childText(node,'Position') === text(entry.position)));
+      if (entry?.componentRefNo && identity.length !== 1)
+        return { ...entry, actual: '', found: false, missing: identity.length ? 'ambiguous-physical-owner' : 'physical-owner-not-found' };
+      owner = identity[0] || null;
       if (!owner) return { ...entry, actual: '', found: false, missing: 'node' };
     }
     const actual = valueAtPath(owner, entry?.path || []);
