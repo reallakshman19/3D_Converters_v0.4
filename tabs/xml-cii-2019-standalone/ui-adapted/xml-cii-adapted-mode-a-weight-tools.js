@@ -114,9 +114,9 @@ function setDtxrRatingMode(panel, result, stateRef, enabled) {
   return changed;
 }
 
-function applyPreferredExact(panel, result, stateRef) {
+export function collectModeAApprovedPreferredChanges(rows = []) {
   const changes = [];
-  for (const row of result.rows || []) {
+  for (const row of rows || []) {
     if (row.mapped) continue;
     if (row._modeAWeightDtxrBest) {
       const best = row._modeAWeightDtxrBest;
@@ -132,6 +132,11 @@ function applyPreferredExact(panel, result, stateRef) {
     if (Number.isFinite(weight) && weight > 0)
       changes.push({ sourceId: row.sourceId, key: row.key, weight, approvedCandidate: row.bestCandidate });
   }
+  return changes;
+}
+
+function applyPreferredExact(panel, result, stateRef) {
+  const changes = collectModeAApprovedPreferredChanges(result.rows);
   if (!changes.length) return 0;
   if (!applyModeAWeightChanges(stateRef, changes, `Use all preferred exact weights (${changes.length})`)) return 0;
   for (const change of changes) {
