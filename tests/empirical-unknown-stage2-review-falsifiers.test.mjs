@@ -140,3 +140,12 @@ test('F04 executable UI falsifier: both real fillBest bodies refuse unapproved m
     }
   }
 });
+
+test('R2 F11: stale Weight Match cached rows from old auto-mapped ranking are not trusted',()=>{
+  const text=readFileSync(new URL('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js',import.meta.url),'utf8');
+  assert.match(text,/xml-cii-wm-cache-v2-original-source-authority/);
+  assert.doesNotMatch(text,/xml-cii-wm-cache-v1/);
+  assert.match(text,/sourceFactsIndex\(xmlText\)/);
+  assert.match(text,/mapped: hasOverride \|\| sourceWeight>0/);
+  assert.doesNotMatch(text,/mapped: hasOverride \|\| \(nr\.weightMatch/);
+});
