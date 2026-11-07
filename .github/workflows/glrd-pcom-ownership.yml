@@ -60,6 +60,10 @@ jobs:
         run: |
           python3 -m py_compile converters/scripts/xml_to_cii2019_pcom_mass.py converters/scripts/xml_to_cii2019_runtime_custody.py scripts/verify-glrd-pcom-owner.py
           python3 scripts/verify-glrd-pcom-owner.py
+      - name: Eight adversarial physical-owner refusal tests
+        run: |
+          python3 -m py_compile scripts/verify-glrd-pcom-refusal.py
+          python3 scripts/verify-glrd-pcom-refusal.py
       - name: Independent PR5 actual-CII pointer ownership audit
         run: |
           node --check scripts/verify-glrd-pcom-pr5-audit-browser.mjs
