@@ -25,11 +25,24 @@ try{
       endpoint:n.getElementsByTagName('Endpoint')[0]?.textContent,
       weight:n.getElementsByTagName('Weight')[0]?.textContent,
       pos:n.getElementsByTagName('Position')[0]?.textContent}));
+  const overrideAll={};
+  for(const pc of issues)overrideAll[pc.key]=1.748; // test fixture ONLY: simulate explicitly saved reviewer entries
+  const configAll={...config,overrides:{rigidWeight:overrideAll}};
+  const all=await enrichStandaloneXmlForRun({sourceText:source,stagedJsonText:stage,
+    supportConfigJson:JSON.stringify(configAll),options:{}});
   return {ok:result.applied,error:result.error,logs:result.logs,stats:result.stats,
-    key:row.key,originalIssue:row,rows,xml:result.xmlText||''};
+    key:row.key,all14Keys:Object.keys(overrideAll),allOk:all.applied,allError:all.error,
+    allComparisonCount:all.evidence?.comparisons??0,originalIssue:row,rows,
+    xml:result.xmlText||'',allXml:all.xmlText||''};
  },{source,stage});
  await writeFile(out+'/browser-parity-diagnostic.json',JSON.stringify({...data,xml:undefined},null,2));
  if(data.xml)await writeFile(out+'/browser-parity-explicit-pcom.xml',data.xml);
+ if(data.allXml)await writeFile(out+'/browser-parity-explicit-all14-pcom.xml',data.allXml);
+ await writeFile(out+'/browser-parity-explicit-configs.json',JSON.stringify({
+    one:{overrides:{rigidWeight:{[data.key]:1.748}}},
+    all:{overrides:{rigidWeight:Object.fromEntries(data.all14Keys.map(k=>[k,1.748]))}}
+ },null,2));
  console.log('PCOM_BROWSER_PARITY',JSON.stringify({applied:data.ok,error:data.error,rows:data.rows,key:data.key,
-   stats:data.stats,xmlBytes:data.xml.length,logs:data.logs?.slice(-3)}));
+   stats:data.stats,xmlBytes:data.xml.length,all14Ok:data.allOk,all14Error:data.allError,
+   all14Count:data.all14Keys.length,allParityComparisons:data.allComparisonCount,logs:data.logs?.slice(-3)}));
 } finally{await browser.close()}
