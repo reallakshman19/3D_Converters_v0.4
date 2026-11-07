@@ -1,3 +1,21 @@
+import { createUnknownComponentLengthWeightSuggester } from '../empirical-weight/unknown-component-length-suggestion.js';
+
+// Sidecar evidence only. No candidate promotion or persisted Weight overrides.
+const unknownSuggesterCache = new WeakMap();
+function attachUnknownComponentSuggestion(issue, config) {
+  if (!issue || issue.mapped || Number(issue.weight) > 0 || Number(issue.overrideWeight) > 0) return issue;
+  if (!['component-ref-endpoint-span', 'ElementLengthMm'].includes(issue.elementLengthSource)) return issue;
+  const rows = config?.weight?.masterRows;
+  if (!Array.isArray(rows) || !rows.length) return issue;
+  let suggester = unknownSuggesterCache.get(rows);
+  if (!suggester) {
+    suggester = createUnknownComponentLengthWeightSuggester({ masterRows: rows });
+    unknownSuggesterCache.set(rows, suggester);
+  }
+  const suggestion = suggester.suggest({componentLengthMm: issue.lengthMm,
+    boreMm: issue.boreMm, rating: issue.rating, componentRefNo: issue.componentRefNo});
+  return { ...issue, unknownComponentSuggestion: suggestion };
+}
 function text(value) {
   return value === null || value === undefined ? '' : String(value);
 }
@@ -157,7 +175,7 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
 }
 
 export function applyXmlCiiFlangeWeightFallbackToIssue(issue, config) {
-  const withHint = ensureIssueValveHint(issue);
+  const withHint = attachUnknownComponentSuggestion(ensureIssueValveHint(issue), config);
   if (!withHint || !shouldAddFlangeFallback(withHint)) return withHint;
   const fallback = buildXmlCiiFlangeWeightFallback(withHint, config);
   if (!fallback) return withHint;
