@@ -75,10 +75,19 @@ def _interior_overlap(edge_start, edge_end, start, end) -> float:
 def source_explicit_pcom_components(input_xml: Path, config: dict[str, Any]) -> list[dict]:
     overrides = config.get('overrides',{}).get('rigidWeight',{})
     if not isinstance(overrides,dict):raise ValueError('CII_PCOM_OVERRIDE_MAP_INVALID')
-    requested = {key:float(value) for key,value in overrides.items()
-                 if isinstance(key,str) and key.endswith('|PCOM') and _positive(value) is not None}
-    if not requested:return []
     root=ET.parse(input_xml).getroot()
+    branch_names={_child(branch,'Branchname') for branch in root.iter()
+                  if _name(branch.tag)=='Branch'}
+    # A selected-branch run may carry overrides saved for other branches.
+    # Ignore those; refuse malformed or unlocated PCOM keys IN this run.
+    requested={}
+    for key,value in overrides.items():
+        if not isinstance(key,str) or not key.endswith('|PCOM'):continue
+        if key.partition('::')[0] not in branch_names:continue
+        numeric=_positive(value)
+        if numeric is None:raise ValueError('CII_PCOM_EXPLICIT_OVERRIDE_INVALID:'+key)
+        requested[key]=numeric
+    if not requested:return []
     groups: dict[tuple[str,str],list[ET.Element]] = {}
     for branch in root.iter():
         if _name(branch.tag)!='Branch':continue
