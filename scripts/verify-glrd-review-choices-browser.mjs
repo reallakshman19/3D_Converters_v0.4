@@ -206,15 +206,30 @@ try {
    const result=await enrichStandaloneXmlForRun({
      sourceText:xml,stagedJsonText:stage,supportConfigJson,options:{}
    });
+   // Produce an otherwise identical native-input baseline from the SAME
+   // browser-enriched route with only the simulated source mass approvals
+   // omitted. This avoids comparing to a different pipeline/configuration.
+   const withoutMass=JSON.parse(supportConfigJson);
+   delete withoutMass.overrides.rigidWeight;
+   delete withoutMass.overrides.rigidWeightReviewReceipts;
+   const baseline=await enrichStandaloneXmlForRun({
+     sourceText:xml,stagedJsonText:stage,
+     supportConfigJson:JSON.stringify(withoutMass),options:{}
+   });
    return {applied:result.applied,error:result.error||'',
      comparisons:result.evidence?.comparisons??0,
      mismatches:result.evidence?.mismatches?.length??0,
      fields:result.appliedFields??0,
-     xmlText:result.xmlText||'',supportConfigJson};
+     xmlText:result.xmlText||'',supportConfigJson,
+     baselineApplied:baseline.applied,baselineError:baseline.error||'',
+     baselineXmlText:baseline.xmlText||''};
  },{xml,stage,fiveUpdates});
  assert.equal(nativeHandoff.applied,true,'simulated reviewed weights must be accepted by run parity: '+nativeHandoff.error);
  assert.ok(nativeHandoff.xmlText.length>0,'actual enriched XML must reach native handoff');
  assert.equal(nativeHandoff.mismatches,0,'browser run parity must not mismatch accepted source weights');
+ assert.equal(nativeHandoff.baselineApplied,true,'same-route unedited XML baseline must apply: '+nativeHandoff.baselineError);
+ assert.ok(nativeHandoff.baselineXmlText.length>0,'baseline engine XML must be emitted');
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-baseline-engine-input.xml'),nativeHandoff.baselineXmlText);
  await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-engine-input.xml'),nativeHandoff.xmlText);
  await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-config.json'),nativeHandoff.supportConfigJson);
  console.log('GLRD_BULK_REVIEW_PARITY_HANDOFF_PASS',JSON.stringify({
