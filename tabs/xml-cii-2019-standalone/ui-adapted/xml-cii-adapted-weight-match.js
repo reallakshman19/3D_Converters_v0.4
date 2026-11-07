@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { createElement } from './xml-cii-adapted-dom.js';
 import { xmlCiiDryRunPreview } from './xml-cii-adapted-preview-dryrun.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -14,7 +15,7 @@ import {
 import { saveMasterContextToLocalStorage, xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js';
 import { DEFAULT_WEIGHT_MASTER_ROWS } from '../../../converters/xml-cii2019-core/default-weight-master-rows.js';
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v1';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v3-content-digest-source-authority';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
 function clean(value) { return t(value).replace(/\s+/g, ' ').trim(); }
@@ -112,6 +113,7 @@ function renderWeightMasterBlocked(contentEl) {
 }
 
 function methodLabel(candidate) {
+  if (candidate?.flangeWeightFallback && candidate?.atFlangeToleranceBoundary) return 'Flange master +6mm';
   if (candidate?.flangeWeightFallback) return 'Flange extrapolated';
   if (candidate?.specialFactorRule) return candidate?.oddEntry ? 'Factor odd' : 'Factor';
   if (candidate?.weightMethod === 'length-interpolated') return 'Interpolated';
@@ -121,6 +123,10 @@ function methodLabel(candidate) {
 }
 
 function renderAcceptedChip(candidate, rowIndex, issue) {
+  if (!isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate))) {
+    const amount = selectedWeight(candidate);
+    return `<span data-advisory-weight="true" title="Estimate only; cannot be applied as approved component mass" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · advisory only</span>`;
+  }
   const value = selectedWeight(candidate);
   const label = desc(candidate);
   const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`, candidate?.weightWarning || ''].filter(Boolean).join(' | ');
@@ -158,8 +164,17 @@ function invalidateXmlCiiWeightCache() {
   try { localStorage.removeItem(WM_CACHE_KEY); } catch {}
 }
 
-function wmCacheFingerprint(fileSize, jsonLen, masterLen, overrides, splitOn) {
-  return `${fileSize || 0}|j${jsonLen}|m${masterLen}|s${splitOn ? 1 : 0}|o${JSON.stringify(overrides?.rigidWeight || {})}`;
+// Cache keys must bind the EXACT input bytes and effective settings, not counts.
+// Same-sized XML edits can change physical source mass while preserving length.
+// Without WebCrypto, fail closed by bypassing cache entirely.
+export async function wmCacheFingerprint(sourceXml, stagedJson, effectiveConfig, splitOn) {
+  if (typeof crypto === 'undefined' || !crypto?.subtle?.digest ||
+      typeof TextEncoder === 'undefined') return null;
+  const material = JSON.stringify({
+    sourceXml, stagedJson, effectiveConfig, splitOn: Boolean(splitOn)
+  });
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function overrideValue(config, bucketName, keys) {
@@ -257,6 +272,93 @@ function applyWeightRulePanelConfig(panelEl, config) {
   cfg.weight.specialValveFactorRules = parseRuleRows(panelEl, '[data-wm-factor-row]', true);
   ensureValveHintConfig(cfg);
   return cfg;
+}
+
+// Only ORIGINAL source XML may qualify a non-override weight as mapped.
+// Preview ranking.best is an empirical suggestion, never source authority.
+export function sourceFactsIndex(originalXml) {
+  const byIdentity = new Map();
+  if (typeof DOMParser === 'undefined' || !originalXml) return byIdentity;
+  const doc = new DOMParser().parseFromString(originalXml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) return byIdentity;
+  const tag = (node,name) => [...(node?.children || [])]
+    .find(child => (child.localName||child.nodeName).replace(/^.*:/,'')===name)?.textContent?.trim() || '';
+  const pos = raw => {
+    const v=String(raw||'').trim().split(/[\s,]+/).map(Number);
+    return v.length===3 && v.every(Number.isFinite)?v:null;
+  };
+  for(const branch of [...doc.getElementsByTagName('*')].filter(n=>(n.localName||n.nodeName)==='Branch')){
+    const branchName=tag(branch,'Branchname')||tag(branch,'BranchName');
+    const nodes=[...branch.children].filter(n=>(n.localName||n.nodeName)==='Node');
+    const records=nodes.map(n=>({
+      branchName,ref:tag(n,'ComponentRefNo').replace(/^=/,'').toUpperCase(),
+      endpoint:tag(n,'Endpoint'),nodeNumber:tag(n,'NodeNumber'),
+      weight:Number(tag(n,'Weight'))||0,
+      length:Number(tag(n,'ElementLengthMm'))||0,
+      position:pos(tag(n,'Position')),
+    }));
+    for(const r of records){
+      if(!r.ref || !r.endpoint) continue;
+      const key=[branchName,r.ref,r.endpoint].join('|');
+      const siblings=records.filter(n=>n.ref===r.ref&&n.endpoint===r.endpoint);
+      // Any duplicate identity is ambiguous (especially sentinel Node -1).
+      if(siblings.length!==1){byIdentity.set(key,{ambiguous:true});continue;}
+      const opposites=records.filter(n=>n.ref===r.ref&&n.endpoint!==r.endpoint&&
+        ['1','2'].includes(n.endpoint));
+      let physicalSpan=null;
+      if(opposites.length===1&&r.position&&opposites[0].position){
+        physicalSpan=Math.hypot(...r.position.map((v,i)=>v-opposites[0].position[i]));
+      }
+      byIdentity.set(key,{
+        sourceWeight:Number.isFinite(r.weight)&&r.weight>0?r.weight:0,
+        physicalSpan:physicalSpan>0?physicalSpan:null,
+        explicitLength:Number.isFinite(r.length)&&r.length>0?r.length:null,
+        nodeNumber:r.nodeNumber,ambiguous:false,
+      });
+    }
+  }
+  return byIdentity;
+}
+
+
+export function standaloneWeightIssueFromDryRunNode(nr,liveConfig,originalFacts) {
+  const key = nr.key;
+  const overrideWeight = Number(liveConfig?.overrides?.rigidWeight?.[key]);
+  const hasOverride = Number.isFinite(overrideWeight) && overrideWeight > 0;
+  const ref = String(nr.componentRefNo||'').replace(/^=/,'').toUpperCase();
+  const source = originalFacts.get([nr.branchName,ref,String(nr.endpoint||'')].join('|'));
+  const sourceTrusted = source && !source.ambiguous;
+  const sourceWeight=sourceTrusted?source.sourceWeight:0;
+  const physicalLength=sourceTrusted?source.physicalSpan:null;
+  const explicitLength=sourceTrusted?source.explicitLength:null;
+  const lengthMm=physicalLength||explicitLength||nr.lengthMm;
+  const elementLengthSource=physicalLength?'component-ref-endpoint-span':
+    explicitLength?'ElementLengthMm':'computed-forward';
+  const currentIssue = {
+    key,
+    branchName: nr.branchName,
+    nodeNumber: nr.nodeNumber,
+    componentType: nr.componentType,
+    boreMm: nr.boreMm,
+    rating: nr.rating,
+    resolvedPipingClass: nr.resolvedPipingClass,
+    lengthMm,
+    elementLengthSource,
+    originalWeight:sourceWeight,
+    dtxr: nr.dtxr,
+    dtxrSource: nr.dtxrSource,
+    dtxrMatchedKey: nr.dtxrMatchedKey,
+    valveHint: nr.valveHint,
+    componentRefNo: nr.componentRefNo || '',
+    endpoint: nr.endpoint || '',
+    componentRefEndpoint: nr.componentRefEndpoint || '',
+    candidates: nr.weightCandidates || [],
+    rejectedCandidates: nr.rejectedWeightCandidates || [],
+    weight: hasOverride ? overrideWeight : sourceWeight,
+    weightSource: hasOverride ? 'override' : (sourceWeight>0 ? 'original-source-weight' : 'unresolved'),
+    mapped: hasOverride || sourceWeight>0
+  };
+  return currentIssue;
 }
 
 export function renderAdaptedWeightMatchPanel(card, stateOrRef, render) {
@@ -393,12 +495,16 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     }
     const rows = issues.map((issue, rowIndex) => {
       const best = issue.candidates?.[0];
-      const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : '');
+      const initial = issue.weight && issue.weight > 0 ? issue.weight : (Number(issue.overrideWeight) > 0 ? issue.overrideWeight : '');
       const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
       const inputStyle = `width:86px;padding:4px;border-radius:4px;font-size:12px;color:#e6edf5;background:#0f172a;border:1px solid #334155;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
       const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
       const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
-      const chips = accepted || rejected || '<span style="color:#64748b;">No suggestion</span>';
+      const unknown = issue.unknownComponentSuggestion;
+      const unknownText = unknown?.ok
+        ? `<span data-unknown-weight-suggestion="true" title="${attr('Advisory only · ' + unknown.referenceFamily + ' master ' + unknown.referenceLengthMm + 'mm / ' + unknown.referenceWeightKg + 'kg · threshold ' + unknown.thresholdMm + 'mm · no automatic XML/CII edit')}" style="font-size:11px;line-height:1.2;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;white-space:nowrap;">Length-rule ≈ ${esc(Number(unknown.suggestedKg).toFixed(3))} kg · ${esc(unknown.referenceFamily)}</span>`
+        : unknown ? `<span data-unknown-weight-hold="true" title="${attr(unknown.reason || unknown.code)}" style="font-size:11px;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;">Length-rule HOLD · ${esc(unknown.code)}</span>` : '';
+      const chips = [accepted, unknownText, rejected].filter(Boolean).join('') || '<span style="color:#64748b;">No suggestion</span>';
       const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (methodLabel(best) || 'Unresolved');
       return `<tr style="${rowStyle}">
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(statusText)}</td>
@@ -450,7 +556,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     let count = 0;
     contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => {
       const best = localIssues[index]?.candidates?.[0];
-      if (!best || Number(selectedWeight(best)) <= 0 || best.zeroFallback) return;
+      if (!best || best.preferred !== true || !isApprovedPhysicalMassCandidate(best, selectedWeight(best))) return;
       input.value = String(selectedWeight(best));
       saveInput(input);
       count += 1;
@@ -478,9 +584,11 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     }
 
     const stagedJsonText = stateRef.current.stagedJsonText || '';
-    const file = stateRef.current.sourceFile;
-    if (!opts.force) {
-      const _fp = wmCacheFingerprint(file?.size || xmlText.length, stagedJsonText.length, liveConfig?.weight?.masterRows?.length || 0, liveConfig?.overrides, liveConfig?.splitCondensedValveFlange !== false);
+    // Compute once and reuse for read/write. On unsupported WebCrypto,
+    // _fp is null: both cache lookup and persistence are disabled.
+    const splitOn = liveConfig?.splitCondensedValveFlange !== false;
+    const _fp = await wmCacheFingerprint(xmlText, stagedJsonText, liveConfig, splitOn);
+    if (!opts.force && _fp !== null) {
       const _cached = readCache(WM_CACHE_KEY);
       if (_cached?.fp === _fp && Array.isArray(_cached?.data) && _cached.data.length) {
         localIssues = _cached.data.map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, liveConfig), liveConfig));
@@ -495,41 +603,12 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
 
     status('Computing weight matches...');
     try {
-      const splitOn = liveConfig?.splitCondensedValveFlange !== false;
       const matchXmlText = await weightMatchSourceXml(xmlText, stagedJsonText, liveConfig, splitOn);
       const { nodeRows } = xmlCiiDryRunPreview(matchXmlText, liveConfig, stagedJsonText);
+      const originalFacts=sourceFactsIndex(xmlText);
 
       localIssues = nodeRows.map((nr) => {
-        const key = nr.key;
-        const overrideWeight = Number(liveConfig?.overrides?.rigidWeight?.[key]);
-        const hasOverride = Number.isFinite(overrideWeight) && overrideWeight > 0;
-        const best = nr.weightCandidates?.[0];
-
-        let currentIssue = {
-          key,
-          branchName: nr.branchName,
-          nodeNumber: nr.nodeNumber,
-          componentType: nr.componentType,
-          boreMm: nr.boreMm,
-          rating: nr.rating,
-          resolvedPipingClass: nr.resolvedPipingClass,
-          lengthMm: nr.lengthMm,
-          dtxr: nr.dtxr,
-          dtxrSource: nr.dtxrSource,
-          dtxrMatchedKey: nr.dtxrMatchedKey,
-          valveHint: nr.valveHint,
-          componentRefNo: nr.componentRefNo || '',
-          endpoint: nr.endpoint || '',
-          componentRefEndpoint: nr.componentRefEndpoint || '',
-          candidates: nr.weightCandidates || [],
-          rejectedCandidates: nr.rejectedWeightCandidates || [],
-          weight: hasOverride ? overrideWeight : (nr.weightMatch?.weight || 0),
-          weightSource: hasOverride ? 'override' : (nr.weightMatch ? 'auto' : 'none'),
-          mapped: hasOverride || (nr.weightMatch && nr.weightMatch.weight > 0 && !nr.weightMatch.zeroFallback)
-        };
-
-        currentIssue = applyXmlCiiFlangeWeightFallbackToIssue(currentIssue, liveConfig);
-        return currentIssue;
+        return applyXmlCiiFlangeWeightFallbackToIssue(standaloneWeightIssueFromDryRunNode(nr,liveConfig,originalFacts),liveConfig);
       });
 
       const mapped = localIssues.filter((row) => row.mapped).length;
@@ -543,8 +622,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
       drawRows(localIssues);
 
       const _cacheable = localIssues.map((row) => { const { ranking: _r, ...rest } = row; return rest; });
-      const _fpWrite = wmCacheFingerprint(file?.size || xmlText.length, stagedJsonText.length, liveConfig?.weight?.masterRows?.length || 0, liveConfig?.overrides, splitOn);
-      writeCache(WM_CACHE_KEY, _fpWrite, _cacheable);
+      if (_fp !== null) writeCache(WM_CACHE_KEY, _fp, _cacheable);
     } catch (error) {
       localIssues = [];
       contentEl.innerHTML = `<div style="padding:14px;text-align:center;color:#ef4444;">Could not compute weight matches: ${esc(error?.message || error)}</div>`;

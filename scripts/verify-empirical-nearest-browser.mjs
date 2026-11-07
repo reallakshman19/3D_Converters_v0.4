@@ -56,6 +56,35 @@ try{
   receipt.tests.push({name:'Manual NS5 -> nearest bracket 4in/6in -> 6.5kg and provenance',result:'PASS'});
 
   await page.screenshot({path:resolve(dir,'sandbox-interpolated-ns5.png'),fullPage:true});
+  assert.match(await page.locator('[data-unknown="result"]').innerText(),
+    /2\.628 kg.*Weldneck Flange/u);
+  assert.match(await page.locator('[data-unknown="basis"]').innerText(),
+    /Flange reference 109 mm; threshold 115 mm/u);
+  receipt.tests.push({name:'Unknown 19.1mm at DN50 Class900 gets advisory flange-based 2.628kg',result:'PASS'});
+  await page.screenshot({path:resolve(dir,'unknown-component-short-flange-suggestion.png'),fullPage:true});
+
+  await page.locator('[data-unknown="length"]').fill('371.2');
+  await page.locator('[data-unknown="length"]').press('Tab');
+  assert.match(await page.locator('[data-unknown="result"]').innerText(),
+    /47\.409 kg.*Flanged Ball Valve-Reduced Bore/u);
+  assert.match(await page.locator('[data-unknown="basis"]').innerText(),
+    /Selected reference 368 mm \/ 47 kg/u);
+  receipt.tests.push({name:'Unknown 371.2mm at DN50 Class900 gets reduced-bore ball valve 47.409kg',result:'PASS'});
+  await page.screenshot({path:resolve(dir,'unknown-component-long-valve-suggestion.png'),fullPage:true});
+
+  await page.locator('[data-unknown="length"]').fill('115');
+  await page.locator('[data-unknown="length"]').press('Tab');
+  assert.match(await page.locator('[data-unknown="result"]').innerText(),
+    /15\.000 kg.*Weldneck Flange/u);
+  assert.match(await page.locator('[data-unknown="basis"]').innerText(),
+    /Selected reference 109 mm \/ 15 kg/u);
+  receipt.tests.push({name:'Exactly 109+6mm -> full 15kg Weldneck Flange unchanged (no interpolation)',result:'PASS'});
+  await page.locator('[data-unknown="rating"]').fill('12345');
+  await page.locator('[data-unknown="rating"]').press('Tab');
+  assert.match(await page.locator('[data-unknown="result"]').innerText(),
+    /HOLD.*FLANGE_REFERENCE_NOT_QUALIFIED/u);
+  receipt.tests.push({name:'Missing class-specific reference refuses cross-rating substitution',result:'PASS'});
+
   await page.locator('[data-sandbox="ns"]').selectOption('6');
   assert.equal((await readWeightRow('Exact master cell'))[1].trim(),'9.000');
   receipt.tests.push({name:'Known NS6 exact remains 9kg after custom NS',result:'PASS'});

@@ -2,6 +2,7 @@ import {
   EMPIRICAL_WEIGHT_MODEL,
   evaluateEmpiricalWeightSandbox,
   listEmpiricalWeightSandboxOptions,
+  createUnknownComponentLengthWeightSuggester,
 } from '../converters/empirical-weight/index.js';
 import {
   cloneEmpiricalWeightModel,
@@ -93,6 +94,10 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
   let family = context?.typeDesc || 'Flanged Gate Valve';
   let sandboxRating = Number(context?.rating ?? 300);
   let sandboxNs = Number(context?.ns ?? 4);
+  let unknownLengthMm = Number(context?.unknownLengthMm ?? 19.1);
+  let unknownBoreMm = Number(context?.boreMm ?? 50);
+  let unknownRating = Number(context?.unknownRating ?? 900);
+  const unknownSuggester = createUnknownComponentLengthWeightSuggester();
 
   const candidate = () => session.snapshot();
   const validation = () => session.validation();
@@ -233,6 +238,32 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       Number(interp.fraction).toFixed(3) + ', ' + interp.method;
   }
 
+  function unknownSuggestionHtml() {
+    const result = unknownSuggester.suggest({componentLengthMm:unknownLengthMm,
+      boreMm:unknownBoreMm,rating:unknownRating,target});
+    const reference = result.reference;
+    const anchorText = reference?.anchors?.map(a =>
+      `DN ${a.boreMm}: ${Number(a.lengthMm).toFixed(1)} mm / ${Number(a.weightKg).toFixed(3)} kg`).join(' · ') || '—';
+    const resultText = result.ok
+      ? `${Number(result.suggestedKg).toFixed(3)} kg · ${result.referenceFamily} · ${result.method}`
+      : `HOLD · ${result.code}: ${result.reason}`;
+    return `<div class="engineering-master-card" data-unknown-component-suggestion>
+      <h3>Unknown Component — Weight Suggestion (Review Only)</h3>
+      <div class="engineering-master-toolbar">
+        <label>Physical component length (mm) <input class="engineering-master-input" type="number" step="any" min="0" data-unknown="length" value="${esc(unknownLengthMm)}"></label>
+        <label>Component bore DN (mm) <input class="engineering-master-input" type="number" step="any" min="0" data-unknown="bore" value="${esc(unknownBoreMm)}"></label>
+        <label>Pressure rating / class <input class="engineering-master-input" type="number" step="any" min="0" data-unknown="rating" value="${esc(unknownRating)}"></label>
+      </div>
+      <div class="engineering-master-banner warn">
+        Rule: length &lt; flange reference length + 6 mm → Weldneck Flange length estimate. Length = boundary → Weldneck Flange master weight as-is (no length scaling). Length &gt; boundary → Flanged Ball Valve-Reduced Bore length estimate.
+        Estimate = selected master kg × (physical component length / master reference length). No automatic XML/CII mass edit.
+      </div>
+      <div class="engineering-master-muted" data-unknown="result">${esc(resultText)}</div>
+      <div class="engineering-master-muted" data-unknown="basis">Flange reference ${esc(result.flange?.lengthMm ?? 'unavailable')} mm; threshold ${esc(result.thresholdMm ?? 'unavailable')} mm ·
+        Selected reference ${esc(reference?.lengthMm ?? 'unavailable')} mm / ${esc(reference?.weightKg ?? 'unavailable')} kg ·
+        DN master anchors: ${esc(anchorText)} · authority: ADVISORY / NOT ENGINEERING APPROVED</div>
+      </div>`;
+  }
   function sandboxHtml() {
     const options = sandboxOptions();
     const result = sandboxResult();
@@ -248,6 +279,7 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
       <div class="engineering-master-table-wrap"><table class="engineering-master-table"><thead><tr><th>Path</th><th>Active kg</th><th>Candidate kg</th><th>Candidate Δ</th><th>Active status</th><th>Candidate status</th></tr></thead><tbody>${sandboxSummaryRows(result)}</tbody></table></div>
       <div class="engineering-master-card"><h3>Nearest master anchors</h3><div>Active: ${esc(nearestDetail(result.active.nearest))}</div><div>Candidate: ${esc(nearestDetail(result.candidate.nearest))}</div></div>
       <div class="engineering-master-preview">${a2DetailHtml('Active', result.active)}${a2DetailHtml('Candidate', result.candidate)}</div>
+      ${unknownSuggestionHtml()}
       <details class="engineering-master-card"><summary>Raw Sandbox result</summary><pre class="engineering-master-json">${esc(JSON.stringify(result, null, 2))}</pre></details>`;
   }
 
@@ -299,6 +331,7 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
     container.querySelector('[data-sandbox="target"]')?.addEventListener('change', (event) => { target = event.target.value; render(); });
     container.querySelector('[data-sandbox="family"]')?.addEventListener('change', (event) => { family = event.target.value; sandboxNs = null; render(); });
     container.querySelector('[data-sandbox="rating"]')?.addEventListener('change', (event) => { sandboxRating = Number(event.target.value); sandboxNs = null; render(); });
+    container.querySelectorAll('[data-unknown]').forEach((input) => { if (input.tagName !== 'INPUT') return; input.addEventListener('change', () => { const v = Number(input.value); if (input.dataset.unknown === 'length') unknownLengthMm = v; if (input.dataset.unknown === 'bore') unknownBoreMm = v; if (input.dataset.unknown === 'rating') unknownRating = v; render(); }); });
     container.querySelector('[data-sandbox="ns"]')?.addEventListener('change', (event) => { if (event.target.value !== 'custom') { sandboxNs = Number(event.target.value); render(); } });
     container.querySelector('[data-sandbox="custom-ns"]')?.addEventListener('change', (event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) { sandboxNs = value; render(); } });
     container.querySelector('[data-action="revert"]')?.addEventListener('click', () => { session.revert(); render(); });

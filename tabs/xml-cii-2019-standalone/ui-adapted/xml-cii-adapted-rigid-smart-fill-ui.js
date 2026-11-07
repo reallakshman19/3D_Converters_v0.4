@@ -15,12 +15,16 @@ function writePolicy(policy) { try { localStorage.setItem(POLICY_KEY, JSON.strin
 function valueState(dialog) { return dialog._rigidSmartValues ||= {}; }
 
 function candidateFrom(button) {
+  if (button?.dataset?.rigidReviewApproved !== 'true') return null;
   const title = text(button.title);
   const scoreMatch = title.match(/Score\s+(\d+(?:\.\d+)?)%/i);
   return {
     suggestedWeight: numeric(button.getAttribute('data-rigid-review-weight')),
     totalScore: scoreMatch ? Number(scoreMatch[1]) / 100 : (button.classList.contains('best') ? .9 : 0),
-    preferred: button.classList.contains('best'), title,
+    preferred: true, title,
+    massAuthority:'APPROVED_SOURCE_MASS',
+    engineeringMassApproved:true,acceptedForCii:true,
+    inferredWeight:false,fallbackSuggestion:false,zeroFallback:false,
     weightMethod: /extrapolat/i.test(title) ? 'length-extrapolated' : /interpolat/i.test(title) ? 'length-interpolated' : 'exact',
     oddEntry: /odd/i.test(title),
   };
@@ -43,7 +47,7 @@ function rawRow(tr, values) {
     lengthMm: numeric(text(cells[5]?.textContent).replace(/[^0-9.]/g, '')),
     manualWeight: entry?.source === 'manual' ? entry.value : '',
     selectedSource: entry?.source || '', weightInput, ratingInput,
-    candidates: [...tr.querySelectorAll('[data-rigid-review-candidate]')].map(candidateFrom),
+    candidates: [...tr.querySelectorAll('[data-rigid-review-candidate][data-rigid-review-approved="true"]')].map(candidateFrom).filter(Boolean),
   };
 }
 
@@ -113,8 +117,12 @@ function buildToolbar(dialog, receipt, policy) {
     createSmartIconButton('settings', 'Smart-fill policy', () => openPolicy(dialog)),
   );
   summaryMetrics(receipt).forEach(([icon, value, label, color]) => metrics.appendChild(createSmartMetricChip(icon, value, label, { color, onClick: () => filterRows(dialog, icon) })));
-  const notice = [...dialog.children].find((node) => /Enter missing weights before conversion/i.test(node.textContent || ''));
-  notice?.insertAdjacentElement('afterend', bar);
+  const notice = [...dialog.children].find((node) =>
+    /Enter missing weights(?: in kg)? before conversion|Empirical suggestions are read-only|Enter approved physical-component mass/i.test(node.textContent || ''));
+  // The banner wording varies between single and ATTA modes; the safety
+  // toolbar must be rendered even when text changes.
+  if (notice) notice.insertAdjacentElement('afterend', bar);
+  else dialog.prepend(bar);
   dialog.querySelector('[data-rigid-review-refresh]')?.style.setProperty('display', 'none');
   dialog.querySelector('[data-rigid-review-fill-best]')?.style.setProperty('display', 'none');
   if (policy.previewBeforeApply) setStatus(dialog, `${receipt.status}: ${receipt.metrics.safeCount} safe, ${receipt.metrics.reviewCount} review, ${receipt.metrics.blockedCount} blocked.`, receipt.status === 'BLOCKED');

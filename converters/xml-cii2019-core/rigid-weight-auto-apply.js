@@ -1,18 +1,21 @@
 import { applyXmlCiiRigidWeightOverrides } from './weight-match-model.js';
+import { isApprovedPhysicalMassCandidate } from './physical-mass-approval.js';
 
 function text(value) { return value === undefined || value === null ? '' : String(value).trim(); }
 function numberValue(value) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : null; }
-function selectedWeight(candidate = {}) { return numberValue(candidate.selectedWeight ?? candidate.suggestedWeight ?? candidate.weight); }
+function selectedWeight(candidate = {}) { return numberValue(candidate?.selectedWeight ?? candidate?.suggestedWeight ?? candidate?.weight); }
 function bestCandidate(issue = {}) { return issue?.ranking?.best || (Array.isArray(issue?.candidates) ? issue.candidates[0] : null) || null; }
 function candidateMethod(candidate = {}) { return text(candidate.weightMethod || candidate.method || candidate.semanticReason || candidate.typeDesc); }
-function autoApplyReason(issue = {}, candidate = {}) {
-  const weight = selectedWeight(candidate);
-  if (weight === null || weight <= 0 || candidate.zeroFallback === true) return '';
-  if (candidate.preferred === true) return 'preferred-exact-master-match';
-  if (issue.flangeWeightFallback || candidate.flangeWeightFallback || /^flange-/i.test(candidateMethod(candidate))) return 'flange-fallback-master-match';
-  if (candidate.fallbackSuggestion && /interpolated|extrapolated/i.test(candidateMethod(candidate)) && candidate.rowData) return 'same-bore-rating-length-fallback';
-  return '';
+function autoApplyReason(issue = {}, candidate = null) {
+  // A source-mass authority record is required independently of a ranked
+  // candidate, and all candidate writers share the same predicate.
+  if (issue?.massAuthority !== 'APPROVED_SOURCE_MASS' ||
+      candidate?.preferred !== true ||
+      !isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate)))
+    return '';
+  return 'approved-source-mass';
 }
+
 export function collectXmlCiiAutoRigidWeightsFromIssues(issues = []) {
   const weightsByKey = {};
   const appliedRows = [];

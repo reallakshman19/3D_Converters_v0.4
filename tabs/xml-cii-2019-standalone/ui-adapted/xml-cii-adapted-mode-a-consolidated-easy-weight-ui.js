@@ -43,7 +43,7 @@ function addRowActions(panel,result,stateRef) {
     const usePlan=buildModeAWeightUsePlan(row);
     if(usePlan){
       const use=document.createElement('button'); use.type='button'; use.textContent='Use'; styleButton(use,usePlan.qualifiedExact,usePlan.requiresReview); use.style.marginLeft='5px';
-      use.title=usePlan.qualifiedExact?`Use qualified 100% Project Data weight ${usePlan.change.weight} kg.`:`Engineer review: ${row.bestScore||'no score'} · ${row.bestDescription||'suggestion'}.`;
+      use.title=usePlan.qualifiedExact?`Use approved physical source mass ${usePlan.change.weight} kg.`:`Engineer review: ${row.bestScore||'no score'} · ${row.bestDescription||'suggestion'}.`;
       use.addEventListener('click',()=>{
         if(usePlan.requiresReview&&typeof confirm==='function'&&!confirm(`Candidate requires review.\n\n${row.bestScore||'No score'} · ${row.bestDescription||'Suggestion'}\nWeight: ${usePlan.change.weight} kg\n\nApply this single engineer override?`)) return;
         apply(panel,result,stateRef,[usePlan.change],`Use Weight Match ${usePlan.change.weight} kg`);
@@ -65,12 +65,12 @@ function addRowActions(panel,result,stateRef) {
 
 function makeToolbar(panel,result,stateRef) {
   const bar=document.createElement('div'); bar.dataset.modeAWeightEasyToolbar='true'; Object.assign(bar.style,{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',margin:'8px 0 10px',padding:'8px',border:'1px solid #334155',borderRadius:'7px',background:'#0f172a'});
-  const match=document.createElement('button'); match.type='button'; match.textContent='⚡ Find Exact Weight Matches'; match.title='Find only direct 100% Project Data weight candidates that are safe for bulk acceptance.'; styleButton(match,true);
+  const match=document.createElement('button'); match.type='button'; match.textContent='⚡ Find Exact Weight Matches'; match.title='Find source-approved physical mass candidates only. A 100% catalog score is advisory, not approval.'; styleButton(match,true);
   const undo=document.createElement('button'); undo.type='button'; undo.textContent='↶ Undo Last Change'; styleButton(undo); undo.disabled=!modeARawState(stateRef).modeAConsolidatedWeightUndo;
   const search=document.createElement('input'); search.type='search'; search.placeholder='Search source / branch / component...'; Object.assign(search.style,{minWidth:'220px',padding:'5px 8px',background:'#0b1220',color:'#e2e8f0',border:'1px solid #475569',borderRadius:'5px'});
   const source=document.createElement('select'); Object.assign(source.style,{padding:'5px 8px',background:'#0b1220',color:'#e2e8f0',border:'1px solid #475569',borderRadius:'5px'}); source.appendChild(new Option('All XML files','')); [...new Map((result.rows||[]).map((r)=>[r.sourceId,r.fileName])).entries()].forEach(([id,name])=>source.appendChild(new Option(name,id)));
-  const status=document.createElement('select'); Object.assign(status.style,{padding:'5px 8px',background:'#0b1220',color:'#e2e8f0',border:'1px solid #475569',borderRadius:'5px'}); [['all','All rows'],['review','Review'],['exact','Exact 100%'],['mapped','Mapped']].forEach(([v,l])=>status.appendChild(new Option(l,v)));
-  const note=document.createElement('span'); note.className='xml-cii-phase-help'; note.style.marginLeft='auto'; note.textContent='Weight Match only: bulk apply accepts direct 100% weight-master candidates. Interpolated/extrapolated/inferred candidates remain Review.';
+  const status=document.createElement('select'); Object.assign(status.style,{padding:'5px 8px',background:'#0b1220',color:'#e2e8f0',border:'1px solid #475569',borderRadius:'5px'}); [['all','All rows'],['review','Review'],['exact','Approved exact'],['mapped','Mapped']].forEach(([v,l])=>status.appendChild(new Option(l,v)));
+  const note=document.createElement('span'); note.className='xml-cii-phase-help'; note.style.marginLeft='auto'; note.textContent='Weight Match only: bulk apply requires explicit approved source mass. A 100% weight-master match without approval remains Review.';
   bar.append(match,undo,search,source,status,note); panel.querySelector('[data-mode-a-consolidated-build="weight"]')?.closest('div')?.after(bar);
   const rows=[...panel.querySelectorAll('[data-mode-a-weight-consolidated-row]')];
   const filter=()=>{const q=text(search.value).toLowerCase(); for(const tr of rows){const okStatus=status.value==='all'||status.value===tr.dataset.weightClass; const okSource=!source.value||source.value===tr.dataset.sourceId; const okSearch=!q||(tr.dataset.searchText||'').includes(q); tr.style.display=okStatus&&okSource&&okSearch?'':'none';}};

@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../converters/xml-cii2019-core/physical-mass-approval.js';
 export function createDefaultRigidSmartFillPolicy() {
   return Object.freeze({
     schema: 'rigid-weight-smart-fill-policy/v1',
@@ -58,6 +59,8 @@ function classifyRow(row, policy) {
   if (manual !== null && manual > 0) return result(row, 'MANUAL', manual, 1, best, blockers);
   if (!rating) blockers.push('RATING_UNRESOLVED');
   if (policy.blockDtxrConflicts && row.ratingConflict) blockers.push('DTXR_RATING_CONFLICT');
+  const approved = isApprovedPhysicalMassCandidate(best, weight);
+  if (!approved) blockers.push('SOURCE_MASS_NOT_APPROVED');
   if (!(weight > 0)) blockers.push('NO_WEIGHT_CANDIDATE');
   if (flags.extrapolated && !policy.allowExtrapolation) blockers.push('EXTRAPOLATION_NOT_ALLOWED');
   if (flags.interpolated && !policy.allowInterpolation) blockers.push('INTERPOLATION_NOT_ALLOWED');

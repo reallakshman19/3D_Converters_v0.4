@@ -30,3 +30,10 @@ export {
   downloadEmpiricalWeightValidationEvidenceZip,
 } from './empirical-weight-validation-zip.js';
 export { EMPIRICAL_WEIGHT_MODEL } from './empirical-weight-model.js';
+
+/** Read-only heuristic for unknown physical component mass. No auto-apply. */
+export {
+  createUnknownComponentLengthWeightSuggester,
+  suggestUnknownComponentLengthWeight,
+  UNKNOWN_COMPONENT_LENGTH_TOLERANCE_MM,
+} from './unknown-component-length-suggestion.js';
