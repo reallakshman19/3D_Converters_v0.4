@@ -44,7 +44,7 @@ function rigidCandidateButtons(issue, index) {
     if (!sourceApproved) {
       return `<span data-rigid-review-advisory="true"
         title="Unapproved empirical estimate, cannot copy to source mass"
-        style="font-size:11px;padding:3px 6px;margin:2px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(value)} kg · estimate only</span>`;
+        style="font-size:11px;padding:3px 6px;margin:2px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(value)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · estimate only</span>`;
     }
     return `<button type="button" class="mc-rigid-review-candidate"
       data-rigid-review-candidate="${index}" data-rigid-review-weight="${esc(value)}"
@@ -91,7 +91,7 @@ function rigidReviewMarkup(rows) {
   </div>`;
 }
 
-function openStandaloneRigidWeightReviewPopup(issues, stateRef, config) {
+export function openStandaloneRigidWeightReviewPopup(issues, stateRef, config) {
   const rows = Array.isArray(issues) ? issues : [];
   if (!rows.length) return Promise.resolve({ cancelled: false, skipped: false, weightsByKey: {} });
   return new Promise((resolve) => {
