@@ -105,8 +105,13 @@ export function isWeightMasterPhysicalFamilyMatch(candidate, constraint) {
   if (!family) return true;
   if (family === 'UNKNOWN' || family === 'UNRESOLVED' ||
       family === 'INSTRUMENT') return false;
-  const desc = text(candidate?.typeDesc || candidate?.valveType || candidate?.type).toUpperCase();
-  const classified = classifyWeightMasterCandidate(candidate);
+  // This guard receives RAW 1595-row Excel/JSON master records, not just
+  // baseCandidateFromRow's normalized {typeDesc,type}. Normalize BOTH forms.
+  const type = text(candidate?.type ?? candidate?.Type ?? candidate?._raw?.Type);
+  const desc = text(candidate?.typeDesc ?? candidate?.TypeDesc ??
+    candidate?.valveType ?? candidate?.['Valve Type'] ??
+    candidate?._raw?.TypeDesc ?? candidate?.type).toUpperCase();
+  const classified = classifyWeightMasterCandidate({type,typeDesc:desc});
   if (family === 'BRANCH_FITTING')
     return /\bBRANCH[\s-]*FITTING\b/.test(desc);
   if (family === 'FLANGE') {
