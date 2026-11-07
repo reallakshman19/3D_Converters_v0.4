@@ -64,8 +64,10 @@ const rigidRows = [
 const rigidReceipt = buildRigidSmartFillPreflight({ rows: rigidRows });
 assert.equal(rigidReceipt.schema, 'rigid-weight-smart-fill-preflight/v1');
 assert.equal(rigidReceipt.metrics.safeCount, 1);
-assert.equal(rigidReceipt.metrics.reviewCount, 1);
-assert.equal(rigidReceipt.metrics.blockedCount, 1);
+assert.equal(rigidReceipt.metrics.reviewCount, 0);
+assert.equal(rigidReceipt.metrics.blockedCount, 2,
+  'inferred or unapproved candidates must be blocked, not given review-fill authority');
+assert.ok(rigidReceipt.rows.find(row=>row.key==='B')?.blockers.includes('SOURCE_MASS_NOT_APPROVED'));
 assert.deepEqual(smartFillWeightMap(rigidReceipt), { A: 42.5 });
 const unapproved = structuredClone(rigidRows);
 delete unapproved[0].candidates[0].massAuthority;
