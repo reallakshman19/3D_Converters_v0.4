@@ -80,8 +80,6 @@ try {
           ]);
           const tools=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js');
           tools.installModeAConsolidatedRigidReviewTools();
-          const smart=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js');
-          smart.installRigidSmartFillDashboard();
         }else{
           const file=route==='atta'?'xml-cii-adapted-run-workflow-atta-default.js':'xml-cii-adapted-run-workflow.js';
           const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/'+file);
@@ -96,8 +94,6 @@ try {
       assert.ok((await chip.innerText()).includes(family),'selected reference family visible');
       assert.equal(await page.locator('[data-mode-a-rigid-candidate],[data-rigid-review-candidate]').count(),0);
       if(route==='modeA'){
-        assert.equal(await page.locator('[data-rigid-smart-toolbar]').count(),0,
-          'single/ATTA eight-column dashboard must never compute bogus Mode A counters');
         await page.locator('[data-mode-a-rigid-fill-exact]').click();
         assert.equal(await input.inputValue(),'');
         await page.locator('[data-mode-a-rigid-fill-all-suggestions]').click();
@@ -218,6 +214,39 @@ try {
   const smartResult=await page.evaluate(async()=>await window.__promise);
   assert.equal(smartResult.weightsByKey?.['B1::10020'],21);
   receipt.smartFill={unsafeEstimate:'BLOCKED',manualOperatorWeight:21};
+
+  // Isolated consolidated Mode A reproduction: the eight-column smart-fill
+  // dashboard must not mount on its nine-column, source-scoped review table.
+  const modeAPage = await browser.newPage({ viewport:{width:1440,height:920} });
+  try {
+    await modeAPage.goto(base+'/tests/fixtures/empirical-weight-nearest-browser.html',
+      {waitUntil:'domcontentloaded'});
+    await modeAPage.evaluate(async()=>{
+      const modal=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+      const smart=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js');
+      const issue={key:'B1::10020',branchName:'B1',nodeNumber:'10020',
+        boreMm:150,rating:900,lengthMm:147,componentType:'RIGID',
+        dtxr:'WELDING NECK FLANGE SCH 80S 900#',
+        candidates:[{weight:59,selectedWeight:59,preferred:true,
+          typeDesc:'Weldneck Flange',weightMethod:'master'}]};
+      window.__modeAReview=modal.openModeAConsolidatedRigidWeightReviewPopup([
+        {sourceId:'SRC-A',fileName:'GLRD-test.xml',issues:[issue]}
+      ]);
+      smart.installRigidSmartFillDashboard();
+    });
+    await modeAPage.waitForTimeout(100);
+    assert.equal(await modeAPage.locator('[data-mode-a-rigid-review-row]').count(),1);
+    assert.equal(await modeAPage.locator('[data-rigid-smart-toolbar]').count(),0,
+      'incompatible eight-column dashboard must not show Mode A false blocked metrics');
+    assert.equal(await modeAPage.locator('.mc-rigid-review-input').inputValue(),'');
+    assert.match(await modeAPage.locator('[data-mode-a-rigid-advisory]').innerText(),
+      /Weldneck Flange/);
+    await modeAPage.locator('[data-mode-a-rigid-cancel]').click();
+    const outcome=await modeAPage.evaluate(async()=>await window.__modeAReview);
+    assert.equal(outcome.cancelled,true);
+    receipt.modeADashboardIsolation={nineColumnDialog:true,
+      erroneousSmartToolbar:'ABSENT',manualWeight:'UNCHANGED',cancel:'PASS'};
+  } finally { await modeAPage.close(); }
 
   assert.deepEqual(errors,[]);
   await writeFile(resolve(dir,'r2-browser-receipt.json'),JSON.stringify({...receipt,errors},null,2));
