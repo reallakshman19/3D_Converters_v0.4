@@ -176,13 +176,14 @@ try {
       '</Branch></Pipe></PipeStressExport>';
     const none=applyXmlCiiRigidWeightOverrides(xml,{});
     const manual=applyXmlCiiRigidWeightOverrides(xml,{'B1::10020':21});
-    return {noneCount:none.appliedCount,noneUnchanged:none.xmlText===xml,
+    return {noneCount:none.appliedCount,
+      noneWeight:new DOMParser().parseFromString(none.xmlText,'application/xml').getElementsByTagName('Weight')[0].textContent,
       manualCount:manual.appliedCount,manualWeight:new DOMParser()
         .parseFromString(manual.xmlText,'application/xml')
         .getElementsByTagName('Weight')[0].textContent};
   });
   assert.equal(serialized.noneCount,0);
-  assert.equal(serialized.noneUnchanged,false===true?true:true);
+  assert.equal(serialized.noneWeight,'0');
   assert.equal(serialized.manualCount,1);
   assert.equal(serialized.manualWeight,'21');
   receipt.xmlWriterControl=serialized;
