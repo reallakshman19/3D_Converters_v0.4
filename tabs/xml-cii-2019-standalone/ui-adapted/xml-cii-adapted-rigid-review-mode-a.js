@@ -178,6 +178,7 @@ function bindCandidateButtons(overlay, rows) {
       stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
   }));
   overlay.querySelectorAll('[data-mode-a-rigid-choice]').forEach(select=>select.addEventListener('change',()=>{
+    if(select.value==='')return; // placeholder must not choose a mass
     const index=Number(select.dataset.modeARigidChoice);
     const choice=availableWeightReviewChoices(rows[index])[Number(select.value)];
     const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
