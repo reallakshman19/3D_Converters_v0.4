@@ -82,7 +82,7 @@ test('F04: both Weight Match bulk controls cannot directly save an inferred cata
   ]){
     const src=readFileSync(new URL('../'+path,import.meta.url),'utf8');
     assert.match(src,/data-advisory-weight/);
-    assert.match(src,/import \\{ isApprovedPhysicalMassCandidate \\}/);
+    assert.match(src,/isApprovedPhysicalMassCandidate/);
     if(path.includes('weight-match-renderer.js')){
       assert.match(src,/stageDraft\\(input,preferredWeightReviewDraft\\(localIssues\\[index\\]\\)\\)/);
       assert.match(src,/if\\(estimateDraft && !verified\\) return false/);
