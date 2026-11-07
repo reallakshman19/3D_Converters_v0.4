@@ -469,6 +469,52 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     return count;
   };
 
+  // Only ORIGINAL source XML may qualify a non-override weight as mapped.
+  // Preview ranking.best is an empirical suggestion, never source authority.
+  function sourceFactsIndex(originalXml) {
+    const byIdentity = new Map();
+    if (typeof DOMParser === 'undefined' || !originalXml) return byIdentity;
+    const doc = new DOMParser().parseFromString(originalXml, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) return byIdentity;
+    const tag = (node,name) => [...(node?.children || [])]
+      .find(child => (child.localName||child.nodeName).replace(/^.*:/,'')===name)?.textContent?.trim() || '';
+    const pos = raw => {
+      const v=String(raw||'').trim().split(/[\s,]+/).map(Number);
+      return v.length===3 && v.every(Number.isFinite)?v:null;
+    };
+    for(const branch of [...doc.getElementsByTagName('*')].filter(n=>(n.localName||n.nodeName)==='Branch')){
+      const branchName=tag(branch,'Branchname')||tag(branch,'BranchName');
+      const nodes=[...branch.children].filter(n=>(n.localName||n.nodeName)==='Node');
+      const records=nodes.map(n=>({
+        branchName,ref:tag(n,'ComponentRefNo').replace(/^=/,'').toUpperCase(),
+        endpoint:tag(n,'Endpoint'),nodeNumber:tag(n,'NodeNumber'),
+        weight:Number(tag(n,'Weight'))||0,
+        length:Number(tag(n,'ElementLengthMm'))||0,
+        position:pos(tag(n,'Position')),
+      }));
+      for(const r of records){
+        if(!r.ref || !r.endpoint) continue;
+        const key=[branchName,r.ref,r.endpoint].join('|');
+        const siblings=records.filter(n=>n.ref===r.ref&&n.endpoint===r.endpoint);
+        // Any duplicate identity is ambiguous (especially sentinel Node -1).
+        if(siblings.length!==1){byIdentity.set(key,{ambiguous:true});continue;}
+        const opposites=records.filter(n=>n.ref===r.ref&&n.endpoint!==r.endpoint&&
+          ['1','2'].includes(n.endpoint));
+        let physicalSpan=null;
+        if(opposites.length===1&&r.position&&opposites[0].position){
+          physicalSpan=Math.hypot(...r.position.map((v,i)=>v-opposites[0].position[i]));
+        }
+        byIdentity.set(key,{
+          sourceWeight:Number.isFinite(r.weight)&&r.weight>0?r.weight:0,
+          physicalSpan:physicalSpan>0?physicalSpan:null,
+          explicitLength:Number.isFinite(r.length)&&r.length>0?r.length:null,
+          nodeNumber:r.nodeNumber,ambiguous:false,
+        });
+      }
+    }
+    return byIdentity;
+  }
+
   const compute = async (opts = {}) => {
     let liveConfig = activeConfig();
     syncToggle(); drawPanel();
@@ -509,12 +555,21 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
       const splitOn = liveConfig?.splitCondensedValveFlange !== false;
       const matchXmlText = await weightMatchSourceXml(xmlText, stagedJsonText, liveConfig, splitOn);
       const { nodeRows } = xmlCiiDryRunPreview(matchXmlText, liveConfig, stagedJsonText);
+      const originalFacts=sourceFactsIndex(xmlText);
 
       localIssues = nodeRows.map((nr) => {
         const key = nr.key;
         const overrideWeight = Number(liveConfig?.overrides?.rigidWeight?.[key]);
         const hasOverride = Number.isFinite(overrideWeight) && overrideWeight > 0;
-        const best = nr.weightCandidates?.[0];
+        const ref = String(nr.componentRefNo||'').replace(/^=/,'').toUpperCase();
+        const source = originalFacts.get([nr.branchName,ref,String(nr.endpoint||'')].join('|'));
+        const sourceTrusted = source && !source.ambiguous;
+        const sourceWeight=sourceTrusted?source.sourceWeight:0;
+        const physicalLength=sourceTrusted?source.physicalSpan:null;
+        const explicitLength=sourceTrusted?source.explicitLength:null;
+        const lengthMm=physicalLength||explicitLength||nr.lengthMm;
+        const elementLengthSource=physicalLength?'component-ref-endpoint-span':
+          explicitLength?'ElementLengthMm':'computed-forward';
 
         let currentIssue = {
           key,
@@ -524,7 +579,9 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
           boreMm: nr.boreMm,
           rating: nr.rating,
           resolvedPipingClass: nr.resolvedPipingClass,
-          lengthMm: nr.lengthMm,
+          lengthMm,
+          elementLengthSource,
+          originalWeight:sourceWeight,
           dtxr: nr.dtxr,
           dtxrSource: nr.dtxrSource,
           dtxrMatchedKey: nr.dtxrMatchedKey,
@@ -534,9 +591,9 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
           componentRefEndpoint: nr.componentRefEndpoint || '',
           candidates: nr.weightCandidates || [],
           rejectedCandidates: nr.rejectedWeightCandidates || [],
-          weight: hasOverride ? overrideWeight : (nr.weightMatch?.weight || 0),
-          weightSource: hasOverride ? 'override' : (nr.weightMatch ? 'auto' : 'none'),
-          mapped: hasOverride || (nr.weightMatch && nr.weightMatch.weight > 0 && !nr.weightMatch.zeroFallback)
+          weight: hasOverride ? overrideWeight : sourceWeight,
+          weightSource: hasOverride ? 'override' : (sourceWeight>0 ? 'original-source-weight' : 'unresolved'),
+          mapped: hasOverride || sourceWeight>0
         };
 
         currentIssue = applyXmlCiiFlangeWeightFallbackToIssue(currentIssue, liveConfig);
