@@ -165,7 +165,7 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
     atFlangeToleranceBoundary,
     weightWarning: atFlangeToleranceBoundary
       ? `Flange full master weight at +6 mm tolerance: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm; NO length interpolation or scaling.`
-      : `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`
+      : `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`,
     inferredWeight: true,
     fallbackSuggestion: true,
     zeroFallback: false,
