@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification } from './xml-cii-adapted-rigid-review-prefill.js';
+import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api-atta-default.js?v=20260803-atta-default-rest-closure-1';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
 import { buildXmlCiiWorkflowJobFromUiState } from '../xml-cii-workflow-ui-adapter.js';
@@ -257,7 +257,7 @@ async function unresolvedRigidIssues(state, config) {
   const { collectXmlCiiZeroRigidWeightIssues } = await import('../../../converters/xml-cii2019-core/weight-match-model.js');
   const { applyXmlCiiFlangeWeightFallbackToIssue } = await import('../../../converters/xml-cii2019-core/flange-weight-fallback.js');
   const { rankXmlCiiWeightCandidates } = await import('../../../converters/xml-cii2019-core/weight-valve-hints.js');
-  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).map((issue) => {
+  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const ratingAuthority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = ratingAuthority.rating;
     const ranking = rating
