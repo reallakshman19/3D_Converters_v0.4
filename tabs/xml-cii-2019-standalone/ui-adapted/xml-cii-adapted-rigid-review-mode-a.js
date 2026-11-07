@@ -232,6 +232,19 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const missingButton=overlay.querySelector('[data-mode-a-rigid-show-missing]');
     const missingList=overlay.querySelector('[data-mode-a-rigid-missing-list]');
     let missingOnly=false;
+    let reviewOnly=false;
+    const reviewButton=overlay.querySelector('[data-mode-a-rigid-show-unreviewed]');
+    const openBulkButton=overlay.querySelector('[data-mode-a-rigid-open-review]');
+    const reviewPanel=overlay.querySelector('[data-mode-a-rigid-bulk-review-panel]');
+    const reviewPanelSummary=overlay.querySelector('[data-mode-a-rigid-bulk-review-summary]');
+    const reviewPanelExamples=overlay.querySelector('[data-mode-a-rigid-bulk-review-examples]');
+    const reviewAttest=overlay.querySelector('[data-mode-a-rigid-bulk-attest]');
+    const reviewConfirm=overlay.querySelector('[data-mode-a-rigid-confirm-bulk-review]');
+    const hideBulkReview=()=>{
+      if(reviewPanel)reviewPanel.style.display='none';
+      if(reviewAttest)reviewAttest.checked=false;
+      if(reviewConfirm)reviewConfirm.disabled=true;
+    };
     const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
       .map(input=>[input.dataset.reviewId||'',text(input.value)]));
     const setStatus = (message, bad = false) => { if (status) { status.textContent = message; status.style.color = bad ? '#ef4444' : '#10b981'; } };
@@ -241,14 +254,53 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       return !(Number.isFinite(weight) && weight>0) &&
         !(input?.dataset.rigidSkippedZero==='true' && input?.value==='0');
     });
+    const pendingReviewRows=()=>[...overlay.querySelectorAll('[data-mode-a-rigid-review-row]')].filter(tr=>{
+      const input=tr.querySelector('.mc-rigid-review-input');
+      return input && input.value!=='' && Number(input.value)>0 &&
+        rigidReviewProposalNeedsVerification(input);
+    });
+    const updateReviewCounts=()=>{
+      const pending=pendingReviewRows().length;
+      if(reviewButton)reviewButton.textContent=(reviewOnly?'Show all':'Show pending reviews')+' ('+pending+')';
+      if(openBulkButton){
+        openBulkButton.textContent='Review draft weights ('+pending+')';
+        openBulkButton.disabled=pending===0;
+      }
+      return pending;
+    };
+    const showBulkReview=()=>{
+      const pending=pendingReviewRows();
+      if(!pending.length){hideBulkReview();return;}
+      if(reviewPanelSummary)reviewPanelSummary.textContent=
+        pending.length+' unapproved physical-component masses still require engineering acceptance. '+
+        'They are estimated draft values; the matching master does not independently establish actual mass. '+
+        'Review source references and edit any uncertain estimates before using the bulk attestation.';
+      if(reviewPanelExamples)reviewPanelExamples.textContent=
+        pending.slice(0,12).map((tr,i)=>{
+          const input=tr.querySelector('.mc-rigid-review-input');
+          const row=rows.find(issue=>issue.reviewId===input?.dataset.reviewId);
+          return (i+1)+'. '+(row?.fileName||row?.sourceId||'XML')+
+            ' | node '+(row?.nodeNumberDisplay||row?.nodeNumber||'?')+
+            ' | '+(row?.componentRefNo||'NO REF')+'_'+(row?.endpoint||'?')+
+            ' | '+input.value+' kg | '+(row?.dtxr||'DTXR missing');
+        }).join('\n')+
+        (pending.length>12?'\n… and '+(pending.length-12)+
+          ' more. Use Show pending reviews to inspect every row before confirming.':'');
+      if(reviewPanel)reviewPanel.style.display='block';
+      if(reviewAttest)reviewAttest.checked=false;
+      if(reviewConfirm)reviewConfirm.disabled=true;
+      reviewPanel?.scrollIntoView?.({block:'nearest'});
+    };
     const refreshMissingList=()=>{
       const missing=missingRows();
       if(missingButton)missingButton.textContent=(missingOnly?'Show all':'Show missing')+' ('+missing.length+')';
       if(missingList){
-        missingList.style.display=missing.length?'block':'none';
+        // Do not fill the whole dialog with 114 rows on initial load.
+        // The full list is accessible through Show missing and source search.
+        missingList.style.display=missing.length && (missingOnly||missing.length<=10)?'block':'none';
         missingList.textContent=missing.length
           ? 'Missing '+missing.length+' physical weights (click Show missing to isolate).\n'+
-            missing.map((tr,index)=>{
+            missing.slice(0,12).map((tr,index)=>{
               const issue=rows.find(row=>row.reviewId===tr.dataset.reviewId);
               return (index+1)+'. '+(issue?.fileName||issue?.sourceId||'XML')+
                 ' | '+(issue?.branchName||'-')+
@@ -256,7 +308,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
                 ' | ref '+(issue?.componentRefNo||'missing source ref')+
                 '_'+(issue?.endpoint||'?')+
                 ' | '+(issue?.dtxr||'DTXR unavailable');
-            }).join('\n')
+            }).join('\n')+
+            (missing.length>12?'\n… '+(missing.length-12)+
+              ' additional missing rows; use Show missing or search by source reference.':'')
           : '';
       }
       return missing;
@@ -265,15 +319,20 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       const q = text(search?.value).toLowerCase();
       const sourceId = source?.value || '';
       const missing=missingRows();
-      if(missingOnly && !missing.length)missingOnly=false; // zero missing must not hide every row
+      const pending=pendingReviewRows();
+      if(missingOnly && !missing.length)missingOnly=false;
+      if(reviewOnly && !pending.length)reviewOnly=false; // zero missing must not hide every row
       const missingSet=new Set(missingOnly?missing:[]);
+      const reviewSet=new Set(reviewOnly?pending:[]);
       overlay.querySelectorAll('[data-mode-a-rigid-review-row]').forEach((tr) => {
         const show = (!sourceId || tr.dataset.sourceId === sourceId) &&
           (!q || (tr.dataset.search || '').includes(q)) &&
-          (!missingOnly || missingSet.has(tr));
+          (!missingOnly || missingSet.has(tr)) &&
+          (!reviewOnly || reviewSet.has(tr));
         tr.style.display = show ? '' : 'none';
       });
       refreshMissingList();
+      updateReviewCounts();
     };
     const draw = (preserve = new Map(), skipped = new Set()) => {
       rows = flattenModeARigidReviewEntries(workingEntries);
