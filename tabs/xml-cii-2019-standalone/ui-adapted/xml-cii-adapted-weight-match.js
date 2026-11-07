@@ -326,7 +326,7 @@ export function standaloneWeightIssueFromDryRunNode(nr,liveConfig,originalFacts)
   const lengthMm=physicalLength||explicitLength||nr.lengthMm;
   const elementLengthSource=physicalLength?'component-ref-endpoint-span':
     explicitLength?'ElementLengthMm':'computed-forward';
-   const currentIssue = {
+  const currentIssue = {
     key,
     branchName: nr.branchName,
     nodeNumber: nr.nodeNumber,
@@ -350,7 +350,6 @@ export function standaloneWeightIssueFromDryRunNode(nr,liveConfig,originalFacts)
     weightSource: hasOverride ? 'override' : (sourceWeight>0 ? 'original-source-weight' : 'unresolved'),
     mapped: hasOverride || sourceWeight>0
   };
-   currentIssue = applyXmlCiiFlangeWeightFallbackToIssue(currentIssue, liveConfig);
   return currentIssue;
 }
 
