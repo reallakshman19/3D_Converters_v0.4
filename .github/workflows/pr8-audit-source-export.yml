@@ -1,0 +1,28 @@
+name: PR8 advisory exact-head source export
+on:
+  push:
+    branches:
+      - audit/pr8-advisory-merge-verification-20261107
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cdfaae385f36c08ededfd84d66a2b06914824a8f
+          persist-credentials: false
+      - name: Export original PR8 source only
+        run: |
+          test "$(git rev-parse HEAD)" = "cdfaae385f36c08ededfd84d66a2b06914824a8f"
+          mkdir -p export
+          git archive --format=zip --output=export/pr8-source.zip HEAD
+          sha256sum export/pr8-source.zip | tee export/SHA256SUMS.txt
+          echo "cdfaae385f36c08ededfd84d66a2b06914824a8f" > export/COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr8-advisory-source-custody
+          path: export/*
+          retention-days: 2
