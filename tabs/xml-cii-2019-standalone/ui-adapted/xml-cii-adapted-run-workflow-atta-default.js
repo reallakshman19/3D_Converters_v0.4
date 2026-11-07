@@ -37,10 +37,19 @@ function rigidCandidateButtons(issue, index) {
   return (issue.candidates || []).map((candidate) => {
     const value = candidate.suggestedWeight ?? candidate.weight;
     const scoreValue = Math.round((candidate.totalScore || candidate.score || 0) * 100);
-    return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}"
-      data-rigid-review-candidate="${index}" data-rigid-review-weight="${esc(value)}"
-      title="Bore ${candidate.boreMm || candidate.rowBore || '-'} | Rating ${candidate.rating || candidate.rowRating || issue.rating || '-'} | Master length ${(candidate.lengthMm || candidate.rowLength || 0).toFixed(1)} | Score ${scoreValue}%"
-      style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">${candidate.preferred ? '* ' : ''}${esc(value)} kg - ${scoreValue}%</button>`;
+    const sourceApproved = candidate.massAuthority === 'APPROVED_SOURCE_MASS' &&
+      candidate.engineeringMassApproved === true &&
+      candidate.acceptedForCii === true && candidate.inferredWeight !== true &&
+      candidate.fallbackSuggestion !== true && candidate.zeroFallback !== true;
+    if (!sourceApproved) {
+      return \`<span data-rigid-review-advisory="true"
+        title="Unapproved empirical estimate, cannot copy to source mass"
+        style="font-size:11px;padding:3px 6px;margin:2px;border:1px solid #6d5590;border-radius:4px;">≈ \${esc(value)} kg · estimate only</span>\`;
+    }
+    return \`<button type="button" class="mc-rigid-review-candidate"
+      data-rigid-review-candidate="\${index}" data-rigid-review-weight="\${esc(value)}"
+      title="Approved source mass: \${scoreValue}%"
+      style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">\${esc(value)} kg · approved</button>\`;
   }).join('');
 }
 
@@ -57,7 +66,7 @@ function rigidReviewRow(issue, index) {
     <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</td>
     <td class="mc-rigid-review-dtxr" title="${attr([issue.dtxrSourcePath, info.dtxrRating ? `DTXR rating ${info.dtxrRating}# (evidence only)` : ''].filter(Boolean).join(' · '))}" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-    <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-rigid-review-key="${attr(issue.key)}" value="${esc(best ? (best.suggestedWeight ?? best.weight) : '')}" placeholder="kg" style="width:72px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
+    <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-rigid-review-key="${attr(issue.key)}" value="" placeholder="kg" style="width:72px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
     <td class="mc-rigid-review-candidates" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${rigidCandidateButtons(issue, index) || '<span style="color:#64748b;">No suggestion</span>'}</td>
   </tr>`;
 }
@@ -68,13 +77,13 @@ function rigidReviewMarkup(rows) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review</div><div style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) have zero weight and length greater than 6 mm.</div></div>
       <button type="button" data-rigid-review-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;font-size:12px;">Cancel</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:10px;border-radius:6px;font-size:12px;margin-bottom:16px;">Enter missing weights in kg before conversion. When kg→N is enabled, CII export converts kg to N (×10). Suggestions use the resolved Rating from explicit overrides, Piping Class master, or Regex extraction. DTXR Rating is comparison evidence only unless explicitly fetched in Preview.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:10px;border-radius:6px;font-size:12px;margin-bottom:16px;">Enter missing weights in kg before conversion. When kg→N is enabled, CII export converts kg to N (×10). Empirical suggestions are read-only and never prefill source weight. Enter approved physical-component mass manually. Suggestions use the resolved Rating from explicit overrides, Piping Class master, or Regex extraction. DTXR Rating is comparison evidence only unless explicitly fetched in Preview.</div>
     <div style="overflow:auto;max-height:45vh;border:1px solid rgba(148,163,184,0.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:rgba(30,41,59,0.3);color:#fff;border-bottom:1px solid rgba(148,163,184,0.15);"><th style="padding:8px;">Branch</th><th style="padding:8px;">Bore</th><th style="padding:8px;">Rating</th><th style="padding:8px;">Node</th><th style="padding:8px;">DTXR</th><th style="padding:8px;">Length</th><th style="padding:8px;">Manual Weight (kg)</th><th style="padding:8px;">Nearest Suggestions</th></tr></thead><tbody>${rows.map(rigidReviewRow).join('')}</tbody></table></div>
     <div data-rigid-review-status style="font-size:12px;margin-top:8px;"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;border-top:1px solid #253a55;padding-top:16px;">
       <button type="button" data-rigid-review-refresh style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Refresh Suggestions</button>
       <div style="display:flex;gap:12px;">
-        <button type="button" data-rigid-review-fill-best style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Use All Suggestions</button>
+        <button type="button" data-rigid-review-fill-best style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Use All Approved Source Weights</button>
         <button type="button" data-rigid-review-skip style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:8px 16px;font-size:12px;">Skip Review</button>
         <button type="button" data-rigid-review-apply style="cursor:pointer;background:#1e4ed8;border:none;color:#fff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;">Apply Weights and Continue</button>
       </div>
@@ -158,9 +167,12 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
     rows.forEach((issue, index) => {
       const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
       const best = issue.candidates?.[0] || null;
-      if (input && best) input.value = String(best.suggestedWeight ?? best.weight ?? '');
+      if (input && best?.massAuthority === 'APPROVED_SOURCE_MASS' &&
+          best.engineeringMassApproved === true && best.acceptedForCii === true &&
+          !best.inferredWeight && !best.fallbackSuggestion && !best.zeroFallback)
+        input.value = String(best.suggestedWeight ?? best.weight ?? '');
     });
-    setStatus('Filled available best suggestions. Review values before applying.', false);
+    setStatus('Only approved source masses may be copied; empirical estimates remain read-only.', false);
   });
   overlay.querySelector('[data-rigid-review-cancel]')?.addEventListener('click', () => finish({ cancelled: true, skipped: false, weightsByKey: {} }));
   overlay.querySelector('[data-rigid-review-skip]')?.addEventListener('click', () => finish({ cancelled: false, skipped: true, weightsByKey: {} }));
