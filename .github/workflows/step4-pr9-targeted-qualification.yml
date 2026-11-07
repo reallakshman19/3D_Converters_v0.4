@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -34,6 +36,68 @@ jobs:
         run: |
           set -o pipefail
           node tests/xml-cii-preview-cache-cost.bench.mjs 2>&1 | tee /tmp/pr9-cache-benchmark.log
+      - name: Prove PR9 negative controls fail on exact pre-fix PR3
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$RUNNER_TEMP/pr3-before-pr9"
+          git worktree add --detach "$old" 027c5e3234d3a88c43375228d9a37f3493490e8a
+          for f in \
+            xml-cii-preview-wall-authority-parity.test.mjs \
+            xml-cii-preview-wall-evidence-index.test.mjs \
+            xml-cii-preview-per-build-cache.test.mjs \
+            xml-cii-preview-cache-cost.bench.mjs; do
+            cp "tests/$f" "$old/tests/$f"
+          done
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$old/node_modules"
+          cd "$old"
+          set +e
+          node --test \
+            --test-name-pattern='foreign-owner malformed|a malformed unrelated|toJSON cannot hide|non-enumerable ranking inputs|hidden or accessor-backed' \
+            tests/xml-cii-preview-wall-authority-parity.test.mjs \
+            tests/xml-cii-preview-wall-evidence-index.test.mjs \
+            tests/xml-cii-preview-per-build-cache.test.mjs \
+            > /tmp/pr9-parent-negative.log 2>&1
+          exit_code="$?"
+          set -e
+          cat /tmp/pr9-parent-negative.log
+          if [ "$exit_code" -eq 0 ]; then
+            echo 'NEGATIVE_CONTROL_FAILURE: old PR3 unexpectedly passes all controls' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          content=Path('/tmp/pr9-parent-negative.log').read_text()
+          names=[
+            'foreign-owner malformed staged evidence preserves baseline branch isolation',
+            'a malformed unrelated owner does not poison the staged index',
+            'toJSON cannot hide a changed master weight from the cache signature',
+            'non-enumerable ranking inputs fail open rather than reusing stale results',
+            'hidden or accessor-backed context fields fail open to fresh rankings',
+          ]
+          failures=[line.split(' - ',1)[1].strip() for line in content.splitlines() if re.search(r'not ok \d+ - ',line)]
+          missing=[name for name in names if name not in failures]
+          print('EXPECTED_RED_TESTS',len(names)-len(missing),'/',len(names))
+          if missing: raise SystemExit('missing red negative controls: '+repr(missing))
+          PY
+      - name: Compare synthetic cache cost with PR3 parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          ( cd "$RUNNER_TEMP/pr3-before-pr9" && node tests/xml-cii-preview-cache-cost.bench.mjs ) \
+            | tee /tmp/pr9-parent-cache-benchmark.log
+          python3 - <<'PY'
+          import json,statistics
+          from pathlib import Path
+          old=json.loads(Path('/tmp/pr9-parent-cache-benchmark.log').read_text())
+          new=json.loads(Path('/tmp/pr9-cache-benchmark.log').read_text())
+          for field in ['weightCacheMs','classCacheMs']:
+            oldmedian=statistics.median(r[field] for r in old['rounds'])
+            newmedian=statistics.median(r[field] for r in new['rounds'])
+            print(f'PR3-to-PR9 synthetic {field}: parent={oldmedian:.1f} ms, fixed={newmedian:.1f} ms, fixed/parent={newmedian/oldmedian:.2f}x')
+          print('Scope: synthetic same-runner operation comparison; NOT GLRD or whole-Preview.')
+          PY
       - name: Preserve execution receipts
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,4 +106,6 @@ jobs:
           path: |
             /tmp/pr9-node-test.log
             /tmp/pr9-cache-benchmark.log
+            /tmp/pr9-parent-negative.log
+            /tmp/pr9-parent-cache-benchmark.log
           if-no-files-found: warn
