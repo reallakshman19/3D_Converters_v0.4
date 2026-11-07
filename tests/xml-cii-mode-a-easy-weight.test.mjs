@@ -40,6 +40,7 @@ function saved(ref,sourceId,key){
 // F13 reproducer: 100% catalog rank without approval is not physical mass.
 const ranking=rankXmlCiiWeightCandidates({
   boreMm:50,rating:900,lengthMm:109,componentType:'RIGID',
+  dtxr:'WELDING NECK FLANGE SCH 40S 900#',
 }, {weight:{masterRows:DEFAULT_WEIGHT_MASTER_ROWS}},{includeRejected:true});
 const master=ranking.candidates.find(c=>/weldneck flange/i.test(String(c.typeDesc||c.valveType||c.type||'')));
 assert.ok(master,'actual master must contain Weldneck Flange evidence');
