@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { isApprovedPhysicalMassCandidate } from '../converters/xml-cii2019-core/physical-mass-approval.js';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import test from 'node:test';
@@ -123,7 +124,7 @@ test('F04 executable UI falsifier: both real fillBest bodies refuse unapproved m
       [{selectedWeight:15,preferred:true},0],
       [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',
         inferredWeight:true},0],
-      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS'},1],
+      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',engineeringMassApproved:true,acceptedForCii:true},1],
     ]) {
       let writes=0;
       const input={value:'',getAttribute:()=> 'B1::10020'};
@@ -131,6 +132,7 @@ test('F04 executable UI falsifier: both real fillBest bodies refuse unapproved m
         localIssues:[{candidates:[candidate]}],
         contentEl:{querySelectorAll:()=>[input]},
         selectedWeight:v=>v?.selectedWeight??v?.weight??0,
+        isApprovedPhysicalMassCandidate,
         saveInput:()=>{writes++;},
         Number,String,
       };
