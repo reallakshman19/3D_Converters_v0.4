@@ -145,12 +145,13 @@ test('master changes during a different ranking miss cannot revive older result'
 });
 
 test('toJSON cannot hide a changed master weight from the cache signature', () => {
-  const row = masterRows()[0];
-  row.toJSON = () => ({ bore: 50, rating: 150, length: 100, weight: 1 });
-  const config = { weight: { masterRows: [row] } };
+  const config = { weight: { masterRows: masterRows() } };
+  // The config is not included in ranking outputs. Unlike a master-row
+  // serializer, this leaves cached results cloneable on the old candidate.
+  config.weight.toJSON = () => ({ fixed: 'misleading signature' });
   const cache = createPreviewPerBuildCache();
   const initial = cache.rankWeight(context, config, { includeRejected: true });
-  row.weight = 23;
+  config.weight.masterRows[0].weight = 23;
   const changed = cache.rankWeight(context, config, { includeRejected: true });
   assert.notDeepStrictEqual(changed, initial);
   assert.deepStrictEqual(
