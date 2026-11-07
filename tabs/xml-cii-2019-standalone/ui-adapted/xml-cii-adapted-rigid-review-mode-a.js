@@ -527,6 +527,20 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         input.style.borderColor = '#31455f';
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].weightsByKey[key] = numeric;
+        if(input.dataset.rigidSuggestionDraft==='estimate'){
+          const verified=input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
+          if(!verified?.checked)throw new Error('Unreviewed estimated mass passed review gate: '+key);
+          updates[sourceId].reviewReceiptsByKey ||= {};
+          const issue=rows.find(row=>row.reviewId===input.dataset.reviewId);
+          updates[sourceId].reviewReceiptsByKey[key]={
+            reviewed:true,reviewMethod:input.dataset.rigidReviewMethod==='EXPLICIT_BULK_OWNER_ATTESTATION'
+              ? 'EXPLICIT_BULK_OWNER_ATTESTATION' : 'EXPLICIT_INDIVIDUAL_OWNER_REVIEW',
+            weightKg:numeric,
+            sourceComponentRef:issue?.componentRefNo||'',
+            sourceEndpoint:issue?.endpoint||'',
+            statement:'Reviewer confirms independent physical-component mass verification',
+          };
+        }
       });
       overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
@@ -537,9 +551,16 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       });
       if(missing.length || unreviewed.length){
         missingOnly=missing.length>0;
+        reviewOnly=missing.length===0 && unreviewed.length>0;
         filter();
-        setStatus(`Enter a positive weight for ${missing.length} missing row(s) or choose explicit Skip blank (0 kg). Source references listed below. Independently review ${unreviewed.length} estimated draft(s) before Apply. ${skipped.length} intentional 0 kg skip(s). No updates applied.`,true);
-        const first=missingRows()[0];
+        if(unreviewed.length && !missing.length) showBulkReview();
+        const first=missing.length?missingRows()[0]:pendingReviewRows()[0];
+        setStatus(
+          (missing.length?missing.length+' physical weight(s) still blank: Show missing / Skip blank. '
+            :'No blank weights remain. ')+
+          (unreviewed.length?unreviewed.length+' estimate draft(s) are NOT independently reviewed. '+
+            'Check Reviewed for each or use the explicit Review draft weights confirmation. ':'')+
+          skipped.length+' intentional 0 kg skip(s). Nothing was applied.',true);
         first?.scrollIntoView?.({block:'nearest'});
         return;
       }
