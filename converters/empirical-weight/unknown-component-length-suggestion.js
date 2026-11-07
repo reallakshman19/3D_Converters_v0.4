@@ -38,23 +38,30 @@ function normalizedTarget(target){
   if(['BW','BW KG'].includes(t))return 'BW KG';
   return null;
 }
+// The application persists imported wtValveweights as normalized rows with
+// original source worksheet cells in _raw. The top-level valveType is a
+// short code (e.g. "Flg"), not the canonical physical-component family.
+const sourceCells = row => row && typeof row._raw==='object' && row._raw ? row._raw : {};
 function massFromRow(row,target){
+  const source=sourceCells(row);
   return number(target==='BW KG'
-    ? row['BW KG']??row.bwKg
-    : row['RF/RTJ KG']??row.rfRtjKg??row.weight);
+    ? row['BW KG']??row.bwKg??source['BW KG']
+    : row['RF/RTJ KG']??row.rfRtjKg??source['RF/RTJ KG']??row.weight);
 }
 function lengthFromRow(row,target){
-  // wtValveweights source length and RF-F/F are in millimetres.
-  // Facing-specific dimensions outrank generic master "length". In
-  // particular BW-F/F must not accidentally use an RF-F/F value.
+  const source=sourceCells(row);
+  // Explicit facing length (including unsupported 0) cannot silently fall
+  // back to a generic reference length that belongs to the other facing.
   const facing = target==='BW KG'
-    ? number(row['BW-F/F']??row.bwFaceToFaceMm)
-    : number(row['RF-F/F']??row['Length (RF-F/F)']);
-  return facing ?? number(row.lengthMm??row.length);
+    ? row['BW-F/F']??row.bwFaceToFaceMm??source['BW-F/F']
+    : row['RF-F/F']??row['Length (RF-F/F)']??source['RF-F/F'];
+  if(facing!==null && facing!==undefined && String(facing).trim()!=='')
+    return number(facing);
+  return number(row.lengthMm??row.length);
 }
-function ratingOf(row){return number(row.Rating??row.rating);}
-function boreOf(row){return number(row.DN??row.boreMm??row.bore);}
-function familyOf(row){return canonical(row.TypeDesc??row.typeDesc??row.valveType);}
+function ratingOf(row){return number(row.Rating??row.rating??sourceCells(row).Rating);}
+function boreOf(row){return number(row.DN??row.boreMm??row.bore??sourceCells(row).DN);}
+function familyOf(row){return canonical(row.TypeDesc??row.typeDesc??sourceCells(row).TypeDesc??row.valveType);}
 const validFamily=(type,expected)=>canonical(type)===canonical(expected);
 
 function groupedReferenceRows(masterRows,family,rating,target){
