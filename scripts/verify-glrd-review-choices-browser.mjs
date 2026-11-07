@@ -19,9 +19,9 @@ try {
    '/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
  const census=await page.evaluate(async ({xml,stage,masterRows})=>{
    const {collectModeARigidWeightReviewIssues,openModeAConsolidatedRigidWeightReviewPopup}=
-     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-choice-skip-trace-1');
+     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-bulk-review-gate-1');
    const {availableWeightReviewChoices}=
-     await import('/converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1');
+     await import('/converters/xml-cii2019-core/weight-review-choices.js?v=20261107-bulk-review-gate-1');
    const d=new DOMParser().parseFromString(xml,'application/xml');
    const ratingByBranch={};
    for(const branch of d.getElementsByTagName('Branch')){
@@ -38,9 +38,10 @@ try {
      ref:issue.componentRefNo,node:issue.nodeNumberDisplay||issue.nodeNumber,
      choices:availableWeightReviewChoices(issue)
    })).filter(x=>x.choices.length>1);
-   window.__glrdReviewPromise=openModeAConsolidatedRigidWeightReviewPopup([
+   window.__glrdReviewEntries=[
      {sourceId:'GLRD-BM2',fileName:'GLRD-1000-PI-01 - BM2.xml',state,config,issues}
-   ]);
+   ];
+   window.__glrdReviewPromise=openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
    return {count:issues.length,alternatives:alternatives.map(({ref,node,choices})=>
      ({ref,node,count:choices.length,weights:choices.map(x=>x.weight),
        lengths:choices.map(x=>x.referenceLengthMm)}))};
@@ -90,7 +91,14 @@ try {
  await page.locator('[data-mode-a-rigid-apply]').click();
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114,
    'unreviewed 109 estimates must refuse publication even after zero skip');
- assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/review 109/i);
+ assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/109 estimate draft/i);
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true,
+   'blocked Apply must open actionable confirmation panel, not a red dead end');
+ assert.match(await page.locator('[data-mode-a-rigid-bulk-review-summary]').innerText(),/109 unapproved/);
+ assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true,
+   'no bulk approval until reviewer explicitly attests independent verification');
+ assert.equal(await page.locator('[data-mode-a-rigid-show-unreviewed]').innerText(),'Show all (109)');
+ await page.screenshot({path:resolve(output,'glrd-blocked-apply-explicit-review-step.png')});
  if((await page.locator('[data-mode-a-rigid-show-missing]').innerText()).startsWith('Show all'))
    await page.locator('[data-mode-a-rigid-show-missing]').click();
  const alternativeSelectors=await page.locator('[data-mode-a-rigid-choice]').count();
@@ -105,13 +113,19 @@ try {
    assert.equal(await tr.locator('[data-rigid-suggestion-verified]').isChecked(),false);
    assert.equal(await tr.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
  }
- // Acceptance simulation ONLY: test deliberate review of all 109 proposals,
- // never declare an actual Owner approval from the tool's click.
- await page.evaluate(()=>document.querySelectorAll('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]')
-   .forEach(input=>{
-     const box=input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
-     if(box)box.checked=true;
-   }));
+ // Acceptance simulation ONLY: a reviewer would have to verify the physical
+ // masses independently before giving this exact, non-default attestation.
+ // Changing a proposal closes the old panel and invalidates a prior review.
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),false);
+ await page.locator('[data-mode-a-rigid-open-review]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
+ await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+ assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isEnabled(),true);
+ await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-show-unreviewed]').innerText(),
+   'Show pending reviews (0)','single explicit attestation closes 109 individual approval gates');
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-review-method="EXPLICIT_BULK_OWNER_ATTESTATION"]').count(),109);
+ await page.screenshot({path:resolve(output,'glrd-after-explicit-bulk-attestation.png')});
  await page.locator('[data-mode-a-rigid-apply]').click();
  const outcome=await page.evaluate(async()=>await window.__glrdReviewPromise);
  assert.equal(outcome.cancelled,false);
@@ -119,6 +133,10 @@ try {
  assert.ok(updates);
  assert.equal(Object.keys(updates.weightsByKey||{}).length,111,'109 estimates and two deliberate manual inputs');
  assert.equal(Object.keys(updates.skippedByKey||{}).length,3,'three intentionally skipped source refs');
+ assert.equal(Object.keys(updates.reviewReceiptsByKey||{}).length,109,
+   'each simulated bulk-accepted source mass has its own audit receipt');
+ assert.ok(Object.values(updates.reviewReceiptsByKey).every(v=>
+   v.reviewed===true && v.reviewMethod==='EXPLICIT_BULK_OWNER_ATTESTATION'));
  assert.ok(Object.values(updates.skippedByKey).every(x=>x.weightKg===0));
  assert.ok(Object.values(updates.weightsByKey).every(x=>x>0),'no fake 0 kg mass override');
  const verifiedState=await page.evaluate(async updates=>{
@@ -129,9 +147,96 @@ try {
    const cfg=JSON.parse(applied.sourceBatch.sources[0].supportConfigJson);
    return {massCount:Object.keys(cfg.overrides.rigidWeight||{}).length,
      skipCount:Object.keys(cfg.overrides.rigidWeightSkipped||{}).length,
+     reviewReceiptCount:Object.keys(cfg.overrides.rigidWeightReviewReceipts||{}).length,
      zeroMassInOverrides:Object.values(cfg.overrides.rigidWeight||{}).filter(x=>Number(x)===0).length};
  },updates);
- assert.deepEqual(verifiedState,{massCount:111,skipCount:3,zeroMassInOverrides:0});
+ assert.deepEqual(verifiedState,{massCount:111,skipCount:3,reviewReceiptCount:109,zeroMassInOverrides:0});
+
+ // Exact reproduction of Owner's third screenshot: 109 estimated draft
+ // weights, 5 zero skips, 0 missing, Apply blocked on 109 Reviewed flags.
+ // Only an explicit independent review acknowledgment unlocks the modal.
+ await page.evaluate(async()=>{
+   const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-bulk-review-gate-1');
+   window.__glrdFiveSkipPromise=m.openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
+ });
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
+ await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count(),109);
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (5)');
+ await page.locator('[data-mode-a-rigid-skip-blanks]').click();
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-skipped-zero="true"]').count(),5);
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (0)');
+ await page.locator('[data-mode-a-rigid-apply]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true);
+ assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
+ assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/No blank weights remain/);
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114,
+   'unreviewed masses must still block run without silently continuing');
+ await page.screenshot({path:resolve(output,'glrd-109-unreviewed-five-skipped-real-screenshot-repro.png')});
+ await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+ await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-show-unreviewed]').innerText(),'Show pending reviews (0)');
+ await page.locator('[data-mode-a-rigid-apply]').click();
+ const fiveOutcome=await page.evaluate(async()=>await window.__glrdFiveSkipPromise);
+ assert.equal(fiveOutcome.cancelled,false);
+ const fiveUpdates=fiveOutcome.updates?.['GLRD-BM2'];
+ assert.ok(fiveUpdates);
+ assert.equal(Object.keys(fiveUpdates.weightsByKey||{}).length,109);
+ assert.equal(Object.keys(fiveUpdates.skippedByKey||{}).length,5);
+ assert.equal(Object.keys(fiveUpdates.reviewReceiptsByKey||{}).length,109);
+ assert.ok(Object.values(fiveUpdates.weightsByKey).every(v=>Number(v)>0));
+ assert.equal(Object.values(fiveUpdates.weightsByKey).filter(v=>Number(v)===0).length,0);
+
+ // Simulated explicit Owner review must also cross the exact standalone
+ // run-parity handoff, not merely close a popup. Do not describe the browser
+ // simulator's attestation as authentic engineering mass approval.
+ const nativeHandoff=await page.evaluate(async ({xml,stage,fiveUpdates})=>{
+   const {applyModeAConsolidatedRigidReviewUpdates}=
+     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js');
+   const {enrichStandaloneXmlForRun}=
+     await import('/tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js');
+   const entry=window.__glrdReviewEntries[0];
+   const state={sourceBatch:{activeSourceId:entry.sourceId,sources:[{
+     sourceId:entry.sourceId,supportConfigJson:JSON.stringify(entry.config)
+   }]}};
+   const updated=applyModeAConsolidatedRigidReviewUpdates(state,{
+     [entry.sourceId]:fiveUpdates
+   });
+   const supportConfigJson=updated.sourceBatch.sources[0].supportConfigJson;
+   const result=await enrichStandaloneXmlForRun({
+     sourceText:xml,stagedJsonText:stage,supportConfigJson,options:{}
+   });
+   // Produce an otherwise identical native-input baseline from the SAME
+   // browser-enriched route with only the simulated source mass approvals
+   // omitted. This avoids comparing to a different pipeline/configuration.
+   const withoutMass=JSON.parse(supportConfigJson);
+   delete withoutMass.overrides.rigidWeight;
+   delete withoutMass.overrides.rigidWeightReviewReceipts;
+   const baseline=await enrichStandaloneXmlForRun({
+     sourceText:xml,stagedJsonText:stage,
+     supportConfigJson:JSON.stringify(withoutMass),options:{}
+   });
+   return {applied:result.applied,error:result.error||'',
+     comparisons:result.evidence?.comparisons??0,
+     mismatches:result.evidence?.mismatches?.length??0,
+     fields:result.appliedFields??0,
+     xmlText:result.xmlText||'',supportConfigJson,
+     baselineApplied:baseline.applied,baselineError:baseline.error||'',
+     baselineXmlText:baseline.xmlText||''};
+ },{xml,stage,fiveUpdates});
+ assert.equal(nativeHandoff.applied,true,'simulated reviewed weights must be accepted by run parity: '+nativeHandoff.error);
+ assert.ok(nativeHandoff.xmlText.length>0,'actual enriched XML must reach native handoff');
+ assert.equal(nativeHandoff.mismatches,0,'browser run parity must not mismatch accepted source weights');
+ assert.equal(nativeHandoff.baselineApplied,true,'same-route unedited XML baseline must apply: '+nativeHandoff.baselineError);
+ assert.ok(nativeHandoff.baselineXmlText.length>0,'baseline engine XML must be emitted');
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-baseline-engine-input.xml'),nativeHandoff.baselineXmlText);
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-engine-input.xml'),nativeHandoff.xmlText);
+ await writeFile(resolve(output,'glrd-109-reviewed-five-skipped-config.json'),nativeHandoff.supportConfigJson);
+ console.log('GLRD_BULK_REVIEW_PARITY_HANDOFF_PASS',JSON.stringify({
+   comparisons:nativeHandoff.comparisons,fields:nativeHandoff.fields,
+   xmlBytes:nativeHandoff.xmlText.length,accepted:109,skipped:5,mismatches:0
+ }));
+
  assert.deepEqual(errors,[]);
  const receipt={schema:'GLRD-CHOICE-SKIP-TRACE-UI-R1',
    glrdRows:census.count,draftPrefills:drafts,
@@ -140,10 +245,21 @@ try {
    alternativeSelectors:alternativeSelectors,
    reviewGateBeforeCheckbox:'BLOCKED',simulatedReviewedMasses:111,
    explicitZeroSkips:3,verifiedState,
+   ownerExactScreenshotRepro:{
+     reviewedMassCount:Object.keys(fiveUpdates.weightsByKey).length,
+     skippedZeroCount:Object.keys(fiveUpdates.skippedByKey).length,
+     receiptCount:Object.keys(fiveUpdates.reviewReceiptsByKey).length,
+     approvedZeroMassCount:0,
+     completedAfterExplicitAttestation:true,
+     runParityAccepted:nativeHandoff.applied,
+     runParityComparisons:nativeHandoff.comparisons,
+     runParityMismatches:nativeHandoff.mismatches
+   },
    engineeringMassApproval:'NO_AUTOMATIC_APPROVAL_FROM_ESTIMATE',errors};
  await writeFile(resolve(output,'glrd-choice-skip-trace-receipt.json'),JSON.stringify(receipt,null,2));
  console.log('GLRD_CHOICE_SKIP_TRACE_PASS',JSON.stringify({
    rows:114,drafts,initialMissing:missingStart.length,afterManualMissing:3,afterSkipMissing:0,
    alternatives:census.alternatives.length,alternativeSelectors,
-   zeroOverrides:verifiedState.zeroMassInOverrides}));
+   zeroOverrides:verifiedState.zeroMassInOverrides,
+   screenshotFiveSkips:5,screenshotReviewed:109,screenshotCompleted:true}));
 } finally {await browser.close()}

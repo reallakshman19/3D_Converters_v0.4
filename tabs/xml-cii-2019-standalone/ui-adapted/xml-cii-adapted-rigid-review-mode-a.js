@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-bulk-review-gate-1';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
@@ -134,7 +134,7 @@ function popupMarkup(rows, entries) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review — Consolidated</div><div data-mode-a-rigid-summary style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) across ${entries.length} XML file(s).</div></div>
       <button type="button" data-mode-a-rigid-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;">Cancel Batch Run</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg for independent per-row review; unapproved values require Reviewed confirmation before committing. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output. “Skip blank” explicitly marks empty rows as 0 kg with no verified mass (logged separately; zero is not approved source mass). Use “Show missing” to see source refs and locate outstanding rows.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg but does not approve or save them. To proceed, independently verify each mass and tick Reviewed, or use Review pending drafts for an explicit bulk engineering acknowledgment. Unreviewed values will not be written. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output. “Skip blank” explicitly marks empty rows as 0 kg with no verified mass (logged separately; zero is not approved source mass). Use “Show missing” to see source refs and locate outstanding rows.</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input type="search" data-mode-a-rigid-search placeholder="Search source / branch / node / component ref..." style="min-width:250px;padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;">
       <select data-mode-a-rigid-source style="padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;"><option value="">All XML files</option>${sourceOptions}</select>
@@ -142,11 +142,28 @@ function popupMarkup(rows, entries) {
       <button type="button" data-mode-a-rigid-show-missing title="Filter to rows requiring positive weight or explicit skip" style="cursor:pointer;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 12px;">Show missing (0)</button>
        <button type="button" data-mode-a-rigid-skip-blanks title="Explicitly mark remaining blank physical components as 0 kg (skipped, no source mass assigned). Never creates an approved weight." style="cursor:pointer;background:#2b3342;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:7px 12px;">Skip blank</button>
        <button type="button" data-mode-a-rigid-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:7px 12px;">Apply All Suggestions</button>
+       <button type="button" data-mode-a-rigid-show-unreviewed title="Locate source rows whose estimated masses still need approval" style="cursor:pointer;background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:7px 12px;">Show pending reviews (0)</button>
+       <button type="button" data-mode-a-rigid-open-review title="Explicitly acknowledge independently verified estimated masses before final Apply" style="cursor:pointer;background:#1d3452;border:1px solid #5377ae;color:#e9f4ff;border-radius:6px;padding:7px 12px;">Review draft weights (0)</button>
       <button type="button" data-mode-a-rigid-fill-exact style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:7px 12px;">Use All Exact Suggestions</button>
-      <span data-mode-a-rigid-status style="font-size:12px;color:#94a3b8;"></span>
+      <span data-mode-a-rigid-status role="status" aria-live="polite" style="font-size:12px;color:#94a3b8;flex-basis:100%;"></span>
     </div>
-    <div data-mode-a-rigid-missing-list role="status" style="display:none;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;background:#281b11;border:1px solid #855328;color:#fbd38d;border-radius:6px;padding:8px;margin:0 0 8px;"></div>
-    <div style="overflow:auto;max-height:55vh;border:1px solid rgba(148,163,184,.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:rgba(30,41,59,.55);color:#fff;position:sticky;top:0;z-index:1;"><th style="padding:7px;">Source XML</th><th style="padding:7px;">Branch</th><th style="padding:7px;">Bore</th><th style="padding:7px;">Rating</th><th style="padding:7px;">Node</th><th style="padding:7px;">DTXR</th><th style="padding:7px;">Length</th><th style="padding:7px;">Manual Weight (kg)</th><th style="padding:7px;">Nearest Suggestions</th></tr></thead><tbody data-mode-a-rigid-body>${rows.map(rowMarkup).join('')}</tbody></table></div>
+    <div data-mode-a-rigid-missing-list role="status" style="display:none;max-height:118px;overflow:auto;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;background:#281b11;border:1px solid #855328;color:#fbd38d;border-radius:6px;padding:8px;margin:0 0 8px;"></div>
+    <div data-mode-a-rigid-bulk-review-panel style="display:none;background:#11223a;border:2px solid #7298ca;color:#edf6ff;border-radius:8px;padding:14px;margin:0 0 12px;">
+      <div style="font-weight:700;font-size:15px;">Independent mass review required before Run</div>
+      <div data-mode-a-rigid-bulk-review-summary style="margin:8px 0;font-size:12px;"></div>
+      <div data-mode-a-rigid-bulk-review-examples style="max-height:110px;overflow:auto;font-size:11px;white-space:pre-wrap;color:#cfdef4;margin-bottom:10px;"></div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;margin:8px 0;">
+        <input type="checkbox" data-mode-a-rigid-bulk-attest style="margin-top:3px;">
+        <span><strong>I confirm I independently verified the physical-component masses for every pending draft listed above.</strong>
+        Marking reviewed is an engineering acceptance of those values for this conversion; the catalog score alone is not approval.
+        All unverified/incorrect masses must be corrected or excluded before I confirm.</span>
+      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" data-mode-a-rigid-confirm-bulk-review disabled style="padding:8px 13px;background:#2563eb;border:1px solid #60a5fa;color:white;border-radius:6px;cursor:pointer;">Confirm independently reviewed drafts</button>
+        <button type="button" data-mode-a-rigid-close-bulk-review style="padding:8px 13px;background:transparent;border:1px solid #475569;color:#cbd5e1;border-radius:6px;cursor:pointer;">Return to individual review</button>
+      </div>
+    </div>
+    <div style="overflow:auto;max-height:55vh;border:1px solid rgba(148,163,184,.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;z-index:2;"><th style="padding:7px;background:#1e293b;">Source XML</th><th style="padding:7px;">Branch</th><th style="padding:7px;">Bore</th><th style="padding:7px;">Rating</th><th style="padding:7px;">Node</th><th style="padding:7px;">DTXR</th><th style="padding:7px;">Length</th><th style="padding:7px;">Manual Weight (kg)</th><th style="padding:7px;">Nearest Suggestions</th></tr></thead><tbody data-mode-a-rigid-body>${rows.map(rowMarkup).join('')}</tbody></table></div>
     <div style="display:flex;justify-content:flex-end;margin-top:14px;border-top:1px solid #253a55;padding-top:14px;"><button type="button" data-mode-a-rigid-apply style="cursor:pointer;background:#1e4ed8;border:none;color:#fff;border-radius:6px;padding:9px 18px;font-weight:700;">Apply Weights and Run All Models</button></div>
   </div>`;
 }
@@ -215,6 +232,19 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const missingButton=overlay.querySelector('[data-mode-a-rigid-show-missing]');
     const missingList=overlay.querySelector('[data-mode-a-rigid-missing-list]');
     let missingOnly=false;
+    let reviewOnly=false;
+    const reviewButton=overlay.querySelector('[data-mode-a-rigid-show-unreviewed]');
+    const openBulkButton=overlay.querySelector('[data-mode-a-rigid-open-review]');
+    const reviewPanel=overlay.querySelector('[data-mode-a-rigid-bulk-review-panel]');
+    const reviewPanelSummary=overlay.querySelector('[data-mode-a-rigid-bulk-review-summary]');
+    const reviewPanelExamples=overlay.querySelector('[data-mode-a-rigid-bulk-review-examples]');
+    const reviewAttest=overlay.querySelector('[data-mode-a-rigid-bulk-attest]');
+    const reviewConfirm=overlay.querySelector('[data-mode-a-rigid-confirm-bulk-review]');
+    const hideBulkReview=()=>{
+      if(reviewPanel)reviewPanel.style.display='none';
+      if(reviewAttest)reviewAttest.checked=false;
+      if(reviewConfirm)reviewConfirm.disabled=true;
+    };
     const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
       .map(input=>[input.dataset.reviewId||'',text(input.value)]));
     const setStatus = (message, bad = false) => { if (status) { status.textContent = message; status.style.color = bad ? '#ef4444' : '#10b981'; } };
@@ -224,14 +254,53 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       return !(Number.isFinite(weight) && weight>0) &&
         !(input?.dataset.rigidSkippedZero==='true' && input?.value==='0');
     });
+    const pendingReviewRows=()=>[...overlay.querySelectorAll('[data-mode-a-rigid-review-row]')].filter(tr=>{
+      const input=tr.querySelector('.mc-rigid-review-input');
+      return input && input.value!=='' && Number(input.value)>0 &&
+        rigidReviewProposalNeedsVerification(input);
+    });
+    const updateReviewCounts=()=>{
+      const pending=pendingReviewRows().length;
+      if(reviewButton)reviewButton.textContent=(reviewOnly?'Show all':'Show pending reviews')+' ('+pending+')';
+      if(openBulkButton){
+        openBulkButton.textContent='Review draft weights ('+pending+')';
+        openBulkButton.disabled=pending===0;
+      }
+      return pending;
+    };
+    const showBulkReview=()=>{
+      const pending=pendingReviewRows();
+      if(!pending.length){hideBulkReview();return;}
+      if(reviewPanelSummary)reviewPanelSummary.textContent=
+        pending.length+' unapproved physical-component masses still require engineering acceptance. '+
+        'They are estimated draft values; the matching master does not independently establish actual mass. '+
+        'Review source references and edit any uncertain estimates before using the bulk attestation.';
+      if(reviewPanelExamples)reviewPanelExamples.textContent=
+        pending.slice(0,12).map((tr,i)=>{
+          const input=tr.querySelector('.mc-rigid-review-input');
+          const row=rows.find(issue=>issue.reviewId===input?.dataset.reviewId);
+          return (i+1)+'. '+(row?.fileName||row?.sourceId||'XML')+
+            ' | node '+(row?.nodeNumberDisplay||row?.nodeNumber||'?')+
+            ' | '+(row?.componentRefNo||'NO REF')+'_'+(row?.endpoint||'?')+
+            ' | '+input.value+' kg | '+(row?.dtxr||'DTXR missing');
+        }).join('\n')+
+        (pending.length>12?'\n… and '+(pending.length-12)+
+          ' more. Use Show pending reviews to inspect every row before confirming.':'');
+      if(reviewPanel)reviewPanel.style.display='block';
+      if(reviewAttest)reviewAttest.checked=false;
+      if(reviewConfirm)reviewConfirm.disabled=true;
+      reviewPanel?.scrollIntoView?.({block:'nearest'});
+    };
     const refreshMissingList=()=>{
       const missing=missingRows();
       if(missingButton)missingButton.textContent=(missingOnly?'Show all':'Show missing')+' ('+missing.length+')';
       if(missingList){
-        missingList.style.display=missing.length?'block':'none';
+        // Do not fill the whole dialog with 114 rows on initial load.
+        // The full list is accessible through Show missing and source search.
+        missingList.style.display=missing.length && (missingOnly||missing.length<=10)?'block':'none';
         missingList.textContent=missing.length
           ? 'Missing '+missing.length+' physical weights (click Show missing to isolate).\n'+
-            missing.map((tr,index)=>{
+            missing.slice(0,12).map((tr,index)=>{
               const issue=rows.find(row=>row.reviewId===tr.dataset.reviewId);
               return (index+1)+'. '+(issue?.fileName||issue?.sourceId||'XML')+
                 ' | '+(issue?.branchName||'-')+
@@ -239,7 +308,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
                 ' | ref '+(issue?.componentRefNo||'missing source ref')+
                 '_'+(issue?.endpoint||'?')+
                 ' | '+(issue?.dtxr||'DTXR unavailable');
-            }).join('\n')
+            }).join('\n')+
+            (missing.length>12?'\n… '+(missing.length-12)+
+              ' additional missing rows; use Show missing or search by source reference.':'')
           : '';
       }
       return missing;
@@ -248,17 +319,25 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       const q = text(search?.value).toLowerCase();
       const sourceId = source?.value || '';
       const missing=missingRows();
-      if(missingOnly && !missing.length)missingOnly=false; // zero missing must not hide every row
+      const pending=pendingReviewRows();
+      if(missingOnly && !missing.length)missingOnly=false;
+      if(reviewOnly && !pending.length)reviewOnly=false; // zero missing must not hide every row
       const missingSet=new Set(missingOnly?missing:[]);
+      const reviewSet=new Set(reviewOnly?pending:[]);
       overlay.querySelectorAll('[data-mode-a-rigid-review-row]').forEach((tr) => {
         const show = (!sourceId || tr.dataset.sourceId === sourceId) &&
           (!q || (tr.dataset.search || '').includes(q)) &&
-          (!missingOnly || missingSet.has(tr));
+          (!missingOnly || missingSet.has(tr)) &&
+          (!reviewOnly || reviewSet.has(tr));
         tr.style.display = show ? '' : 'none';
       });
       refreshMissingList();
+      updateReviewCounts();
     };
     const draw = (preserve = new Map(), skipped = new Set()) => {
+      hideBulkReview();
+      reviewOnly=false;
+      missingOnly=false;
       rows = flattenModeARigidReviewEntries(workingEntries);
       if (body) body.innerHTML = rows.map(rowMarkup).join('');
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
@@ -273,24 +352,73 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     };
     bindCandidateButtons(overlay, rows);
     filter(); // Show accurate missing-row count and source-ref trace immediately.
+    reviewButton?.addEventListener('click',()=>{
+      reviewOnly=!reviewOnly;
+      if(reviewOnly)missingOnly=false;
+      filter();
+      if(reviewOnly)pendingReviewRows()[0]?.scrollIntoView?.({block:'nearest'});
+    });
+    openBulkButton?.addEventListener('click',showBulkReview);
+    reviewAttest?.addEventListener('change',()=>{
+      if(reviewConfirm)reviewConfirm.disabled=!reviewAttest.checked || !pendingReviewRows().length;
+    });
+    overlay.querySelector('[data-mode-a-rigid-close-bulk-review]')?.addEventListener('click',hideBulkReview);
+    reviewConfirm?.addEventListener('click',()=>{
+      if(!reviewAttest?.checked){
+        setStatus('Independent mass verification acknowledgment is required. No values have been approved.',true);
+        return;
+      }
+      const pending=pendingReviewRows();
+      if(!pending.length){hideBulkReview();filter();return;}
+      for(const tr of pending){
+        const input=tr.querySelector('.mc-rigid-review-input');
+        const verified=tr.querySelector('[data-rigid-suggestion-verified]');
+        if(!input || !verified)continue;
+        verified.checked=true;
+        input.dataset.rigidReviewMethod='EXPLICIT_BULK_OWNER_ATTESTATION';
+      }
+      hideBulkReview();
+      reviewOnly=false;
+      filter();
+      setStatus('Explicit independent review acknowledged for '+pending.length+
+        ' estimated physical-component masses. Click Apply Weights and Run All Models to continue. '+
+        'No output has been produced yet.',false);
+    });
     overlay.addEventListener('change',event=>{
+      if(event.target?.matches?.('[data-rigid-suggestion-verified]')){
+        const input=event.target.closest('tr')?.querySelector('.mc-rigid-review-input');
+        if(input){
+          if(event.target.checked && input.dataset.rigidSuggestionDraft==='estimate')
+            input.dataset.rigidReviewMethod='EXPLICIT_INDIVIDUAL_OWNER_REVIEW';
+          else delete input.dataset.rigidReviewMethod;
+        }
+        filter();
+      }
       if(event.target?.matches?.('[data-mode-a-rigid-choice]') ||
-         event.target?.matches?.('.mc-rigid-review-input')) refreshMissingList();
+         event.target?.matches?.('.mc-rigid-review-input')){
+        hideBulkReview(); // any changed candidate invalidates a previous blanket confirmation
+        filter();
+      }
     });
     overlay.addEventListener('click',event=>{
-      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]'))
-        refreshMissingList();
+      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]')){
+        hideBulkReview(); // a replacement candidate invalidates earlier bulk attestation
+        filter();
+      }
     });
     overlay.addEventListener('input', event=>{
       if(event.target?.matches?.('.mc-rigid-review-input')){
         clearRigidReviewProposal(event.target);
         delete event.target.dataset.rigidSkippedZero;
         delete event.target.dataset.rigidChoiceIndex;
-        refreshMissingList();
+        delete event.target.dataset.rigidReviewMethod;
+        hideBulkReview();
+        filter();
       }
     });
     missingButton?.addEventListener('click',()=>{
       missingOnly=!missingOnly;
+      if(missingOnly)reviewOnly=false;
       filter();
       if(missingOnly)missingRows()[0]?.scrollIntoView?.({block:'nearest'});
     });
@@ -306,8 +434,10 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         input.style.borderColor='#fbbf24';
       }
       const count=missing.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.rigidSkippedZero==='true').length;
-      setStatus(count+' blank row(s) marked 0 kg SKIPPED. These remain zero mass; they are not approved source weights.',false);
       filter();
+      setStatus(count+' blank row(s) marked 0 kg SKIPPED. '+pendingReviewRows().length+
+        ' estimated masses still require independent Reviewed confirmation. '+
+        'No skipped zero is an approved physical source mass.',false);
     });
     overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
       let filled=0,skipped=0;
@@ -317,7 +447,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         if(!input || !proposal || (input.value && !input.dataset.rigidSuggestionDraft)) {skipped++;return;}
         if(stageRigidReviewProposal(input,proposal))filled++; else skipped++;
       });
-      setStatus(`Prefilled ${filled} review draft(s); ${skipped} unavailable or entered manually. Verify each estimated mass before Apply.`,filled===0);
+      hideBulkReview();
+      filter();
+      setStatus(`Prefilled ${filled} review draft(s), ${missingRows().length} blank(s) remaining. `+
+        `${pendingReviewRows().length} estimated masses require explicit independent review. `+
+        'Use Show pending reviews, or Review draft weights after checking the source. No values saved.',filled===0);
     });
     search?.addEventListener('input', filter);
     source?.addEventListener('change', filter);
@@ -331,7 +465,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
         if (input && stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
       });
-      setStatus(`Filled ${count} preferred exact suggestion(s). Review remaining rows manually.`, false);
+      hideBulkReview();
+      filter();
+      setStatus(`Filled ${count} independently approved source mass(es). Review remaining drafts before Run.`, false);
     });
 
     overlay.querySelector('[data-mode-a-rigid-refresh]')?.addEventListener('click', async () => {
@@ -395,6 +531,20 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         input.style.borderColor = '#31455f';
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].weightsByKey[key] = numeric;
+        if(input.dataset.rigidSuggestionDraft==='estimate'){
+          const verified=input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
+          if(!verified?.checked)throw new Error('Unreviewed estimated mass passed review gate: '+key);
+          updates[sourceId].reviewReceiptsByKey ||= {};
+          const issue=rows.find(row=>row.reviewId===input.dataset.reviewId);
+          updates[sourceId].reviewReceiptsByKey[key]={
+            reviewed:true,reviewMethod:input.dataset.rigidReviewMethod==='EXPLICIT_BULK_OWNER_ATTESTATION'
+              ? 'EXPLICIT_BULK_OWNER_ATTESTATION' : 'EXPLICIT_INDIVIDUAL_OWNER_REVIEW',
+            weightKg:numeric,
+            sourceComponentRef:issue?.componentRefNo||'',
+            sourceEndpoint:issue?.endpoint||'',
+            statement:'Reviewer confirms independent physical-component mass verification',
+          };
+        }
       });
       overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
@@ -405,10 +555,20 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       });
       if(missing.length || unreviewed.length){
         missingOnly=missing.length>0;
+        reviewOnly=missing.length===0 && unreviewed.length>0;
         filter();
-        setStatus(`Enter a positive weight for ${missing.length} missing row(s) or choose explicit Skip blank (0 kg). Source references listed below. Independently review ${unreviewed.length} estimated draft(s) before Apply. ${skipped.length} intentional 0 kg skip(s). No updates applied.`,true);
-        const first=missingRows()[0];
-        first?.scrollIntoView?.({block:'nearest'});
+        if(unreviewed.length && !missing.length) showBulkReview();
+        const firstMissing=missing.length?missingRows()[0]:null;
+        setStatus(
+          (missing.length?'Enter a positive weight for '+missing.length+
+              ' missing row(s) or choose explicit Skip blank; Show missing locates the source. '
+            :'No blank weights remain. ')+
+          (unreviewed.length?unreviewed.length+' estimate draft(s) are NOT independently reviewed. '+
+            'Check Reviewed for each or use the explicit Review draft weights confirmation. ':'')+
+          skipped.length+' intentional 0 kg skip(s). Nothing was applied.',true);
+        // After a 0-missing/109-unreviewed Apply, keep the explicit
+        // confirmation panel in view rather than scrolling past it to row 1.
+        firstMissing?.scrollIntoView?.({block:'nearest'});
         return;
       }
       overlay.remove();

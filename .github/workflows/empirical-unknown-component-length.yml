@@ -12,6 +12,7 @@ on:
       - 'converters/xml-cii2019-core/weight-review-choices.js'
       - 'tests/xml-cii-weight-review-choices-skip.test.mjs'
       - 'scripts/verify-glrd-review-choices-browser.mjs'
+      - 'scripts/verify-glrd-reviewed-bulk-native.py'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js'
       - 'tests/xml-cii-glrd-bore-family-integration.test.mjs'
       - 'tests/xml-cii-glrd-release-cache-chain.test.mjs'
@@ -173,6 +174,11 @@ jobs:
           git fetch --no-tags --depth=1 origin e0939f05833d37fba201ba748aa09372560dc051
           git worktree add --detach /tmp/glrd-v04-main e0939f05833d37fba201ba748aa09372560dc051
           python3 scripts/verify-glrd-bm2-native-parity.py --inputs /tmp/glrd-inputs --before-root /tmp/glrd-v04-main --after-root . --out artifacts/glrd-native-parity
+
+      - name: Native CII conversion after simulated 109 reviewed masses and 5 explicit zero skips
+        run: |
+          python3 -m py_compile scripts/verify-glrd-reviewed-bulk-native.py
+          python3 scripts/verify-glrd-reviewed-bulk-native.py
 
       - name: Upload browser screenshots and receipt
         if: always()
