@@ -117,7 +117,7 @@ const nearestFirst = estimator.estimate(request, { allowNearestInterpolation: tr
 ```
 
 In **Empirical Weight Tuning → Sandbox**, type a custom `Estimate NS` to
-compare the new `Nearest master bracket` row with the unchanged production
+compare the new `Nearest master bracket` row with the current default
 `Final API estimate`. The `Final API · nearest-first (review only)` row
 shows the opt-in route without publishing it.
 
@@ -125,8 +125,13 @@ shows the opt-in route without publishing it.
 It is *not* an approved physical component mass and must not bypass any
 XML→CII rigid-weight ownership, native writer or independent mass-conservation
 gate. Default production routing remains
-exact → A2 matrix → A1 equation (unchanged). This feature must be qualified
-before opt-in routing is promoted for production.
+exact → A2 matrix → A1 equation (routing order unchanged). **Compatibility note:**
+PR #7 also repaired a baseline `fail(...)` envelope bug that could mark an absent
+master cell `ok:true` without a mass, accidentally preventing the A2 fallback.
+For missing cells the same default `estimate()` call can now return an A2
+estimate where the baseline returned no weight. This is a behavior change,
+not merely an opt-in new method, and requires independent compatibility review.
+This feature must be qualified before opt-in routing is promoted for production.
 
 ## Unknown component physical-length suggestion (review only)
 
@@ -209,3 +214,29 @@ Such output is labeled `EXTRAPOLATED` with `LOW` confidence.
 ## Model ownership
 
 `converters/empirical-weight/empirical-weight-model.js` exposes all 270 Approach 1 equations (assembled from `converters/empirical-weight/model/part-*.js`) and the Approach 2 family stack weights. Regenerate the model registry whenever `wtValveweights` is materially changed; do not hand-edit individual coefficients.
+
+## Stage-2 exposed-review repair boundary (7 November 2026)
+
+The exposure-qualified Stage-2 reviewer returned **NO-GO** at PR #8
+`671ae10e`. Its code-level falsifiers identified unapproved mass promotion
+through ranked candidates, non-preferred bulk actions, standalone run parity,
+and a broad `FLANGED` regex that selected Swing Check Valve. Subsequent
+forward commits on PR #8 restrict unknown-component ranked candidates to the
+same strict physical-reference selector, require exact rating and trusted
+component-span provenance, make inferred candidate chips passive, and prevent
+automatic XML mass selection from ranked estimates.
+
+**Approval boundary:** exact-master lookup, nearest/DN interpolation, and the
+Owner's +6 mm rule produce *advisory candidates only*. An explicit reviewed
+`config.overrides.rigidWeight` remains a separately tracked input; the
+standalone run-parity path must not fill an original zero-mass XML node from
+`ranking.best` or other inferred fields. The latent automatic-weight planner
+requires `APPROVED_SOURCE_MASS` in both issue and candidate and rejects
+inferred/fallback candidates even when flagged preferred. These are guarding
+claims to be challenged by exact-head adversarial tests; they do not yet prove
+native Pyodide output correctness.
+
+The real GLRD 19.1 mm **CII element** includes the 12.7 mm source PCOM span
+plus connection gaps. Physical component length must be proved from the
+source's matched endpoints; it is not the CII route length. No new source
+mass or emitted CII RIGID weight is approved by this work.
