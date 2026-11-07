@@ -404,7 +404,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(statusText)}</td>
         <td title="${attr(issue.branchName)}" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(issue.branchName)}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.lineKey || '')}</td>
-        <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.reviewCategory === 'UNKNOWN' ? 'Unknown (PCOM)' : issue.componentType || '')}</td>
+        <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc((issue.reviewCategory === 'UNKNOWN' || issue.componentType === 'PCOM') ? 'Unknown (PCOM)' : issue.componentType || '')}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.rating || '')}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.nodeNumber)}</td>
