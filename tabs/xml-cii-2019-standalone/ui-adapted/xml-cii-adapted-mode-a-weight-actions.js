@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { replaceModeAState } from './xml-cii-adapted-mode-a-state.js';
 import { createModeASourceProcessingRef, modeARawRef, modeARawState } from './xml-cii-adapted-mode-a-propagation.js';
 
@@ -20,7 +21,14 @@ function snapshots(stateRef, sourceIds) {
 }
 
 export function applyModeAWeightChanges(stateRef, changes = [], label = 'Weight Match') {
-  if (!changes.length) return false;
+  // Final common write boundary: reject the whole batch before touching
+  // any source configuration if any claim lacks physical-mass approval.
+  // This writer is used only by catalog-driven Mode A easy-weight actions;
+  // manual source-mass entry belongs to a separate, explicitly reviewed path.
+  if (!Array.isArray(changes) || !changes.length ||
+      changes.some(row => !text(row?.sourceId) || !text(row?.key) ||
+        !isApprovedPhysicalMassCandidate(row?.approvedCandidate, Number(row?.weight))))
+    return false;
   const before = snapshots(stateRef, changes.map((row) => row.sourceId));
   const bySource = new Map();
   for (const change of changes) {
