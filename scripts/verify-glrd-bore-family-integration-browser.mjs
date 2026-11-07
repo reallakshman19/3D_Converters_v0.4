@@ -126,8 +126,79 @@ try {
    assert.equal(data.fullBoreRef27507.type?.toUpperCase().includes('FULL BORE'),true,'FB must not use RB');
  }
  assert.ok(data.stats.checked>=100,'must audit most original 135 weight-bearing components');
+
+ // Render the REAL Weight Match panel, not a model of its table. Preview
+ // Ratings are supplied as the 31-branch pinned 93833/13451 authority.
+ await page.evaluate(async ({xml,stage,masterRows})=>{
+   const {publishXmlCiiPreviewRatingSnapshot}=
+     await import('/converters/xml-cii2019-core/preview-rating-snapshot.js');
+   const {applyXmlCiiStagedGeometryAuthority}=
+     await import('/converters/xml-cii2019-core/staged-geometry-authority.js');
+   const {xmlCiiRenderWeightMatchPhase,bindXmlCiiWeightMatchPhase}=
+     await import('/tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261107-glrd-bore-family-r2');
+   const d=new DOMParser().parseFromString(xml,'application/xml');
+   const branches=[...d.getElementsByTagName('Branch')];
+   const preview=branches.map(b=>{
+     const branchName=b.getElementsByTagName('Branchname')[0]?.textContent||'';
+     const p=branchName.match(/-(\\d{5})-\\d{2}\\/B\\d+$/)?.[1];
+     return {branchName,rating:({'93833':900,'13451':150})[p]};
+   });
+   if(preview.length!==31 || preview.some(x=>!x.rating))throw Error('No 31-branch Preview Rating authority');
+   publishXmlCiiPreviewRatingSnapshot(preview,{authorityDigest:'pinned-owner-GLRD-manual-preview'});
+   const config={weight:{masterRows},overrides:{rating:Object.fromEntries(preview.map(x=>[x.branchName,x.rating]))}};
+   const section=document.createElement('section');
+   section.id='glrd-actual-weight-match-panel';
+   section.innerHTML=xmlCiiRenderWeightMatchPhase();
+   document.body.appendChild(section);
+   const projected=applyXmlCiiStagedGeometryAuthority(xml,stage,{config});
+   const file=new File([xml],'GLRD-1000-PI-01 - BM2.xml',{type:'application/xml'});
+   bindXmlCiiWeightMatchPhase(section,{
+     xmlFile:file,stagedJsonText:stage,config,
+     enrichXmlForCii2019:async()=>({xmlText:projected.xmlText||xml,config}),
+     onSaveConfig:()=>{},
+     ensureOverrides:c=>(c.overrides||={}),
+     resolveStagedJsonText:async()=>({text:stage,label:'Owner pinned stage'}),
+   });
+   section.querySelector('#mc-wm-refresh').click();
+ },{xml,stage,masterRows});
+ await page.waitForFunction(()=>{
+   const panel=document.querySelector('#glrd-actual-weight-match-panel');
+   return panel?.querySelectorAll('.mc-rigid-review-table-wrap tbody tr').length>=149 ||
+     panel?.querySelector('#mc-wm-status')?.textContent==='Error';
+ },null,{timeout:45000});
+ const rendered=await page.evaluate(()=>{
+   const panel=document.querySelector('#glrd-actual-weight-match-panel');
+   const rows=[...panel.querySelectorAll('.mc-rigid-review-table-wrap tbody tr')];
+   const byRef=ref=>rows.find(tr=>tr.querySelectorAll('td')[7]?.textContent?.includes('/'+ref+'_2'));
+   const read=ref=>{
+     const tr=byRef(ref),td=tr?[...tr.querySelectorAll('td')]:[];
+     return {ref,present:!!tr,bore:td[4]?.textContent?.trim()||'',
+       boreEvidence:td[4]?.title||'',rating:td[5]?.textContent?.trim()||'',
+       suggestion:td[12]?.textContent?.trim()||'',
+       candidateButtons:td[12]?.querySelectorAll('[data-wm-candidate]').length||0,
+       advisoryChips:td[12]?.querySelectorAll('[data-advisory-weight]').length||0};
+   };
+   return {rows:rows.length,summary:panel.querySelector('#mc-wm-status')?.textContent||'',
+     noSourceWrites:panel.querySelectorAll('[data-wm-candidate]').length===0,
+     targetRefs:['8045','8050','8014','27507'].map(read)};
+ });
+ console.log('GLRD_ACTUAL_WEIGHT_MATCH_UI',JSON.stringify(rendered));
+ assert.equal(rendered.rows,149,'real Weight Match must include original 135 components plus 14 PCOM');
+ for(const ref of ['8045','8050','8014']){
+   const row=rendered.targetRefs.find(x=>x.ref===ref);
+   assert.equal(row.bore,'150 mm *',ref+' displayed corrected source DN');
+   assert.match(row.boreEvidence,/Source OD 168\\.3 mm/,ref+' source OD provenance');
+   assert.match(row.suggestion,/59(?:\\.0+)?kg/,ref+' visible master kg');
+   assert.ok(row.advisoryChips>0,'unapproved master remains an advisory chip');
+ }
+ const fbRow=rendered.targetRefs.find(x=>x.ref==='27507');
+ assert.equal(fbRow.bore,'50 mm','Full-bore VALV source DN');
+ assert.match(fbRow.suggestion,/56\\.001kg/);
+ assert.doesNotMatch(fbRow.suggestion,/47\\.001kg/,'must not show reduced-bore mass');
+ await page.screenshot({path:resolve(out,'glrd-actual-weight-match-reconciled.png')});
+
  await writeFile(out+'/glrd-bore-family-receipt.json',
-   JSON.stringify({...data,sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
+   JSON.stringify({...data,renderedWeightMatch:rendered,sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
      safety:'unapproved catalog candidates are advisory; no XML/CII mass write',
      errors},null,2));
  assert.deepEqual(errors,[]);
