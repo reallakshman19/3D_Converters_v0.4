@@ -10,6 +10,10 @@ const SCRIPT_FILE_NAMES = Object.freeze([
   'xml_to_cii2019_direction.py',
   'xml_to_cii2019_bend_radius_policy.py',
   'xml_to_cii2019_runtime_custody.py',
+  // Required by runtime_custody even when no PCOM weight was approved.
+  // Without this module Pyodide could enrich XML but the CII writer fails
+  // with ModuleNotFoundError before producing any .cii output.
+  'xml_to_cii2019_pcom_mass.py',
   'xml_to_cii2019_master_addon.py',
   'master_customization.py',
   'cii2019_section_rules.py',
