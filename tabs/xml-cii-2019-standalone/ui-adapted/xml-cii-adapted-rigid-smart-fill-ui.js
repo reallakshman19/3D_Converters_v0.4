@@ -233,8 +233,18 @@ function openPolicy(dialog) {
   document.body.appendChild(panel);
 }
 
+// The single/ATTA smart-fill table has eight columns and uses
+// data-rigid-review-key / data-rigid-review-candidate. Consolidated Mode A has
+// nine columns, source-scoped review IDs, and data-mode-a-rigid-candidate.
+// Interpreting Mode A as single-model corrupts the status counters, rating,
+// length and candidate authority; do not mount this dashboard there.
+export function isSingleOrAttaRigidReviewDialog(dialog) {
+  return Boolean(dialog?.querySelector?.('.mc-rigid-review-input[data-rigid-review-key]'))
+    && !dialog?.querySelector?.('[data-mode-a-rigid-body]');
+}
+
 function renderDialog(dialog) {
-  if (!dialog?.isConnected) return;
+  if (!dialog?.isConnected || !isSingleOrAttaRigidReviewDialog(dialog)) return;
   prepareInputs(dialog);
   const rows = readRows(dialog); const policy = readPolicy();
   const receipt = buildRigidSmartFillPreflight({ rows, policy });
