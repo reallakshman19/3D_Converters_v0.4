@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {
   availableWeightReviewChoices,preferredWeightReviewDraft,weightReviewChoiceLabel,comparisonWeightMasterReferences
 } from '../converters/xml-cii2019-core/weight-review-choices.js';
