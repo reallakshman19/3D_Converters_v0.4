@@ -30,6 +30,8 @@ try{
  await page.goto(base+'/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
  const facts=await page.evaluate(async ({xml,stage,masterRows})=>{
    const {collectModeARigidWeightReviewIssues}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+   const {collectXmlCiiZeroRigidWeightIssues}=await import('/converters/xml-cii2019-core/weight-match-model.js');
+   const {isRigidWeightReviewEligibleIssue}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js');
    const {rankXmlCiiWeightCandidates}=await import('/converters/xml-cii2019-core/weight-valve-hints.js');
    const {applyXmlCiiFlangeWeightFallbackToIssue}=await import('/converters/xml-cii2019-core/flange-weight-fallback.js');
    const {proposedRigidReviewWeight}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js');
@@ -48,6 +50,7 @@ try{
    }
    const config={weight:{masterRows},overrides:{rating:ratingByBranch}};
    const sourceState={sourceText:xml,stagedJsonText:stage};
+   const rawIssues=collectXmlCiiZeroRigidWeightIssues(xml,stage,config);
    const issues=await collectModeARigidWeightReviewIssues(sourceState,config);
    window.__glrdAllIssues=issues;
    window.__glrdConfig=config;
@@ -63,7 +66,10 @@ try{
    },config);
    const prop=proposedRigidReviewWeight(corrected);
    window.__glrdKnownIssue=corrected;
-   return {branches:branches.length,nodes:sourceNodes.length,reviewIssues:issues.length,
+   return {branches:branches.length,nodes:sourceNodes.length,
+      rawReviewIssues:rawIssues.length,
+      excludedNonPhysical:rawIssues.filter(i=>!isRigidWeightReviewEligibleIssue(i)).length,
+      reviewIssues:issues.length,
       sourceKey:selected.key,branch:selected.branchName,physicalLength:selected.lengthMm,
       lengthProvenance:selected.elementLengthSource,bore:selected.boreMm,rating:900,
       candidateKg:prop?.weight??null,candidateFamily:prop?.reference??null,approved:prop?.approved??null,
@@ -86,7 +92,9 @@ try{
  receipt.census=facts;
  assert.equal(facts.branches,31);
  assert.equal(facts.nodes,1196);
- assert.ok(facts.reviewIssues>100 && facts.reviewIssues<260,'real multi-branch review census');
+ assert.equal(facts.rawReviewIssues,154,'baseline unfiltered GLRD review census');
+ assert.equal(facts.excludedNonPhysical,40,'OLET and unrelated connection rows excluded');
+ assert.equal(facts.reviewIssues,114,'physical-source-only GLRD review queue');
  assert.ok(Math.abs(facts.physicalLength-147)<.01,'physical node 60 must span 147 mm');
  assert.ok(facts.candidateKg>0 && facts.approved===false,'actual master flange estimate must not auto-approve');
  // Full source queue from the actual collector: no mass writing when cancelled.
@@ -159,7 +167,7 @@ try{
  assert.deepEqual(errors,[]);
  await writeFile(resolve(out,'glrd-source-review-popup-receipt.json'),JSON.stringify({...receipt,errors},null,2));
  console.log('GLRD uploaded-source browser modal replay PASS',JSON.stringify({branches:facts.branches,nodes:facts.nodes,
-   reviewed:facts.reviewIssues,sourceKey:facts.sourceKey,flangeKg:facts.candidateKg,fullPrefilled,
+   reviewed:facts.reviewIssues,excludedNonPhysical:facts.excludedNonPhysical,sourceKey:facts.sourceKey,flangeKg:facts.candidateKg,fullPrefilled,
    proposalByType:facts.proposalByType,noDraftReasons:facts.noDraftReasons}));
 } catch(e){
  await writeFile(resolve(out,'glrd-source-review-popup-receipt.json'),JSON.stringify({...receipt,error:String(e),errors},null,2));
