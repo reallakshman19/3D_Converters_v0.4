@@ -107,11 +107,13 @@ try {
    const options=await choice.locator('option').allTextContents();
    assert.ok(options.length>2,'must offer multiple reference lengths/weights');
    assert.ok(options.some(x=>x.includes('master L=')),'must disclose reference length');
-   // An alternate master is a proposal only; choosing it must NOT auto-check Reviewed.
+   // An alternate master is a proposal only; no per-row qualification UI
+   // remains, and selection must not silently grant bulk approval.
    await choice.selectOption({index:2});
    const tr=choice.locator('xpath=ancestor::tr');
-   assert.equal(await tr.locator('[data-rigid-suggestion-verified]').isChecked(),false);
+   assert.equal(await tr.locator('[data-rigid-suggestion-verified]').count(),0);
    assert.equal(await tr.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
+   assert.equal(await tr.locator('.mc-rigid-review-input').getAttribute('data-rigid-review-method'),null);
  }
  // Acceptance simulation ONLY: a reviewer would have to verify the physical
  // masses independently before giving this exact, non-default attestation.
@@ -160,6 +162,8 @@ try {
    window.__glrdFiveSkipPromise=m.openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
  });
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
+ assert.equal(await page.locator('[data-rigid-suggestion-verified]').count(),0,
+   'consolidated 114-row review must contain no per-row Reviewed controls');
  await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
  assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count(),109);
  assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (5)');
