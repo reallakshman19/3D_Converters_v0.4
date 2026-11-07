@@ -80,6 +80,8 @@ try {
           ]);
           const tools=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js');
           tools.installModeAConsolidatedRigidReviewTools();
+          const smart=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js');
+          smart.installRigidSmartFillDashboard();
         }else{
           const file=route==='atta'?'xml-cii-adapted-run-workflow-atta-default.js':'xml-cii-adapted-run-workflow.js';
           const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/'+file);
@@ -94,6 +96,8 @@ try {
       assert.ok((await chip.innerText()).includes(family),'selected reference family visible');
       assert.equal(await page.locator('[data-mode-a-rigid-candidate],[data-rigid-review-candidate]').count(),0);
       if(route==='modeA'){
+        assert.equal(await page.locator('[data-rigid-smart-toolbar]').count(),0,
+          'single/ATTA eight-column dashboard must never compute bogus Mode A counters');
         await page.locator('[data-mode-a-rigid-fill-exact]').click();
         assert.equal(await input.inputValue(),'');
         await page.locator('[data-mode-a-rigid-fill-all-suggestions]').click();
