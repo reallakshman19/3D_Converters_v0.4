@@ -133,7 +133,7 @@ function popupMarkup(rows, entries) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review — Consolidated</div><div data-mode-a-rigid-summary style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) across ${entries.length} XML file(s).</div></div>
       <button type="button" data-mode-a-rigid-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;">Cancel Batch Run</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg for independent per-row review; unapproved values require Reviewed confirmation before committing. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg for independent per-row review; unapproved values require Reviewed confirmation before committing. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output. “Skip blank” explicitly marks empty rows as 0 kg with no verified mass (logged separately; zero is not approved source mass). Use “Show missing” to see source refs and locate outstanding rows.</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input type="search" data-mode-a-rigid-search placeholder="Search source / branch / node / component ref..." style="min-width:250px;padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;">
       <select data-mode-a-rigid-source style="padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;"><option value="">All XML files</option>${sourceOptions}</select>
@@ -268,6 +268,15 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       filter();
     };
     bindCandidateButtons(overlay, rows);
+    filter(); // Show accurate missing-row count and source-ref trace immediately.
+    overlay.addEventListener('change',event=>{
+      if(event.target?.matches?.('[data-mode-a-rigid-choice]') ||
+         event.target?.matches?.('.mc-rigid-review-input')) refreshMissingList();
+    });
+    overlay.addEventListener('click',event=>{
+      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]'))
+        refreshMissingList();
+    });
     overlay.addEventListener('input', event=>{
       if(event.target?.matches?.('.mc-rigid-review-input')){
         clearRigidReviewProposal(event.target);
