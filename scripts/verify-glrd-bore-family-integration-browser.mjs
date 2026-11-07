@@ -140,7 +140,7 @@ try {
    const branches=[...d.getElementsByTagName('Branch')];
    const preview=branches.map(b=>{
      const branchName=b.getElementsByTagName('Branchname')[0]?.textContent||'';
-     const p=branchName.match(/-(\\d{5})-\\d{2}\\/B\\d+$/)?.[1];
+     const p=branchName.match(/-(\d{5})-\d{2}\/B\d+$/)?.[1];
      return {branchName,rating:({'93833':900,'13451':150})[p]};
    });
    if(preview.length!==31 || preview.some(x=>!x.rating))throw Error('No 31-branch Preview Rating authority');
@@ -187,14 +187,14 @@ try {
  for(const ref of ['8045','8050','8014']){
    const row=rendered.targetRefs.find(x=>x.ref===ref);
    assert.equal(row.bore,'150 mm *',ref+' displayed corrected source DN');
-   assert.match(row.boreEvidence,/Source OD 168\\.3 mm/,ref+' source OD provenance');
-   assert.match(row.suggestion,/59(?:\\.0+)?kg/,ref+' visible master kg');
+   assert.match(row.boreEvidence,/Source OD 168\.3 mm/,ref+' source OD provenance');
+   assert.match(row.suggestion,/59(?:\.0+)?kg/,ref+' visible master kg');
    assert.ok(row.advisoryChips>0,'unapproved master remains an advisory chip');
  }
  const fbRow=rendered.targetRefs.find(x=>x.ref==='27507');
  assert.equal(fbRow.bore,'50 mm','Full-bore VALV source DN');
- assert.match(fbRow.suggestion,/56\\.001kg/);
- assert.doesNotMatch(fbRow.suggestion,/47\\.001kg/,'must not show reduced-bore mass');
+ assert.match(fbRow.suggestion,/56\.001kg/);
+ assert.doesNotMatch(fbRow.suggestion,/47\.001kg/,'must not show reduced-bore mass');
  await page.screenshot({path:resolve(out,'glrd-actual-weight-match-reconciled.png')});
 
  await writeFile(out+'/glrd-bore-family-receipt.json',
