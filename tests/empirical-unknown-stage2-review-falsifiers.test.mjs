@@ -141,7 +141,7 @@ test('F04 executable UI falsifier: proposal buttons stage drafts; no catalog mas
         engineeringMassApproved:true,acceptedForCii:true},1],
     ]){
       let writes=0,stages=0;
-      const input={value:'',getAttribute:()=> 'B1::10020'};
+      const input={value:'',dataset:{},getAttribute:()=> 'B1::10020'};
       const sandbox={
         localIssues:[{candidates:[candidate],mapped:false}],
         contentEl:{querySelectorAll:()=>[input]},
