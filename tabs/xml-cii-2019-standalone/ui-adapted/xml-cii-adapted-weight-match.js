@@ -14,7 +14,7 @@ import {
 import { saveMasterContextToLocalStorage, xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js';
 import { DEFAULT_WEIGHT_MASTER_ROWS } from '../../../converters/xml-cii2019-core/default-weight-master-rows.js';
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v1';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v2-original-source-authority';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
 function clean(value) { return t(value).replace(/\s+/g, ' ').trim(); }
