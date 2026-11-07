@@ -118,6 +118,8 @@ export function openStandaloneRigidWeightReviewPopup(issues, stateRef, config) {
 function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
   const finish = (result) => { overlay.remove(); resolve(result); };
   const statusValue = overlay.querySelector('[data-rigid-review-status]');
+  const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
+    .map(input=>[input.getAttribute('data-rigid-review-key')||'',String(input.value||'').trim()]));
   const setStatus = (message, bad) => {
     if (!statusValue) return;
     statusValue.textContent = message;
@@ -209,10 +211,10 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
   });
   overlay.querySelector('[data-rigid-review-cancel]')?.addEventListener('click', () => finish({ cancelled: true, skipped: false, weightsByKey: {} }));
   overlay.querySelector('[data-rigid-review-skip]')?.addEventListener('click', () => finish({ cancelled: false, skipped: true, weightsByKey: {} }));
-  overlay.querySelector('[data-rigid-review-apply]')?.addEventListener('click', () => applyRigidReviewWeights(overlay, finish, setStatus));
+  overlay.querySelector('[data-rigid-review-apply]')?.addEventListener('click', () => applyRigidReviewWeights(overlay, finish, setStatus, initialRatings));
 }
 
-function applyRigidReviewWeights(overlay, finish, setStatus) {
+function applyRigidReviewWeights(overlay, finish, setStatus, initialRatings = new Map()) {
   const weightsByKey = {};
   const missing = [];
   const unreviewed = [];
@@ -242,7 +244,8 @@ function applyRigidReviewWeights(overlay, finish, setStatus) {
   const ratingsByKey = {};
   overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach(input=>{
     const value=String(input.value||'').trim();
-    if(value)ratingsByKey[input.getAttribute('data-rigid-review-key')||'']=value;
+    const key=input.getAttribute('data-rigid-review-key')||'';
+    if(value && value!==initialRatings.get(key))ratingsByKey[key]=value;
   });
   finish({ cancelled: false, skipped: false, weightsByKey, ratingsByKey });
 }
