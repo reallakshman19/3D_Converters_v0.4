@@ -90,8 +90,20 @@ jobs:
           python3 - <<'PY'
           import json,statistics
           from pathlib import Path
-          old=json.loads(Path('/tmp/pr9-parent-cache-benchmark.log').read_text())
-          new=json.loads(Path('/tmp/pr9-cache-benchmark.log').read_text())
+          # Node module-type warnings may be appended after valid JSON.
+          # Parse one complete JSON object rather than treating the combined
+          # stdout/stderr stream as JSON-only.
+          decoder=json.JSONDecoder()
+          def read_report(path):
+            raw=Path(path).read_text()
+            start=raw.find('{')
+            if start<0: raise ValueError(f'No JSON report in {path}')
+            value,end=decoder.raw_decode(raw[start:])
+            if not isinstance(value,dict) or not value.get('rounds'):
+              raise ValueError(f'Missing benchmark rounds in {path}')
+            return value
+          old=read_report('/tmp/pr9-parent-cache-benchmark.log')
+          new=read_report('/tmp/pr9-cache-benchmark.log')
           for field in ['weightCacheMs','classCacheMs']:
             oldmedian=statistics.median(r[field] for r in old['rounds'])
             newmedian=statistics.median(r[field] for r in new['rounds'])
