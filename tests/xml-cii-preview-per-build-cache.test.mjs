@@ -143,3 +143,35 @@ test('master changes during a different ranking miss cannot revive older result'
   assert.deepStrictEqual(after, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }));
   assert.equal(cache.stats.rankInvalidations, 1);
 });
+
+test('toJSON cannot hide a changed master weight from the cache signature', () => {
+  const row = masterRows()[0];
+  row.toJSON = () => ({ bore: 50, rating: 150, length: 100, weight: 1 });
+  const config = { weight: { masterRows: [row] } };
+  const cache = createPreviewPerBuildCache();
+  const initial = cache.rankWeight(context, config, { includeRejected: true });
+  row.weight = 23;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  assert.notDeepStrictEqual(changed, initial);
+  assert.deepStrictEqual(
+    changed, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }),
+  );
+  assert.equal(cache.stats.rankHits, 0);
+});
+
+test('non-enumerable ranking inputs fail open rather than reusing stale results', () => {
+  const row = masterRows()[0];
+  Object.defineProperty(row, 'weight', {
+    value: 10, enumerable: false, writable: true, configurable: true,
+  });
+  const config = { weight: { masterRows: [row] } };
+  const cache = createPreviewPerBuildCache();
+  const initial = cache.rankWeight(context, config, { includeRejected: true });
+  row.weight = 29;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  assert.notDeepStrictEqual(changed, initial);
+  assert.deepStrictEqual(
+    changed, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }),
+  );
+  assert.equal(cache.stats.rankHits, 0);
+});

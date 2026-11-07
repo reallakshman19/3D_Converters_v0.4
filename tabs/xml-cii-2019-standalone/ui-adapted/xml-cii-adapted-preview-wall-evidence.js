@@ -149,6 +149,10 @@ function walkStaged(value, branchName, out) {
   }
 }
 
+// Deferred failure keeps malformed foreign-owner evidence from poisoning
+// a requested branch that the baseline collector would have skipped.
+const stagedIndexDeferredErrors = new WeakMap();
+
 /** Index staged branch wall facts once, preserving walk order and duplicates. */
 export function indexStagedBranchWallEvidence(stagedJsonText) {
   let parsed;
@@ -161,24 +165,35 @@ export function indexStagedBranchWallEvidence(stagedJsonText) {
   const items = [];
   walkStaged(parsed, '', items);
   const index = new Map();
+  const deferredErrors = new Map();
   for (const { value, attrs, type, branchName: owner } of items) {
     const root = canonicalBranch(owner);
-    if (!root || type === 'BRANCH') continue;
-    const dtxr = attr(attrs, ['DTXR_POS', 'DTXR', 'DESC', 'DESCRIPTION'])
-      || value.name;
-    const item = componentEvidence(
-      type, attr(attrs, ['REF', 'NAME']), stagedBoreMm(attrs),
-      dtxr, 'staged-json',
-    );
-    if (!item) continue;
-    if (!index.has(root)) index.set(root, []);
-    index.get(root).push(item);
+    if (!root || type === 'BRANCH' || deferredErrors.has(root)) continue;
+    try {
+      const dtxr = attr(attrs, ['DTXR_POS', 'DTXR', 'DESC', 'DESCRIPTION'])
+        || value.name;
+      const item = componentEvidence(
+        type, attr(attrs, ['REF', 'NAME']), stagedBoreMm(attrs),
+        dtxr, 'staged-json',
+      );
+      if (!item) continue;
+      if (!index.has(root)) index.set(root, []);
+      index.get(root).push(item);
+    } catch (error) {
+      // The old collector raises this error only when this branch is queried.
+      // Preserve that result; unrelated branch queries must still succeed.
+      deferredErrors.set(root, error);
+    }
   }
+  if (deferredErrors.size) stagedIndexDeferredErrors.set(index, deferredErrors);
   return index;
 }
 
 export function collectIndexedStagedBranchWallEvidence(index, branchName) {
-  return index?.get(canonicalBranch(branchName)) || [];
+  const root = canonicalBranch(branchName);
+  const deferredErrors = stagedIndexDeferredErrors.get(index);
+  if (deferredErrors?.has(root)) throw deferredErrors.get(root);
+  return index?.get(root) || [];
 }
 
 export function collectStagedBranchWallEvidence(stagedJsonText, branchName) {

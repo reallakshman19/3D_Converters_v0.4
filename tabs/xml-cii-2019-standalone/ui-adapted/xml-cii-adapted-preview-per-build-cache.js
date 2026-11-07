@@ -22,19 +22,42 @@ function primitiveSignature(value) {
 }
 
 /**
- * Cache reuse requires unchanged JSON-like master content, not object identity
- * alone. Exotic graphs fail open to recalculation instead of guessing.
+ * Return an exact-content signature only for ordinary data records.
+ * JSON.stringify invokes toJSON before its replacer: a custom serializer
+ * can hide changes to fields that the ranking engine actually reads.
+ * Reject it, accessors and invisible properties; recompute instead.
  */
 function dataSignature(value) {
   if (!value || typeof value !== 'object') return null;
   const seen = new WeakSet();
   try {
+    // Root toJSON runs before JSON.stringify's first replacer callback.
+    if (typeof value.toJSON === 'function') return null;
     return JSON.stringify(value, (_key, item) => {
       if (item && typeof item === 'object') {
         if (seen.has(item)) throw new Error('shared/cyclic data');
         seen.add(item);
-        if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype
+        const isArray = Array.isArray(item);
+        if (!isArray && Object.getPrototypeOf(item) !== Object.prototype
           && Object.getPrototypeOf(item) !== null) throw new Error('non-plain data');
+        if (typeof item.toJSON === 'function') throw new Error('custom serializer');
+        // Validate *before* children are serialized so nested toJSON cannot
+        // replace real master values with a misleading unchanged signature.
+        for (const key of Reflect.ownKeys(item)) {
+          if (typeof key !== 'string') throw new Error('symbol-keyed data');
+          if (isArray && key === 'length') continue;
+          if (isArray && !/^(0|[1-9]\\d*)$/.test(key)) {
+            throw new Error('array metadata');
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(item, key);
+          if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+            throw new Error('invisible or computed data');
+          }
+          const child = descriptor.value;
+          if (child && typeof child === 'object' && typeof child.toJSON === 'function') {
+            throw new Error('nested custom serializer');
+          }
+        }
       } else if (['undefined', 'function', 'symbol', 'bigint'].includes(typeof item)
         || (typeof item === 'number' && !Number.isFinite(item))) {
         throw new Error('unsupported data');

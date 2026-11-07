@@ -235,3 +235,21 @@ test('optional actual GLRD XML + staged JSON preserve 31-branch/1196-node wall r
   assert.ok(indexedResult.nodeRows.some((node) => String(node.nodeNumber) === '10'));
   assert.ok(indexedResult.nodeRows.some((node) => String(node.nodeNumber) === '460'));
 });
+
+test('foreign-owner malformed staged evidence preserves baseline branch isolation', () => {
+  const requested = syntheticNames[0];
+  const foreign = '/FOREIGN-2"-P9999999-93833-01/B1';
+  const stagedJsonText = JSON.stringify([{
+    type: 'PIPE',
+    attributes: { OWNER: foreign },
+    name: { toString: null },
+  }]);
+  // A bad record for another branch was skipped by the original collector.
+  evaluate([requested], stagedJsonText);
+  // On its own requested branch, the original collector raised TypeError.
+  const document = documentFor(sampleBranches([foreign]));
+  globalThis.DOMParser = class { parseFromString() { return document; } };
+  const args = previewInput([foreign], stagedJsonText);
+  assert.throws(() => before.applyPreviewBoreWallAuthority(args), TypeError);
+  assert.throws(() => afterFix.applyPreviewBoreWallAuthority(args), TypeError);
+});
