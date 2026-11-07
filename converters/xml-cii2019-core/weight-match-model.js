@@ -369,8 +369,12 @@ export function xmlCiiPhysicalComponentSpanLengthMm(nodes, nodeIdx) {
   for (const sibling of nodes || []) {
     if (sibling === node || !['FLAN', 'RIGID', 'PCOM'].includes(xmlText(sibling, 'ComponentType').toUpperCase())) continue;
     const siblingRef = toText(xmlText(sibling, 'ComponentRefNo')).trim().toUpperCase().replace(/^=/, '');
-    if (siblingRef !== ref ||
-        xmlText(sibling, 'ComponentType').toUpperCase() !== type ||
+    const siblingType = xmlText(sibling, 'ComponentType').toUpperCase();
+    // Existing flanges legitimately bridge FLAN endpoint 1 to RIGID
+    // endpoint 2. PCOM must match PCOM only, never adjacent FLAN/RIGID.
+    const samePhysicalFamily = type === 'PCOM'
+      ? siblingType === 'PCOM' : ['FLAN', 'RIGID'].includes(siblingType);
+    if (siblingRef !== ref || !samePhysicalFamily ||
         xmlText(sibling, 'Endpoint') !== opposite) continue;
     const point = normalizePoint(xmlText(sibling, 'Position'));
     if (!point) continue;
