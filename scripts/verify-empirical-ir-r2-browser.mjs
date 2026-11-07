@@ -128,6 +128,65 @@ try {
         uneditedApply:'BLOCKED',bulk:'BLOCKED',manualKg:21,plannedBefore:0,plannedAfter:21});
     }
   }
+
+  // Positive control: an expressly approved source-mass candidate can be
+  // selected, but is NOT a prefill. No inferred candidate can mimic this.
+  for(const route of ['single','atta','modeA']){
+    await page.evaluate(async route=>{
+      const candidate={suggestedWeight:22,weight:22,selectedWeight:22,
+        massAuthority:'APPROVED_SOURCE_MASS',engineeringMassApproved:true,
+        acceptedForCii:true,preferred:true,inferredWeight:false,
+        fallbackSuggestion:false,zeroFallback:false,referenceFamily:'Verified source'};
+      const issue={key:'B1::10020',branchName:'B1',nodeNumber:'10020',
+        componentType:'RIGID',boreMm:50,rating:900,lengthMm:115,
+        candidates:[candidate],fileName:'source.xml',sourceId:'SRC-A'};
+      if(route==='modeA'){
+        const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+        window.__promise=m.openModeAConsolidatedRigidWeightReviewPopup([
+          {sourceId:'SRC-A',fileName:'source.xml',issues:[issue]}
+        ]);
+        const t=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js');
+        t.installModeAConsolidatedRigidReviewTools();
+      }else{
+        const file=route==='atta'?'xml-cii-adapted-run-workflow-atta-default.js':'xml-cii-adapted-run-workflow.js';
+        const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/'+file);
+        window.__promise=m.openStandaloneRigidWeightReviewPopup([issue],{current:{}},{});
+      }
+    },route);
+    const input=page.locator('.mc-rigid-review-input');
+    assert.equal(await input.inputValue(),'','even approved candidate requires deliberate selection');
+    if(route==='modeA') await page.locator('[data-mode-a-rigid-fill-exact]').click();
+    else await page.locator('[data-rigid-review-fill-best]').click();
+    assert.equal(await input.inputValue(),'22');
+    await page.locator(route==='modeA'?'[data-mode-a-rigid-apply]':'[data-rigid-review-apply]').click();
+    const saved=await page.evaluate(async()=>await window.__promise);
+    assert.equal(route==='modeA'
+      ?saved.updates?.['SRC-A']?.weightsByKey?.['B1::10020']
+      :saved.weightsByKey?.['B1::10020'],22);
+    receipt.cases.push({route,control:'explicit approved source candidate',
+      initialBlank:true,explicitSelectionKg:22});
+  }
+  // Verify the actual XML override writer, not merely a preview's mass plan.
+  const serialized=await page.evaluate(async()=>{
+    const {applyXmlCiiRigidWeightOverrides}=await import('/converters/xml-cii2019-core/weight-match-model.js');
+    const xml='<PipeStressExport><Pipe><Branch><Branchname>B1</Branchname>'+
+      '<Node><NodeNumber>10020</NodeNumber><ComponentType>RIGID</ComponentType>'+
+      '<ComponentRefNo>=TEST/UNKNOWN</ComponentRefNo><Endpoint>2</Endpoint>'+
+      '<Weight>0</Weight><Position>0 0 115</Position></Node>'+
+      '</Branch></Pipe></PipeStressExport>';
+    const none=applyXmlCiiRigidWeightOverrides(xml,{});
+    const manual=applyXmlCiiRigidWeightOverrides(xml,{'B1::10020':21});
+    return {noneCount:none.appliedCount,noneUnchanged:none.xmlText===xml,
+      manualCount:manual.appliedCount,manualWeight:new DOMParser()
+        .parseFromString(manual.xmlText,'application/xml')
+        .getElementsByTagName('Weight')[0].textContent};
+  });
+  assert.equal(serialized.noneCount,0);
+  assert.equal(serialized.noneUnchanged,false===true?true:true);
+  assert.equal(serialized.manualCount,1);
+  assert.equal(serialized.manualWeight,'21');
+  receipt.xmlWriterControl=serialized;
+
   assert.deepEqual(errors,[]);
   await writeFile(resolve(dir,'r2-browser-receipt.json'),JSON.stringify({...receipt,errors},null,2));
   console.log('R2 browser live popup tests PASS:',receipt.cases.length);
