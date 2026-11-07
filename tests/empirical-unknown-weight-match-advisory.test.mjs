@@ -75,8 +75,10 @@ test('both parent and standalone Weight Match expose passive non-auto-apply sugg
     if(filename.includes('weight-match-renderer.js')){
       assert.match(src,/const chips = \[accepted, choices\.length \? '' : unknownText, rejected\]/);
       assert.match(src,/data-wm-choice="/);
-      assert.match(src,/data-wm-verified/);
-      assert.match(src,/if\(estimateDraft && !verified\) return false/);
+      assert.doesNotMatch(src,/data-wm-verified|data-wm-save-reviewed/);
+      assert.match(src,/if\(input.dataset.wmProposalDraft\) return false/);
+      assert.match(src,/mc-wm-batch-attest/);
+      assert.match(src,/rigidWeightReviewReceipts/);
       assert.match(src,/stageDraft\(input,choice\)/);
       assert.doesNotMatch(src,/data-wm-candidate="\$\{[^}]*unknown/);
     } else {
