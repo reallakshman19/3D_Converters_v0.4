@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues } from '../../../converters/xml-cii2019-core/weight-match-model.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -52,11 +53,7 @@ function candidateButtons(issue, rowIndex) {
     const rawScore = Number(candidate.totalScore ?? candidate.score ?? 0);
     const score = Math.round((rawScore <= 1 ? rawScore * 100 : rawScore));
     const method = candidate.preferred ? 'exact' : (candidate.weightMethod || (candidate.inferredWeight ? 'inferred' : 'review'));
-    const sourceApproved = candidate.massAuthority === 'APPROVED_SOURCE_MASS' &&
-      candidate.engineeringMassApproved === true &&
-      candidate.acceptedForCii === true &&
-      candidate.inferredWeight !== true &&
-      candidate.fallbackSuggestion !== true && candidate.zeroFallback !== true;
+    const sourceApproved = isApprovedPhysicalMassCandidate(candidate, weight);
     if (!sourceApproved) return `<span data-mode-a-rigid-advisory="true"
       title="Estimate only; no approved physical-component mass"
       style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · review only</span>`;
@@ -168,10 +165,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       rows.forEach((row, index) => {
         const best = row.candidates?.[0];
         const value = Number(best?.suggestedWeight ?? best?.selectedWeight ?? best?.weight);
-        if (!best?.preferred || best.massAuthority !== 'APPROVED_SOURCE_MASS' ||
-             best.engineeringMassApproved !== true || best.acceptedForCii !== true ||
-             best.inferredWeight || best.fallbackSuggestion || best.zeroFallback ||
-             !Number.isFinite(value) || value <= 0) return;
+        if (!best?.preferred || !isApprovedPhysicalMassCandidate(best, value)) return;
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
         if (input) { input.value = String(value); count += 1; }
       });
