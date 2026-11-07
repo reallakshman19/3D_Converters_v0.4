@@ -60,6 +60,10 @@ jobs:
         run: |
           python3 -m py_compile converters/scripts/xml_to_cii2019_pcom_mass.py converters/scripts/xml_to_cii2019_runtime_custody.py scripts/verify-glrd-pcom-owner.py
           python3 scripts/verify-glrd-pcom-owner.py
+      - name: Independent PR5 actual-CII pointer ownership audit
+        run: |
+          node --check scripts/verify-glrd-pcom-pr5-audit-browser.mjs
+          node scripts/verify-glrd-pcom-pr5-audit-browser.mjs
       - name: Upload independent source/edge diagnostics
         if: always()
         uses: actions/upload-artifact@v4
