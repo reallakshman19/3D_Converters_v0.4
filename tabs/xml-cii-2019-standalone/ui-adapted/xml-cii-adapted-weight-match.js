@@ -15,7 +15,7 @@ import {
 import { saveMasterContextToLocalStorage, xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js';
 import { DEFAULT_WEIGHT_MASTER_ROWS } from '../../../converters/xml-cii2019-core/default-weight-master-rows.js';
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v2-original-source-authority';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v3-content-digest-source-authority';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
 function clean(value) { return t(value).replace(/\s+/g, ' ').trim(); }
@@ -164,8 +164,17 @@ function invalidateXmlCiiWeightCache() {
   try { localStorage.removeItem(WM_CACHE_KEY); } catch {}
 }
 
-function wmCacheFingerprint(fileSize, jsonLen, masterLen, overrides, splitOn) {
-  return `${fileSize || 0}|j${jsonLen}|m${masterLen}|s${splitOn ? 1 : 0}|o${JSON.stringify(overrides?.rigidWeight || {})}`;
+// Cache keys must bind the EXACT input bytes and effective settings, not counts.
+// Same-sized XML edits can change physical source mass while preserving length.
+// Without WebCrypto, fail closed by bypassing cache entirely.
+export async function wmCacheFingerprint(sourceXml, stagedJson, effectiveConfig, splitOn) {
+  if (typeof crypto === 'undefined' || !crypto?.subtle?.digest ||
+      typeof TextEncoder === 'undefined') return null;
+  const material = JSON.stringify({
+    sourceXml, stagedJson, effectiveConfig, splitOn: Boolean(splitOn)
+  });
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function overrideValue(config, bucketName, keys) {
@@ -575,9 +584,11 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     }
 
     const stagedJsonText = stateRef.current.stagedJsonText || '';
-    const file = stateRef.current.sourceFile;
-    if (!opts.force) {
-      const _fp = wmCacheFingerprint(file?.size || xmlText.length, stagedJsonText.length, liveConfig?.weight?.masterRows?.length || 0, liveConfig?.overrides, liveConfig?.splitCondensedValveFlange !== false);
+    // Compute once and reuse for read/write. On unsupported WebCrypto,
+    // _fp is null: both cache lookup and persistence are disabled.
+    const splitOn = liveConfig?.splitCondensedValveFlange !== false;
+    const _fp = await wmCacheFingerprint(xmlText, stagedJsonText, liveConfig, splitOn);
+    if (!opts.force && _fp !== null) {
       const _cached = readCache(WM_CACHE_KEY);
       if (_cached?.fp === _fp && Array.isArray(_cached?.data) && _cached.data.length) {
         localIssues = _cached.data.map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, liveConfig), liveConfig));
@@ -592,7 +603,6 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
 
     status('Computing weight matches...');
     try {
-      const splitOn = liveConfig?.splitCondensedValveFlange !== false;
       const matchXmlText = await weightMatchSourceXml(xmlText, stagedJsonText, liveConfig, splitOn);
       const { nodeRows } = xmlCiiDryRunPreview(matchXmlText, liveConfig, stagedJsonText);
       const originalFacts=sourceFactsIndex(xmlText);
@@ -612,8 +622,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
       drawRows(localIssues);
 
       const _cacheable = localIssues.map((row) => { const { ranking: _r, ...rest } = row; return rest; });
-      const _fpWrite = wmCacheFingerprint(file?.size || xmlText.length, stagedJsonText.length, liveConfig?.weight?.masterRows?.length || 0, liveConfig?.overrides, splitOn);
-      writeCache(WM_CACHE_KEY, _fpWrite, _cacheable);
+      if (_fp !== null) writeCache(WM_CACHE_KEY, _fp, _cacheable);
     } catch (error) {
       localIssues = [];
       contentEl.innerHTML = `<div style="padding:14px;text-align:center;color:#ef4444;">Could not compute weight matches: ${esc(error?.message || error)}</div>`;
