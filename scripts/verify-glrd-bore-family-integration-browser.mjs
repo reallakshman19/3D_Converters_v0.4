@@ -152,12 +152,17 @@ try {
    document.body.appendChild(section);
    const projected=applyXmlCiiStagedGeometryAuthority(xml,stage,{config});
    const file=new File([xml],'GLRD-1000-PI-01 - BM2.xml',{type:'application/xml'});
+   window.__glrdWeightMatchSaveCount=0;
+   window.__glrdWeightMatchSavedConfig=null;
    bindXmlCiiWeightMatchPhase(section,{
      xmlFile:file,stagedJsonText:stage,config,
      // The renderer itself applies staged geometry exactly once. Feeding an
      // already projected XML here would double-apply that same transform.
      enrichXmlForCii2019:async()=>({xmlText:xml,config}),
-     onSaveConfig:()=>{},
+     onSaveConfig:cfg=>{
+       window.__glrdWeightMatchSaveCount++;
+       window.__glrdWeightMatchSavedConfig=cfg;
+     },
      ensureOverrides:c=>(c.overrides||={}),
      resolveStagedJsonText:async()=>({text:stage,label:'Owner pinned stage'}),
    });
@@ -221,8 +226,37 @@ try {
  assert.doesNotMatch(fbRow.suggestion,/47\.001\s*kg/,'must not show reduced-bore mass');
  await page.screenshot({path:resolve(out,'glrd-actual-weight-match-reconciled.png')});
 
+ // Critical UI authority check: an alternative Class/DN master reference is
+ // only a draft until a reviewer explicitly ticks Reviewed AND clicks Save.
+ const row=page.locator('#glrd-actual-weight-match-panel .mc-rigid-review-table tbody tr')
+   .filter({hasText:'/27507_2'}).first();
+ assert.equal(await row.count(),1,'real Owner full-bore source row exists');
+ const preSave=await page.evaluate(()=>({
+   saves:window.__glrdWeightMatchSaveCount,
+   sourceMassEntries:Object.keys(window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}).length
+ }));
+ assert.deepEqual(preSave,{saves:0,sourceMassEntries:0},
+   '149 prefilled Weight Match values must not save any source mass');
+ await row.locator('[data-wm-choice-index="1"]').click();
+ assert.equal(await row.locator('.mc-rigid-review-input').getAttribute('data-wm-proposal-draft'),'estimate');
+ assert.equal(await row.locator('[data-wm-verified]').isChecked(),false);
+ await row.locator('[data-wm-save-reviewed]').click();
+ assert.equal(await page.evaluate(()=>window.__glrdWeightMatchSaveCount),0,
+   'unreviewed comparison-only candidate must NOT persist');
+ await row.locator('[data-wm-verified]').check();
+ await row.locator('[data-wm-save-reviewed]').click();
+ const reviewedSaved=await page.evaluate(()=>({
+   saves:window.__glrdWeightMatchSaveCount,
+   weights:window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}
+ }));
+ assert.equal(reviewedSaved.saves,1,'only explicit Reviewed + Save may persist physical kg');
+ assert.equal(Object.keys(reviewedSaved.weights).length,1,
+   'reviewed single component must never approve 148 other preloads');
+
  await writeFile(out+'/glrd-bore-family-receipt.json',
-   JSON.stringify({...data,renderedWeightMatch:rendered,sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
+   JSON.stringify({...data,renderedWeightMatch:rendered,reviewedSingleSave:{
+     saveCount:reviewedSaved.saves,keys:Object.keys(reviewedSaved.weights)},
+     sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
      safety:'unapproved catalog candidates are advisory; no XML/CII mass write',
      errors},null,2));
  assert.deepEqual(errors,[]);
