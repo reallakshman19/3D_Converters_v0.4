@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification } from './xml-cii-adapted-rigid-review-prefill.js';
+import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues } from '../../../converters/xml-cii2019-core/weight-match-model.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -11,7 +11,7 @@ const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
 export async function collectModeARigidWeightReviewIssues(state = {}, config = {}) {
-  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).map((issue) => {
+  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const authority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = authority.rating;
     const ranking = rating
