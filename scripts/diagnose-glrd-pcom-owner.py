@@ -26,8 +26,8 @@ def overlap(a,b,s,t):
 def main():
   source,stage=[Path(s).resolve() for s in sys.argv[1:3]]
   config={'splitCondensedValveFlange':True}
-  processed=patched._maybe_enrich_from_staged_json(source,stage,config)
-  processed=patched._apply_process_data_to_xml(processed,config)
+  processed=source if '--already-enriched' in sys.argv else patched._maybe_enrich_from_staged_json(source,stage,config)
+  if '--already-enriched' not in sys.argv:processed=patched._apply_process_data_to_xml(processed,config)
   original=ET.parse(processed).getroot()
   groups={}
   for br in original.iter():
