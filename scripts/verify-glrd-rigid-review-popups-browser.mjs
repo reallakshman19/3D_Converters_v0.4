@@ -164,6 +164,43 @@ try{
    assert.equal(saved,facts.candidateKg,'only explicit review may persist the displayed kg');
    receipt[route]={draftKg:facts.candidateKg,uneditedApply:'BLOCKED',reviewedApply:'PASS',savedKg:saved};
  }
+ // Mobile viewport: restored controls remain reachable in both popup schemas.
+ const mobile=await browser.newPage({viewport:{width:390,height:844}});
+ try{
+   await mobile.goto(base+'/tests/fixtures/empirical-weight-nearest-browser.html',
+      {waitUntil:'domcontentloaded'});
+   for(const route of ['single','modeA']){
+     await mobile.evaluate(async({route,facts})=>{
+       const issue={key:facts.sourceKey,branchName:facts.branch,nodeNumber:'60',
+         componentType:'RIGID',reviewCategory:'RIGID',boreMm:facts.bore,
+         rating:900,lengthMm:facts.physicalLength,
+         elementLengthSource:'component-ref-endpoint-span',mapped:false,weight:0,
+         dtxr:'WELDING NECK FLANGE SCH 80S 900#',
+         candidates:[{selectedWeight:facts.candidateKg,weight:facts.candidateKg,
+           typeDesc:'Weldneck Flange',candidateClass:{family:'FLANGE'},
+           rowBore:facts.bore,rowRating:900,weightMethod:'master'}]};
+       if(route==='modeA'){
+         const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+         window.__mobileReview=m.openModeAConsolidatedRigidWeightReviewPopup([
+           {sourceId:'BM2-SOURCE',fileName:'GLRD-1000-PI-01 - BM2.xml',issues:[issue]}
+         ]);
+       }else{
+         const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow.js');
+         window.__mobileReview=m.openStandaloneRigidWeightReviewPopup([issue],{current:{}},{});
+       }
+     },{route,facts});
+     const button=mobile.locator(route==='modeA'?'[data-mode-a-rigid-apply-suggestions]':'[data-rigid-review-apply-suggestions]');
+     assert.equal(await button.count(),1);
+     await button.scrollIntoViewIfNeeded();
+     await button.click();
+     assert.equal(Number(await mobile.locator('.mc-rigid-review-input').inputValue()),facts.candidateKg);
+     await mobile.screenshot({path:resolve(out,'glrd-mobile-'+route+'-draft.png')});
+     await mobile.locator(route==='modeA'?'[data-mode-a-rigid-cancel]':'[data-rigid-review-cancel]').click();
+     assert.equal((await mobile.evaluate(async()=>await window.__mobileReview)).cancelled,true);
+   }
+   receipt.mobile={viewport:'390x844',single:'PASS',modeA:'PASS'};
+ } finally{await mobile.close();}
+
  assert.deepEqual(errors,[]);
  await writeFile(resolve(out,'glrd-source-review-popup-receipt.json'),JSON.stringify({...receipt,errors},null,2));
  console.log('GLRD uploaded-source browser modal replay PASS',JSON.stringify({branches:facts.branches,nodes:facts.nodes,
