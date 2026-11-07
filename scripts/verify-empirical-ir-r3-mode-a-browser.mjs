@@ -21,7 +21,7 @@ async function setup({approval=false,second=false}={}){
     const {installModeAConsolidatedWeightTools}=
       await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-tools.js');
     const rank=rankXmlCiiWeightCandidates({
-      boreMm:50,rating:900,lengthMm:109,componentType:'RIGID'
+      boreMm:50,rating:900,lengthMm:109,componentType:'RIGID',dtxr:'WELDING NECK FLANGE SCH 40S 900#'
     },{weight:{masterRows:DEFAULT_WEIGHT_MASTER_ROWS}},{includeRejected:true});
     const original=rank.candidates.find(c=>/Weldneck Flange/i.test(String(c.typeDesc||c.valveType||c.type||'')));
     if(!original || Number(original.selectedWeight??original.suggestedWeight??original.weight)!==15)

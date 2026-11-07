@@ -14,9 +14,14 @@ import {mappedNodeWeights}
 function issue(lengthMm,extra={}) {
   const config={weight:{masterRows:DEFAULT_WEIGHT_MASTER_ROWS}};
   const props={key:'B1::10020',branchName:'B1',nodeNumber:'10020',
-    boreMm:50,rating:900,componentType:'RIGID',componentRefNo:'=TEST/UNKNOWN',
+    boreMm:50,rating:900,componentType:'PCOM',componentRefNo:'=TEST/UNKNOWN',
     lengthMm,elementLengthSource:'component-ref-endpoint-span',mapped:false,weight:0,...extra};
-  const ranking=rankXmlCiiWeightCandidates({...props},config,{includeRejected:true});
+  // F01 deliberately injects an old UNCLASSIFIED ranked catalog suggestion
+  // into a source PCOM/UNKNOWN record, then verifies that the Unknown
+  // length-rule replaces it and no unapproved mass is ever applied.
+  const ranking=rankXmlCiiWeightCandidates({
+    boreMm:props.boreMm,rating:props.rating,lengthMm:props.lengthMm
+  },config,{includeRejected:true});
   return {config,input:{...props,ranking,candidates:ranking.candidates.slice(0,5),
     rejectedCandidates:ranking.rejectedCandidates.slice(0,3)}};
 }

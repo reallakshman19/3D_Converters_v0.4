@@ -586,6 +586,60 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
   return rows;
 }
 
+/**
+ * Keep Weight Match and Mode A tied to the SAME original component bore.
+ * Preview and staged-geometry code may project a different bore onto the
+ * enriched XML. That projection may be appropriate for process calculations
+ * but must not silently redefine a physical flange/valve master lookup.
+ *
+ * Match by branch + original ComponentRefNo + Endpoint, never by the shared
+ * -1 sentinel node number. Ambiguous source identities remain unqualified.
+ */
+export function reconcileXmlCiiWeightMatchSourceBores(rows, originalXmlText) {
+  if (typeof DOMParser === 'undefined' || !Array.isArray(rows)) return rows || [];
+  const document = new DOMParser().parseFromString(toText(originalXmlText), 'application/xml');
+  if (document.getElementsByTagName('parsererror').length) return rows;
+  const keyOf = (branch, ref, endpoint) =>
+    [toText(branch).trim(), toText(ref).trim().replace(/^=/, '').toUpperCase(),
+      toText(endpoint).trim().toUpperCase()].join('::');
+  const original = new Map();
+  for (const branch of [...document.getElementsByTagName('Branch')]) {
+    const branchName = xmlText(branch, 'Branchname');
+    for (const node of xmlChildrenByName(branch, 'Node')) {
+      const ref = xmlText(node, 'ComponentRefNo');
+      const endpoint = xmlText(node, 'Endpoint');
+      if (!toText(ref).trim() || !toText(endpoint).trim()) continue;
+      const key = keyOf(branchName, ref, endpoint);
+      const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));
+      const explicitlyWritten = xmlCiiNumberText(xmlText(node, 'BoreMm'));
+      const boreMm = explicitlyWritten !== null && explicitlyWritten > 0
+        ? explicitlyWritten : (od !== null && od > 0 ? nominalDnFromOd(od) : null);
+      const value = { boreMm, sourceOD: od, method: explicitlyWritten !== null
+        ? 'original-xml-BoreMm' : 'original-xml-OutsideDiameter' };
+      if (original.has(key)) original.set(key, null); // duplicate owner: refuse guessing
+      else original.set(key, value);
+    }
+  }
+  return rows.map(row => {
+    const ref = toText(row?.componentRefNo).trim();
+    const endpoint = toText(row?.endpoint).trim();
+    if (!ref || !endpoint) return row;
+    const key = keyOf(row.branchName, ref, endpoint);
+    if (!original.has(key)) return { ...row, sourceBoreAuthority: 'NO_EXACT_SOURCE_OWNER',
+      sourceBoreHold: true };
+    const source = original.get(key);
+    if (!source || !Number.isFinite(source.boreMm) || source.boreMm <= 0)
+      return { ...row, sourceBoreAuthority: 'AMBIGUOUS_OR_MISSING',
+        sourceBoreHold: true };
+    const before = Number(row.boreMm);
+    return { ...row, boreMm: source.boreMm, sourceBoreMm: source.boreMm,
+      projectedBoreMm: Number.isFinite(before) ? before : null,
+      boreAuthorityMismatch: Number.isFinite(before) && Math.abs(before - source.boreMm) >= 0.5,
+      sourceBoreAuthority: source.method, sourceOutsideDiameterMm: source.sourceOD,
+      sourceBoreHold: false };
+  });
+}
+
 export function collectXmlCiiWeightMatchRows(xmlTextVal, stagedJsonText, config) {
   return collectWeightRows(xmlTextVal, stagedJsonText, config, 'all-review-nodes');
 }

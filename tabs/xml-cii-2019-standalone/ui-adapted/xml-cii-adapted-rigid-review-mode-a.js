@@ -1,9 +1,9 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
-import { collectXmlCiiZeroRigidWeightIssues } from '../../../converters/xml-cii2019-core/weight-match-model.js';
+import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
-import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
+import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2';
 import { flattenModeARigidReviewEntries } from './xml-cii-adapted-rigid-review-mode-a-state.js';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -11,10 +11,10 @@ const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
 export async function collectModeARigidWeightReviewIssues(state = {}, config = {}) {
-  return collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config).filter(isRigidWeightReviewEligibleIssue).map((issue) => {
+  return reconcileXmlCiiWeightMatchSourceBores(collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config), state.sourceText || '').filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const authority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = authority.rating;
-    const ranking = rating
+    const ranking = rating && !issue.sourceBoreHold
       ? rankXmlCiiWeightCandidates({
           boreMm: issue.boreMm,
           rating,
@@ -101,7 +101,7 @@ function rowMarkup(issue, rowIndex) {
   return `<tr data-mode-a-rigid-review-row data-source-id="${attr(issue.sourceId)}" data-search="${attr(search)}">
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.fileName || issue.alias || issue.sourceId)}</td>
     <td title="${attr(issue.branchName)}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:260px;">${esc(issue.branchName)}</td>
-    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
+    <td title="${attr([issue.sourceBoreAuthority || 'original XML', issue.sourceOutsideDiameterMm ? `Source OD ${issue.sourceOutsideDiameterMm} mm` : '', issue.boreAuthorityMismatch ? `Corrected projected DN ${issue.projectedBoreMm}` : ''].filter(Boolean).join(' | '))}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);"><input type="text" class="mc-rigid-review-rating-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="${attr(info.shownRating)}" title="${attr(info.title)}" style="width:64px;background:#101827;color:#fff;border:1px solid ${info.conflict || info.missingWithDtxr ? '#ef4444' : '#31455f'};border-radius:4px;padding:4px;font-size:11px;">${badge}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</td>
     <td title="${attr(issue.dtxrSourcePath || '')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>

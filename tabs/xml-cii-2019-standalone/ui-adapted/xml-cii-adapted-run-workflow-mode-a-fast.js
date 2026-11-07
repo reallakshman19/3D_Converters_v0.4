@@ -12,7 +12,7 @@ import { xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js?v=2026
 import {
   collectModeARigidWeightReviewIssues,
   openModeAConsolidatedRigidWeightReviewPopup,
-} from './xml-cii-adapted-rigid-review-mode-a.js?v=20260813-mode-a-rigid-review-1';
+} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261107-glrd-bore-family-r2';
 import { applyModeAConsolidatedRigidReviewUpdates } from './xml-cii-adapted-rigid-review-mode-a-state.js?v=20260813-mode-a-rigid-review-1';
 import { downloadModeACiiZip } from './xml-cii-adapted-mode-a-cii-zip.js?v=20260814-save-all-cii-zip-1';
 

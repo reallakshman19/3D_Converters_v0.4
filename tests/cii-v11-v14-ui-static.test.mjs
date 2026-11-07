@@ -21,13 +21,14 @@ const worker = read('converters/cii-v11-v14-worker.js');
 const legacyAdapter = read('tabs/model-converters/legacy-adapter.js');
 
 const releaseKey = '20260816-cii-v11-v14-dropdown-release-4';
+const rootCacheKey = '20261107-glrd-bore-family-r2'; // shell bootstrap supersedes, CAESAR inner chain unchanged
 const workerReleaseKey = '20260816-cii-v11-v14-import-rca-1';
 const registryQuery = 'v=20260617-basic-glb-3';
 
 // Full browser cache-custody chain. Every parent URL must advance or a browser
 // can legally keep executing the pre-RCA child module even when Python changed.
-assert.match(indexHtml, new RegExp(`main-rhbg-fitguard\\.js\\?v=${releaseKey}`));
-assert.match(startup, new RegExp(`core/app\\.js\\?v=${releaseKey}`));
+assert.match(indexHtml, new RegExp(`main-rhbg-fitguard\\.js\\?v=${rootCacheKey}`));
+assert.match(startup, new RegExp(`core/app\\.js\\?v=${rootCacheKey}`));
 assert.match(app, new RegExp(`model-converters-tab\\.js\\?v=${releaseKey}`));
 assert.match(app, new RegExp(`__MODEL_CONVERTERS_CACHE_KEY__ = '${releaseKey}'`));
 assert.match(shim, new RegExp(`model-converters/index\\.js\\?v=${releaseKey}`));
