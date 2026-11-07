@@ -1,6 +1,6 @@
 import { bindAdaptedWorkflowEvents as bindBaseModeAEvents } from './xml-cii-adapted-events-mode-a-cii-zip.js?v=20260814-save-all-cii-zip-1';
 import { modeARawRef } from './xml-cii-adapted-mode-a-propagation.js?v=20260813-mode-a-rigid-review-1';
-import { runModeABatchFastFromUi } from './xml-cii-adapted-run-workflow-mode-a-fast.js?v=20260814-fast-run-1';
+import { runModeABatchFastFromUi } from './xml-cii-adapted-run-workflow-mode-a-fast.js?v=20261107-glrd-bore-family-r2';
 
 function styleRunButton(button, primary = false) {
   if (!button?.style) return;
