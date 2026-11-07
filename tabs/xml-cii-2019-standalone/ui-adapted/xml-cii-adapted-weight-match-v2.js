@@ -58,7 +58,7 @@ export function renderAdaptedWeightMatchPanelV2(card, stateRef) {
   void (async () => {
     try {
       const [renderer, parity] = await Promise.all([
-        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js'),
+        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261107-glrd-bore-family-r2'),
         import('../xml-cii-standalone-run-parity.js'),
       ]);
       const shared = await parity.loadParentWeightMatchModules();
