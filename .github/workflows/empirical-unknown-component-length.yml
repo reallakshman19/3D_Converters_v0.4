@@ -79,6 +79,7 @@ jobs:
           node --test tests/xml-cii-weight-match-content-cache.test.mjs
           node tests/xml-cii-smart-ui-preflight.test.mjs
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
+          node --test tests/xml-cii-weight-nearest-known-family-regression.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
           node --test tests/empirical-weight-nearest-interpolation.test.mjs
