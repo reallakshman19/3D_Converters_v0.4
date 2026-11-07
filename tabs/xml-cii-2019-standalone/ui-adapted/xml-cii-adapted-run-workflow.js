@@ -47,7 +47,7 @@ function rigidCandidateButtons(issue, index) {
         style="font-size:11px;padding:3px 6px;margin:2px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(value)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · estimate only</span>`;
     }
     return `<button type="button" class="mc-rigid-review-candidate"
-      data-rigid-review-candidate="${index}" data-rigid-review-weight="${esc(value)}"
+      data-rigid-review-candidate="${index}" data-rigid-review-approved="true" data-rigid-review-weight="${esc(value)}"
       title="Approved source mass: ${scoreValue}%"
       style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">${esc(value)} kg · approved</button>`;
   }).join('');
