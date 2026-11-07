@@ -106,6 +106,16 @@ try{
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),facts.reviewIssues,
    'unreviewed full-queue Apply must not close or mutate the batch');
  assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/missing|review/i);
+ // Refresh must rerank the actual source queue, keep 154 identities and
+ // discard unverified drafts rather than committing them.
+ await page.locator('[data-mode-a-rigid-refresh]').click();
+ await page.waitForFunction(()=>!document.querySelector('[data-mode-a-rigid-refresh]')?.disabled,null,{timeout:30000});
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),facts.reviewIssues,'Refresh source review census parity');
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count(),0,
+   'unreviewed prefill is not silently preserved as a manual value on rerank');
+ await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
+ assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft]').count(),facts.qualifiedDrafts,
+   'rebuilding full queue must preserve eligible draft count');
  await page.screenshot({path:resolve(out,'glrd-full-consolidated-draft.png')});
  await page.locator('[data-mode-a-rigid-cancel]').click();
  assert.equal((await page.evaluate(async()=>await window.__glrdFullPromise)).cancelled,true);
@@ -149,7 +159,8 @@ try{
  assert.deepEqual(errors,[]);
  await writeFile(resolve(out,'glrd-source-review-popup-receipt.json'),JSON.stringify({...receipt,errors},null,2));
  console.log('GLRD uploaded-source browser modal replay PASS',JSON.stringify({branches:facts.branches,nodes:facts.nodes,
-   reviewed:facts.reviewIssues,sourceKey:facts.sourceKey,flangeKg:facts.candidateKg,fullPrefilled}));
+   reviewed:facts.reviewIssues,sourceKey:facts.sourceKey,flangeKg:facts.candidateKg,fullPrefilled,
+   proposalByType:facts.proposalByType,noDraftReasons:facts.noDraftReasons}));
 } catch(e){
  await writeFile(resolve(out,'glrd-source-review-popup-receipt.json'),JSON.stringify({...receipt,error:String(e),errors},null,2));
  throw e;
