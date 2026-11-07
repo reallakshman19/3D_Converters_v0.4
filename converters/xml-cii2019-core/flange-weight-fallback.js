@@ -183,13 +183,13 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
     valveHintLabel: formatIssueValveHint(issue),
     semanticTier: 0,
     semanticPotentialTier: 0,
-    semanticReason: 'Flange WT extrapolated by element length',
+    semanticReason: atFlangeToleranceBoundary ? 'Weldneck Flange full master weight at +6mm tolerance' : 'Flange WT extrapolated by element length',
     semanticSource: '',
     rejectedReason: '',
     preferred: false,
     type: reference.type || 'FLANGE',
     valveType: reference.valveType || 'FLANGE',
-    typeDesc: 'Flange WT scaled to ElementLength',
+    typeDesc: atFlangeToleranceBoundary ? 'Weldneck Flange full master at +6mm tolerance' : 'Flange WT scaled to ElementLength',
   };
 }
 
