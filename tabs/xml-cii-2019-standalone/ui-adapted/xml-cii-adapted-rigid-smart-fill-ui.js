@@ -117,8 +117,12 @@ function buildToolbar(dialog, receipt, policy) {
     createSmartIconButton('settings', 'Smart-fill policy', () => openPolicy(dialog)),
   );
   summaryMetrics(receipt).forEach(([icon, value, label, color]) => metrics.appendChild(createSmartMetricChip(icon, value, label, { color, onClick: () => filterRows(dialog, icon) })));
-  const notice = [...dialog.children].find((node) => /Enter missing weights before conversion/i.test(node.textContent || ''));
-  notice?.insertAdjacentElement('afterend', bar);
+  const notice = [...dialog.children].find((node) =>
+    /Enter missing weights(?: in kg)? before conversion|Empirical suggestions are read-only|Enter approved physical-component mass/i.test(node.textContent || ''));
+  // The banner wording varies between single and ATTA modes; the safety
+  // toolbar must be rendered even when text changes.
+  if (notice) notice.insertAdjacentElement('afterend', bar);
+  else dialog.prepend(bar);
   dialog.querySelector('[data-rigid-review-refresh]')?.style.setProperty('display', 'none');
   dialog.querySelector('[data-rigid-review-fill-best]')?.style.setProperty('display', 'none');
   if (policy.previewBeforeApply) setStatus(dialog, `${receipt.status}: ${receipt.metrics.safeCount} safe, ${receipt.metrics.reviewCount} review, ${receipt.metrics.blockedCount} blocked.`, receipt.status === 'BLOCKED');
