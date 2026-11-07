@@ -18,6 +18,8 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
       - 'scripts/verify-empirical-ir-r2-browser.mjs'
+      - 'tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js'
       - 'tests/empirical-unknown-*.test.mjs'
       - 'scripts/verify-empirical-nearest-browser.mjs'
       - '.github/workflows/empirical-unknown-component-length.yml'
@@ -47,6 +49,8 @@ jobs:
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js
           node --check scripts/verify-empirical-nearest-browser.mjs
           node --check scripts/verify-empirical-ir-r2-browser.mjs
+          node --check tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-atta-default.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js
@@ -56,6 +60,8 @@ jobs:
           node --test tests/empirical-unknown-component-length-suggestion.test.mjs
           node --test tests/empirical-unknown-weight-match-advisory.test.mjs
           node tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
+          node tests/xml-cii-smart-ui-integration.test.mjs
+          node tests/xml-cii-smart-ui-preflight.test.mjs
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
