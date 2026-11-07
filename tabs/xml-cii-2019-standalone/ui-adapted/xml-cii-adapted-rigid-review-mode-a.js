@@ -155,7 +155,10 @@ function bindCandidateButtons(overlay, rows) {
   overlay.querySelectorAll('[data-mode-a-rigid-candidate]').forEach((button) => button.addEventListener('click', () => {
     const index=Number(button.dataset.modeARigidCandidate);
     const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
-    if(input)stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index]));
+    const weight=Number(button.dataset.modeARigidWeight);
+    if(input && button.dataset.modeARigidApproved==='true' &&
+       Number.isFinite(weight) && weight>0)
+      stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
   }));
   overlay.querySelectorAll('[data-mode-a-rigid-propose]').forEach(button=>button.addEventListener('click',()=>{
     const index=Number(button.dataset.modeARigidPropose);
