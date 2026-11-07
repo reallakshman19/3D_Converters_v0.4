@@ -68,7 +68,7 @@ test('source PCOM always routes to Unknown, even if text names a known valve', (
   assert.equal(after.unknownComponentSuggestion?.referenceFamily, 'Weldneck Flange');
   assert.equal(after.unknownComponentSuggestion?.suggestedKg, 2.628);
   assert.equal(after.massSuggestionOnly, true);
-  assert.equal(after.ranking.best?.engineeringMassApproved, false);
+  assert.equal(after.ranking.best, null, '19.1/109 is outside ranked fallback ratio; sidecar remains advisory only');
   assert.equal(isApprovedPhysicalMassCandidate(after.ranking.best), false);
 });
 
