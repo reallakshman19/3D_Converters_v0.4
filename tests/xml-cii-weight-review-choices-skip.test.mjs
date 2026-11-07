@@ -101,3 +101,50 @@ test('rendered modal has visible source-ref and multiple-choice and missing-row 
   assert.match(html,/368mm/);
   assert.match(html,/381mm/);
 });
+
+test('explicit review receipts remain separate from weights and zero skips',()=>{
+  const result=applyModeAConsolidatedRigidReviewUpdates(state,{BM2:{
+    weightsByKey:{'KEY-REVIEWED':17,'KEY-MANUAL':7},
+    skippedByKey:{'KEY-BLIND':{skipped:true,weightKg:0}},
+    reviewReceiptsByKey:{'KEY-REVIEWED':{
+      reviewed:true,reviewMethod:'EXPLICIT_BULK_OWNER_ATTESTATION',
+      weightKg:17,sourceComponentRef:'=134/28062',sourceEndpoint:'2',
+    }},
+  }});
+  const cfg=JSON.parse(result.sourceBatch.sources[0].supportConfigJson);
+  assert.equal(cfg.overrides.rigidWeight['KEY-REVIEWED'],17);
+  assert.equal(cfg.overrides.rigidWeight['KEY-MANUAL'],7);
+  assert.equal(cfg.overrides.rigidWeight['KEY-BLIND'],undefined);
+  assert.equal(cfg.overrides.rigidWeightReviewReceipts['KEY-REVIEWED'].reviewMethod,
+    'EXPLICIT_BULK_OWNER_ATTESTATION');
+  assert.equal(cfg.overrides.rigidWeightReviewReceipts['KEY-REVIEWED'].sourceComponentRef,'=134/28062');
+  assert.equal(cfg.overrides.rigidWeightReviewReceipts['KEY-MANUAL'],undefined);
+  assert.equal(cfg.overrides.rigidWeightReviewReceipts['KEY-BLIND'],undefined);
+  assert.equal(Object.keys(cfg.overrides.rigidWeightReviewReceipts).length,1);
+});
+test('review receipts cannot claim an accepted mass different from saved source override',()=>{
+  assert.throws(()=>applyModeAConsolidatedRigidReviewUpdates(state,{BM2:{
+    weightsByKey:{'KEY-REVIEWED':17},
+    reviewReceiptsByKey:{'KEY-REVIEWED':{
+      reviewed:true,reviewMethod:'EXPLICIT_BULK_OWNER_ATTESTATION',weightKg:18
+    }}
+  }}),/Invalid physical mass review receipt/);
+});
+test('review receipts cannot be fabricated by a generic estimated suggestion',()=>{
+  assert.throws(()=>applyModeAConsolidatedRigidReviewUpdates(state,{BM2:{
+    weightsByKey:{'KEY-REVIEWED':17},
+    reviewReceiptsByKey:{'KEY-REVIEWED':{
+      reviewed:false,reviewMethod:'CATALOG_EXACT_MATCH',weightKg:17
+    }}
+  }}),/Invalid physical mass review receipt/);
+});
+test('consolidated UI requires explicit checkbox before mass review bulk confirmation',()=>{
+  const html=readFileSync(new URL('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js',import.meta.url),'utf8');
+  assert.match(html,/data-mode-a-rigid-open-review/);
+  assert.match(html,/data-mode-a-rigid-bulk-attest/);
+  assert.match(html,/data-mode-a-rigid-confirm-bulk-review disabled/);
+  assert.match(html,/reviewConfirm\.disabled=!reviewAttest\.checked/);
+  assert.match(html,/data-mode-a-rigid-show-unreviewed/);
+  assert.match(html,/Nothing was applied/);
+  assert.doesNotMatch(html,/if\(unreviewed\.length\)\s*unreviewed\.forEach[^\n]*checked=true/);
+});
