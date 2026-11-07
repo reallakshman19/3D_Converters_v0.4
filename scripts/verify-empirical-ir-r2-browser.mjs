@@ -188,6 +188,33 @@ try {
   assert.equal(serialized.manualWeight,'21');
   receipt.xmlWriterControl=serialized;
 
+
+  // Smart-fill enhancement is another live UI path. No candidate with
+  // merely empirical authority can become a "SAFE" fill in that toolbar.
+  await page.evaluate(async()=>{
+    const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow.js');
+    const issue={key:'B1::10020',branchName:'B1',nodeNumber:'10020',
+      componentType:'RIGID',boreMm:50,rating:900,lengthMm:147,
+      candidates:[{suggestedWeight:18.774,weight:18.774,
+        referenceFamily:'Flanged Ball Valve-Reduced Bore',
+        preferred:true,inferredWeight:true,fallbackSuggestion:true,
+        massAuthority:'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS'}]};
+    window.__promise=m.openStandaloneRigidWeightReviewPopup([issue],{current:{}},{});
+    const smart=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-smart-fill-ui.js');
+    smart.installRigidSmartFillDashboard();
+  });
+  const smartButton=page.locator('button[title="Fill safe weight suggestions"]');
+  assert.equal(await smartButton.count(),1);
+  assert.equal(await smartButton.isDisabled(),true);
+  const smartInput=page.locator('.mc-rigid-review-input');
+  assert.equal(await smartInput.inputValue(),'');
+  await page.screenshot({path:resolve(dir,'r2-smart-fill-empirical-blocked.png'),fullPage:true});
+  await smartInput.fill('21');
+  await page.locator('[data-rigid-review-apply]').click();
+  const smartResult=await page.evaluate(async()=>await window.__promise);
+  assert.equal(smartResult.weightsByKey?.['B1::10020'],21);
+  receipt.smartFill={unsafeEstimate:'BLOCKED',manualOperatorWeight:21};
+
   assert.deepEqual(errors,[]);
   await writeFile(resolve(dir,'r2-browser-receipt.json'),JSON.stringify({...receipt,errors},null,2));
   console.log('R2 browser live popup tests PASS:',receipt.cases.length);
