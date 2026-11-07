@@ -23,6 +23,7 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-tools.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-actions.js'
       - 'tests/xml-cii-mode-a-easy-weight.test.mjs'
+      - 'scripts/verify-empirical-ir-r3-mode-a-browser.mjs'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
       - 'scripts/verify-empirical-ir-r2-browser.mjs'
       - 'tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js'
@@ -66,6 +67,7 @@ jobs:
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-actions.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-consolidated.js
           node --check converters/xml-cii2019-core/physical-mass-approval.js
+          node --check scripts/verify-empirical-ir-r3-mode-a-browser.mjs
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js
       - name: Unknown length rule and Weight Match non-auto-apply tests
         run: |
@@ -99,6 +101,11 @@ jobs:
           EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
           EMPIRICAL_BROWSER_ARTIFACT_DIR: artifacts/empirical-unknown-browser
         run: node scripts/verify-empirical-ir-r2-browser.mjs
+      - name: Stage-2 R3 real Chromium consolidated easy-weight authority
+        env:
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+          EMPIRICAL_BROWSER_ARTIFACT_DIR: artifacts/empirical-unknown-browser
+        run: node scripts/verify-empirical-ir-r3-mode-a-browser.mjs
       - name: Upload browser screenshots and receipt
         if: always()
         uses: actions/upload-artifact@v4
