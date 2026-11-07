@@ -11,7 +11,7 @@ function reportStartupError(error) {
 }
 
 async function startStandaloneApp() {
-  const module = await import('./core/app.js?v=20261107-bulk-review-gate-1');
+  const module = await import('./core/app.js?v=20261107-weights-pyodide-fix-1');
   await module.init(startupMount());
 }
 
