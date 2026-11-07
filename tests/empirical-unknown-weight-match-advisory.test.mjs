@@ -35,10 +35,16 @@ test('approved/mapped weight and a route-only length cannot be overwritten or su
   assert.equal(applyXmlCiiFlangeWeightFallbackToIssue(make(19.1,{elementLengthSource:'computed-forward'}),config)
     .unknownComponentSuggestion,undefined);
 });
-test('length=flange+6 is HOLD, not silently classified as either family',()=>{
+test('length=flange+6 displays full 15kg flange as-is, without applying a weight',()=>{
   const r=applyXmlCiiFlangeWeightFallbackToIssue(make(115),config);
-  assert.equal(r.unknownComponentSuggestion?.ok,false);
-  assert.equal(r.unknownComponentSuggestion.code,'LENGTH_AT_DECISION_BOUNDARY');
+  assert.equal(r.unknownComponentSuggestion?.ok,true);
+  assert.equal(r.unknownComponentSuggestion.referenceFamily,'Weldneck Flange');
+  assert.equal(r.unknownComponentSuggestion.suggestedKg,15);
+  assert.equal(r.unknownComponentSuggestion.lengthRatio,1);
+  assert.equal(r.unknownComponentSuggestion.method,'FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE');
+  assert.equal(r.unknownComponentSuggestion.acceptedForCii,false);
+  assert.equal(r.unknownComponentSuggestion.engineeringMassApproved,false);
+  assert.deepEqual(r.candidates,[]);
 });
 test('master row absent is not silently substituted by a different rating',()=>{
   const c={weight:{masterRows:[{TypeDesc:'Weldneck Flange',Rating:150,DN:50,length:109,'RF/RTJ KG':15}]}};
