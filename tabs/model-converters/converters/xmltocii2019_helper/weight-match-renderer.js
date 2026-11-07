@@ -1,6 +1,6 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260626-weight-review-2';
-import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260626-special-factor-guard-1';
+import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
 import {
   readXmlCiiPreviewRatingSnapshot,
@@ -264,7 +264,17 @@ function methodLabel(candidate) { if (candidate?.flangeWeightFallback && candida
 function renderAcceptedChip(candidate, rowIndex, issue) {
   if (!isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate))) {
     const amount = selectedWeight(candidate);
-    return `<span data-advisory-weight="true" title="Estimate only; cannot be applied as approved component mass" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · advisory only</span>`;
+    const label = desc(candidate);
+    const method = candidate?.preferred ? 'Exact-length master match' : (methodLabel(candidate) || 'Master candidate');
+    const evidence = [
+      'Advisory only, not approved physical-component mass',
+      'TypeDesc: ' + label,
+      'Rating: ' + (issue.rating || '-'),
+      'Weight: ' + amount + ' kg',
+      'Length delta: ' + nfmt(candidate.lengthDelta) + ' mm',
+      candidate?.weightWarning || '',
+    ].filter(Boolean).join(' | ');
+    return `<span data-advisory-weight="true" title="${attr(evidence)}" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · ${esc(label)} · ${esc(method)} · advisory only</span>`;
   } const value = selectedWeight(candidate); const label = desc(candidate); const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`, candidate?.weightWarning || ''].filter(Boolean).join(' | '); const marker = candidate?.inferredWeight ? '≈ ' : (candidate.preferred ? '★ ' : ''); const method = methodLabel(candidate); const suffix = method ? ` · ${method}` : ` · Δ${esc(nfmt(candidate.lengthDelta))}`; return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-wm-candidate="${rowIndex}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">${marker}${esc(value)}kg${suffix}</button>`; }
 function renderRejectedChip(candidate) { return `<span class="mc-rigid-review-candidate mc-wm-chip-rejected" title="${attr(candidate.rejectedReason || '')}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;opacity:.72;border-style:dashed!important;">× ${esc(desc(candidate))} · Δ${esc(nfmt(candidate.lengthDelta))}mm</span>`; }
 function enrichedOptionsForWeightMatch(config) { const split = truthy(config?.splitCondensedValveFlange) || truthy(config?.split_condensed_valve_flange); return { dryRun: true, skipAutoWeightMatch: true, supportConfigJson: JSON.stringify(config || {}), splitCondensedValveFlange: split, split_condensed_valve_flange: split, condenseRigidXsd: truthy(config?.condenseRigidXsd) || truthy(config?.condense_rigid_xsd) }; }
@@ -279,7 +289,7 @@ export function xmlCiiRenderWeightMatchPhase() {
   return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
 }
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v2-preview-rating';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v3-nearest-family-20261107';
 const PV_CACHE_KEY = 'xml-cii-pv-cache-v2';
 const CACHE_MAX_BYTES = 2_500_000;
 function wmCacheFingerprint(file, jsonLen, masterLen, overrides, ratingMode, snapshotRevision) { return `${file?.name || ''}:${file?.size || 0}|j${jsonLen}|m${masterLen}|o${JSON.stringify(overrides || {})}|rm${ratingMode}|pr${snapshotRevision || ''}`; }
@@ -318,8 +328,8 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const initial = issue.weight && issue.weight > 0 ? issue.weight : (Number(issue.overrideWeight) > 0 ? issue.overrideWeight : '');
       const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
       const inputStyle = `width:86px;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
-      const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
-      const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
+      const accepted = issue.massSuggestionOnly ? '' : (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
+      const rejected = issue.massSuggestionOnly ? '' : (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
       const unknown = issue.unknownComponentSuggestion;
       const unknownText = unknown?.ok
         ? `<span data-unknown-weight-suggestion="true" title="${attr('Advisory only · ' + unknown.referenceFamily + ' master ' + unknown.referenceLengthMm + 'mm / ' + unknown.referenceWeightKg + 'kg · threshold ' + unknown.thresholdMm + 'mm · no automatic XML/CII edit')}" style="font-size:11px;line-height:1.2;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;white-space:nowrap;">Length-rule ≈ ${esc(Number(unknown.suggestedKg).toFixed(3))} kg · ${esc(unknown.referenceFamily)}</span>`
