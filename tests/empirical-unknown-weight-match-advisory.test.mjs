@@ -46,6 +46,13 @@ test('master row absent is not silently substituted by a different rating',()=>{
   assert.equal(r.unknownComponentSuggestion?.ok,false);
   assert.equal(r.unknownComponentSuggestion.code,'FLANGE_REFERENCE_NOT_QUALIFIED');
 });
+test('ambiguous imported length-unit mode HOLDS the suggestion',()=>{
+  const cfg={weight:{masterRows:DEFAULT_WEIGHT_MASTER_ROWS,convertSmallLengthsInToMm:true}};
+  const answer=applyXmlCiiFlangeWeightFallbackToIssue(make(19.1),cfg);
+  assert.equal(answer.unknownComponentSuggestion.ok,false);
+  assert.equal(answer.unknownComponentSuggestion.code,'MASTER_LENGTH_UNIT_REVIEW_REQUIRED');
+  assert.deepEqual(answer.candidates,[]);
+});
 test('both parent and standalone Weight Match expose passive non-auto-apply suggestions',()=>{
   for(const filename of [
     'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js',
@@ -53,6 +60,7 @@ test('both parent and standalone Weight Match expose passive non-auto-apply sugg
   ]){
     const src=readFileSync(new URL('../'+filename,import.meta.url),'utf8');
     assert.match(src,/data-unknown-weight-suggestion/);
+    assert.match(src,/data-unknown-weight-hold/);
     assert.match(src,/const unknown = issue\.unknownComponentSuggestion/);
     assert.match(src,/const chips = \[accepted, unknownText, rejected\]/);
     assert.doesNotMatch(src,/data-wm-candidate="\$\{[^}]*unknown/);
