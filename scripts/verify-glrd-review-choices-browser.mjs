@@ -137,13 +137,13 @@ try {
    glrdRows:census.count,draftPrefills:drafts,
    initialMissing:missingStart,afterManualMissing:3,afterSkipMissing:0,
    multipleChoiceRows:census.alternatives.length,examples:census.alternatives.slice(0,10),
-   renderedAlternativeSelectors:alternativeSelectors,
+   alternativeSelectors:alternativeSelectors,
    reviewGateBeforeCheckbox:'BLOCKED',simulatedReviewedMasses:111,
    explicitZeroSkips:3,verifiedState,
    engineeringMassApproval:'NO_AUTOMATIC_APPROVAL_FROM_ESTIMATE',errors};
  await writeFile(resolve(output,'glrd-choice-skip-trace-receipt.json'),JSON.stringify(receipt,null,2));
  console.log('GLRD_CHOICE_SKIP_TRACE_PASS',JSON.stringify({
    rows:114,drafts,initialMissing:missingStart.length,afterManualMissing:3,afterSkipMissing:0,
-   alternatives:census.alternatives.length,renderedAlternativeSelectors,
+   alternatives:census.alternatives.length,alternativeSelectors,
    zeroOverrides:verifiedState.zeroMassInOverrides}));
 } finally {await browser.close()}
