@@ -85,7 +85,8 @@ try {
  await page.screenshot({path:resolve(output,'glrd-three-missing-traced.png')});
  await page.locator('[data-mode-a-rigid-skip-blanks]').click();
  assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-skipped-zero="true"]').count(),3);
- assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show all (0)');
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (0)',
+   'zero missing automatically exits missing-only mode and restores all visible rows');
  await page.locator('[data-mode-a-rigid-apply]').click();
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114,
    'unreviewed 109 estimates must refuse publication even after zero skip');
