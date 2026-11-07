@@ -47,6 +47,15 @@ jobs:
           node -e "const u='http://127.0.0.1:4173';let n=0;const p=async()=>{try{if((await fetch(u)).ok)return;}catch{}if(++n>60)process.exit(1);setTimeout(p,500)};p()"
       - name: Inspect browser-enriched explicit PCOM mass for native handoff
         run: node scripts/diagnose-glrd-pcom-parity-browser.mjs
+      - name: Inspect exact browser-enriched CII edge graph
+        run: |
+          python3 scripts/diagnose-glrd-pcom-owner.py artifacts/glrd-pcom/browser-parity-explicit-pcom.xml /tmp/glrd-pcom/stage.json --already-enriched > artifacts/glrd-pcom/enriched-geometry-diagnostic.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('artifacts/glrd-pcom/enriched-geometry-diagnostic.json'))
+          print('BROWSER_ENRICHED_GEOMETRY',d['pcomCount'],'edges',d['edges'],'rigid records',d['rigids'])
+          for r in d['records']:print('ENRICHED_PCOM_SPAN',r['ref'],r['spanMm'],r['candidates'])
+          PY
       - name: Upload independent source/edge diagnostics
         if: always()
         uses: actions/upload-artifact@v4
