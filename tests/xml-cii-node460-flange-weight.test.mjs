@@ -27,6 +27,13 @@ const config = { weight: { masterRows } };
 const base = { boreMm: 50, rating: 900 };
 const candidate = buildXmlCiiFlangeWeightFallback({ ...base, lengthMm: span }, config);
 assert.equal(candidate?.suggestedWeight, 15, 'correct 900# flange suggestion is approximately 15 kg');
+const atTolerance = buildXmlCiiFlangeWeightFallback({ ...base, lengthMm: 115 }, config);
+assert.equal(atTolerance?.suggestedWeight, 15,
+  '115mm = 109mm +6mm: exact master 15kg unchanged, never 15.826kg');
+assert.equal(atTolerance?.weightMethod, 'flange-master-at-6mm-tolerance');
+assert.equal(atTolerance?.atFlangeToleranceBoundary, true);
+assert.equal(atTolerance?.preferred, false,
+  'master-based tolerance suggestion must remain manual, not auto-preferred');
 assert.equal(buildXmlCiiFlangeWeightFallback({ ...base, lengthMm: 608.3 }, config), null,
   '608.3 mm route distance must not amplify a 109 mm flange weight');
 assert.equal(buildXmlCiiFlangeWeightFallback({ ...base, rating: 1500, lengthMm: span }, config)?.suggestedWeight, 14,
