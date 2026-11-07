@@ -13,6 +13,8 @@ on:
       - 'tests/xml-cii-preview-run-parity-closure.test.mjs'
       - 'tests/fixtures/xml-cii-standalone/rigid-mass-browser-harness.html'
       - 'scripts/verify-xml-cii-rigid-browser.mjs'
+      - 'scripts/verify-pcom-unknown-review-browser.mjs'
+      - 'converters/xml-cii2019-core/weight-match-model.js'
       - '.github/workflows/xml-cii-rigid-mass-audit.yml'
   workflow_dispatch:
 
@@ -35,6 +37,8 @@ jobs:
           node --check tests/rigid-weight-empirical-audit.test.mjs
           node --check tests/rigid-weight-run-gate.integration.test.mjs
           node --check scripts/verify-xml-cii-rigid-browser.mjs
+          node --check scripts/verify-pcom-unknown-review-browser.mjs
+          node --check converters/xml-cii2019-core/weight-match-model.js
       - name: Test rigid ownership, release gate and the production empirical weight API
         run: |
           node tests/rigid-weight-empirical-audit.test.mjs
@@ -56,6 +60,9 @@ jobs:
           XML_CII_BROWSER_BASE_URL: http://127.0.0.1:4173
           XML_CII_BROWSER_ARTIFACT_DIR: artifacts/xml-cii-rigid-mass-browser
         run: node scripts/verify-xml-cii-rigid-browser.mjs
+
+      - name: Chromium actual PCOM Unknown source-length review classification
+        run: node scripts/verify-pcom-unknown-review-browser.mjs
 
       - name: Upload Chromium screenshot and qualification receipt
         if: always()
