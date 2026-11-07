@@ -1,0 +1,45 @@
+name: Step 4 PR9 bounded qualification
+on:
+  push:
+    branches:
+      - fix/step4-pr2-pr3-fail-open-edge-20261107
+  pull_request:
+    branches:
+      - perf/xml-cii-v04-preview-per-build-cache-20261105
+permissions:
+  contents: read
+jobs:
+  bounded-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned project dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run exact-module PR2/PR3/PR9 tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test \
+            tests/xml-cii-preview-wall-authority-parity.test.mjs \
+            tests/xml-cii-preview-wall-evidence-index.test.mjs \
+            tests/xml-cii-preview-per-build-cache.test.mjs \
+            tests/xml-cii-preview-strict-line-authority.test.mjs \
+            2>&1 | tee /tmp/pr9-node-test.log
+      - name: Measure synthetic cache cost (not whole Preview)
+        shell: bash
+        run: |
+          set -o pipefail
+          node tests/xml-cii-preview-cache-cost.bench.mjs 2>&1 | tee /tmp/pr9-cache-benchmark.log
+      - name: Preserve execution receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr9-node-synthetic-receipts
+          path: |
+            /tmp/pr9-node-test.log
+            /tmp/pr9-cache-benchmark.log
+          if-no-files-found: warn
