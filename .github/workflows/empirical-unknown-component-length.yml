@@ -23,6 +23,7 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-tools.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-actions.js'
       - 'tests/xml-cii-mode-a-easy-weight.test.mjs'
+      - 'tests/xml-cii-weight-match-content-cache.test.mjs'
       - 'scripts/verify-empirical-ir-r3-mode-a-browser.mjs'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
       - 'scripts/verify-empirical-ir-r2-browser.mjs'
@@ -75,6 +76,7 @@ jobs:
           node --test tests/empirical-unknown-weight-match-advisory.test.mjs
           node tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
           node tests/xml-cii-mode-a-easy-weight.test.mjs
+          node --test tests/xml-cii-weight-match-content-cache.test.mjs
           node tests/xml-cii-smart-ui-preflight.test.mjs
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
