@@ -44,7 +44,8 @@ try {
       const override=standaloneWeightIssueFromDryRunNode(
         nr,{...cfg,overrides:{rigidWeight:{'B1::10020':23}}},sourceFactsIndex(xml(0)));
       return {L,mapped:raw.mapped,mass:raw.weight,lengthSource:raw.elementLengthSource,
-        physicalLength:raw.lengthMm,estimate:r.ranking.best?.selectedWeight,
+        physicalLength:raw.lengthMm,advisoryKg:r.unknownComponentSuggestion?.suggestedKg,
+        rankedCandidateKg:r.ranking.best?.selectedWeight ?? null,
         family:r.unknownComponentSuggestion?.referenceFamily,
         sourceMapped:actual.mapped,sourceMass:actual.weight,
         overrideMapped:override.mapped,overrideMass:override.weight};
@@ -55,7 +56,7 @@ try {
     assert.equal(f.mapped,false); assert.equal(f.mass,0);
     assert.equal(f.lengthSource,'component-ref-endpoint-span');
     assert.ok(Math.abs(f.physicalLength-expected.L)<1e-7);
-    assert.equal(f.estimate,expected.weight);assert.equal(f.family,expected.family);
+    assert.equal(f.advisoryKg,expected.weight);assert.equal(f.family,expected.family);
     assert.equal(f.sourceMapped,true);assert.equal(f.sourceMass,21);
     assert.equal(f.overrideMapped,true);assert.equal(f.overrideMass,23);
   }
