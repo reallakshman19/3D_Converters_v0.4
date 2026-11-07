@@ -13,6 +13,9 @@ on:
       - 'tests/xml-cii-weight-review-choices-skip.test.mjs'
       - 'scripts/verify-glrd-review-choices-browser.mjs'
       - 'scripts/verify-glrd-reviewed-bulk-native.py'
+      - 'scripts/verify-glrd-browser-pyodide-cii-after-skip.mjs'
+      - 'converters/xml-cii-2019-standalone/engine.js'
+      - 'tests/xml-cii-browser-engine-pcom-runtime.test.mjs'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js'
       - 'tests/xml-cii-glrd-bore-family-integration.test.mjs'
       - 'tests/xml-cii-glrd-release-cache-chain.test.mjs'
@@ -69,6 +72,8 @@ jobs:
           node --check converters/xml-cii2019-core/weight-match-model.js
           node --check converters/xml-cii2019-core/weight-review-choices.js
           node --check scripts/verify-glrd-review-choices-browser.mjs
+          node --check scripts/verify-glrd-browser-pyodide-cii-after-skip.mjs
+          node --check converters/xml-cii-2019-standalone/engine.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js
           node --check scripts/verify-glrd-bore-family-integration-browser.mjs
           node --check converters/xml-cii2019-core/rigid-weight-auto-apply.js
@@ -108,6 +113,7 @@ jobs:
           node --test tests/xml-cii-glrd-bore-family-integration.test.mjs
           node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
           node --test tests/xml-cii-weight-review-choices-skip.test.mjs
+          node --test tests/xml-cii-browser-engine-pcom-runtime.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
         run: |
           node --test tests/empirical-weight-nearest-interpolation.test.mjs
@@ -162,6 +168,12 @@ jobs:
           EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
         run: node scripts/verify-glrd-review-choices-browser.mjs
 
+      - name: Browser Pyodide GLRD actual CII after 109 reviewed and 5 explicit zero skips
+        env:
+          GLRD_INPUT_DIR: /tmp/glrd-inputs
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+        run: node scripts/verify-glrd-browser-pyodide-cii-after-skip.mjs
+
       - name: Chromium real GLRD full review census + standalone/ATTA/Mode A draft/approval
         env:
           GLRD_INPUT_DIR: /tmp/glrd-inputs
@@ -190,5 +202,6 @@ jobs:
             artifacts/glrd-bore-family/**
             artifacts/glrd-review-choices/**
             artifacts/glrd-native-parity/**
+            artifacts/glrd-browser-pyodide-cii/**
             /tmp/empirical-unknown-browser.log
           if-no-files-found: warn
