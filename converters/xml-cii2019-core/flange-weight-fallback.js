@@ -5,6 +5,15 @@ const unknownSuggesterCache = new WeakMap();
 function attachUnknownComponentSuggestion(issue, config) {
   if (!issue || issue.mapped || Number(issue.weight) > 0 || Number(issue.overrideWeight) > 0) return issue;
   if (!['component-ref-endpoint-span', 'ElementLengthMm'].includes(issue.elementLengthSource)) return issue;
+  // Imported master unit conversion may be heuristic/mixed. Do not infer
+  // physical master reference lengths until their unit authority is known.
+  if (config?.weight?.convertSmallLengthsInToMm === true) {
+    return { ...issue, unknownComponentSuggestion: {
+      ok:false,code:'MASTER_LENGTH_UNIT_REVIEW_REQUIRED',
+      reason:'Imported master length conversion is enabled; verify reference length units before this suggestion.',
+      acceptedForCii:false,engineeringMassApproved:false,
+    } };
+  }
   const rows = config?.weight?.masterRows;
   if (!Array.isArray(rows) || !rows.length) return issue;
   let suggester = unknownSuggesterCache.get(rows);
