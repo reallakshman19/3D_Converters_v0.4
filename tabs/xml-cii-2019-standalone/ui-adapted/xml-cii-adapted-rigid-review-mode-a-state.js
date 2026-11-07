@@ -45,6 +45,20 @@ export function applyModeAConsolidatedRigidReviewUpdates(state = {}, updates = {
     const overrides = object(config, 'overrides');
     const ratings = patch.ratingsByKey && typeof patch.ratingsByKey === 'object' ? patch.ratingsByKey : {};
     const weights = patch.weightsByKey && typeof patch.weightsByKey === 'object' ? patch.weightsByKey : {};
+    const skips = patch.skippedByKey && typeof patch.skippedByKey === 'object' ? patch.skippedByKey : {};
+    if (Object.keys(skips).length) {
+      // Zero kg is NOT a physical source-mass override. Record the Owner's
+      // explicit skip in separate run custody, never in overrides.rigidWeight.
+      const bucket=object(overrides,'rigidWeightSkipped');
+      for(const [key,record] of Object.entries(skips)){
+        if(text(key) && record?.skipped===true && Number(record?.weightKg)===0){
+          if(Number(overrides.rigidWeight?.[key])>0)
+            throw new Error('Cannot skip source mass with existing positive override: '+key);
+          bucket[key]={skipped:true,weightKg:0,
+            reason:'EXPLICIT_ZERO_MASS_SKIP_NO_SOURCE_AUTHORITY'};
+        }
+      }
+    }
     if (Object.keys(ratings).length) {
       const bucket = object(overrides, 'rating');
       for (const [key, value] of Object.entries(ratings)) if (text(key) && text(value)) bucket[key] = text(value);

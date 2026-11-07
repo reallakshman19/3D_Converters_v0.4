@@ -152,12 +152,17 @@ try {
    document.body.appendChild(section);
    const projected=applyXmlCiiStagedGeometryAuthority(xml,stage,{config});
    const file=new File([xml],'GLRD-1000-PI-01 - BM2.xml',{type:'application/xml'});
+   window.__glrdWeightMatchSaveCount=0;
+   window.__glrdWeightMatchSavedConfig=null;
    bindXmlCiiWeightMatchPhase(section,{
      xmlFile:file,stagedJsonText:stage,config,
      // The renderer itself applies staged geometry exactly once. Feeding an
      // already projected XML here would double-apply that same transform.
      enrichXmlForCii2019:async()=>({xmlText:xml,config}),
-     onSaveConfig:()=>{},
+     onSaveConfig:cfg=>{
+       window.__glrdWeightMatchSaveCount++;
+       window.__glrdWeightMatchSavedConfig=cfg;
+     },
      ensureOverrides:c=>(c.overrides||={}),
      resolveStagedJsonText:async()=>({text:stage,label:'Owner pinned stage'}),
    });
@@ -189,29 +194,69 @@ try {
        candidateButtons:td[12]?.querySelectorAll('[data-wm-candidate]').length||0,
        advisoryChips:td[12]?.querySelectorAll('[data-advisory-weight]').length||0};
    };
+   const draftRows=rows.filter(tr=>{
+     const input=tr.querySelector('.mc-rigid-review-input[data-wm-proposal-draft="estimate"]');
+     return input && Number(input.value)>0;
+   });
+   const multipleChoiceRows=rows.filter(tr=>tr.querySelectorAll('[data-wm-choice]').length>1);
    return {rows:rows.length,summary:panel.querySelector('#mc-wm-status')?.textContent||'',
+     draftPreloaded: draftRows.length,
+     multipleChoiceRows: multipleChoiceRows.length,
+     sourceMassAutoCommitted:false,
      noSourceWrites:panel.querySelectorAll('[data-wm-candidate]').length===0,
      targetRefs:['8045','8050','8014','27507'].map(read)};
  });
  console.log('GLRD_ACTUAL_WEIGHT_MATCH_UI',JSON.stringify(rendered));
  assert.equal(rendered.rows,149,'real Weight Match must include original 135 components plus 14 PCOM');
+ assert.ok(rendered.draftPreloaded>=135,'Weight Match must actually prefill most source rows as REVIEW-ONLY drafts');
+ assert.ok(rendered.multipleChoiceRows>0,'Weight Match must show multiple physical-length master alternatives');
+ assert.equal(rendered.noSourceWrites,true,'no approved-source mass via prior direct candidate buttons');
  assert.match(rendered.summary,/0 unresolved/,'rows with advisory candidates are not unresolved');
  assert.ok(rendered.targetRefs.every(r=>r.status!=='Unresolved'),'display valid proposals as Review candidate');
  for(const ref of ['8045','8050','8014']){
    const row=rendered.targetRefs.find(x=>x.ref===ref);
    assert.equal(row.bore,'150 mm *',ref+' displayed corrected source DN');
    assert.match(row.boreEvidence,/Source OD 168\.3 mm/,ref+' source OD provenance');
-   assert.match(row.suggestion,/59(?:\.0+)?kg/,ref+' visible master kg');
+   assert.match(row.suggestion,/59(?:\.0+)?\s*kg/,ref+' visible master kg');
    assert.ok(row.advisoryChips>0,'unapproved master remains an advisory chip');
  }
  const fbRow=rendered.targetRefs.find(x=>x.ref==='27507');
  assert.equal(fbRow.bore,'50 mm','Full-bore VALV source DN');
- assert.match(fbRow.suggestion,/56\.001kg/);
- assert.doesNotMatch(fbRow.suggestion,/47\.001kg/,'must not show reduced-bore mass');
+ assert.match(fbRow.suggestion,/56\.001\s*kg/);
+ assert.doesNotMatch(fbRow.suggestion,/47\.001\s*kg/,'must not show reduced-bore mass');
  await page.screenshot({path:resolve(out,'glrd-actual-weight-match-reconciled.png')});
 
+ // Critical UI authority check: an alternative Class/DN master reference is
+ // only a draft until a reviewer explicitly ticks Reviewed AND clicks Save.
+ const row=page.locator('#glrd-actual-weight-match-panel .mc-rigid-review-table tbody tr')
+   .filter({hasText:'/27507_2'}).first();
+ assert.equal(await row.count(),1,'real Owner full-bore source row exists');
+ const preSave=await page.evaluate(()=>({
+   saves:window.__glrdWeightMatchSaveCount,
+   sourceMassEntries:Object.keys(window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}).length
+ }));
+ assert.deepEqual(preSave,{saves:0,sourceMassEntries:0},
+   '149 prefilled Weight Match values must not save any source mass');
+ await row.locator('[data-wm-choice-index="1"]').click();
+ assert.equal(await row.locator('.mc-rigid-review-input').getAttribute('data-wm-proposal-draft'),'estimate');
+ assert.equal(await row.locator('[data-wm-verified]').isChecked(),false);
+ await row.locator('[data-wm-save-reviewed]').click();
+ assert.equal(await page.evaluate(()=>window.__glrdWeightMatchSaveCount),0,
+   'unreviewed comparison-only candidate must NOT persist');
+ await row.locator('[data-wm-verified]').check();
+ await row.locator('[data-wm-save-reviewed]').click();
+ const reviewedSaved=await page.evaluate(()=>({
+   saves:window.__glrdWeightMatchSaveCount,
+   weights:window.__glrdWeightMatchSavedConfig?.overrides?.rigidWeight||{}
+ }));
+ assert.equal(reviewedSaved.saves,1,'only explicit Reviewed + Save may persist physical kg');
+ assert.equal(Object.keys(reviewedSaved.weights).length,1,
+   'reviewed single component must never approve 148 other preloads');
+
  await writeFile(out+'/glrd-bore-family-receipt.json',
-   JSON.stringify({...data,renderedWeightMatch:rendered,sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
+   JSON.stringify({...data,renderedWeightMatch:rendered,reviewedSingleSave:{
+     saveCount:reviewedSaved.saves,keys:Object.keys(reviewedSaved.weights)},
+     sourceSha256:sha(xml),stagedSha256:sha(stage),masterRows:masterRows.length,
      safety:'unapproved catalog candidates are advisory; no XML/CII mass write',
      errors},null,2));
  assert.deepEqual(errors,[]);

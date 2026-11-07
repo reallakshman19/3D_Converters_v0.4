@@ -1,4 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-choice-skip-trace-1';
 import { collectXmlCiiWeightMatchRows, reconcileXmlCiiWeightMatchSourceBores } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
@@ -194,6 +195,7 @@ function rerankWithRating(row, config, { ratingMode = 'preview', snapshot = read
     nodeHint: ranking.nodeHint,
     candidates: ranking.candidates.slice(0, 5),
     rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
+    comparisonReferences:comparisonWeightMasterReferences({...row,rating},config),
     ranking,
   };
 }
@@ -297,10 +299,10 @@ function applyWeightRulePanelConfig(panelEl, config) { const cfg = plainObject(c
 
 export function xmlCiiRenderWeightMatchPhase() {
   const info = 'Default Rating authority is the exact Rating shown in Preview. Weight Match does not derive Rating again.';
-  return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
+  return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Prefill all suggestions (review)</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
 }
 
-const WM_CACHE_KEY = 'xml-cii-wm-cache-v4-glrd-source-bore-family-20261107';
+const WM_CACHE_KEY = 'xml-cii-wm-cache-v5-review-choice-preload-20261107';
 const PV_CACHE_KEY = 'xml-cii-pv-cache-v2';
 const CACHE_MAX_BYTES = 2_500_000;
 function wmCacheFingerprint(file, jsonLen, masterLen, overrides, ratingMode, snapshotRevision) { return `${file?.name || ''}:${file?.size || 0}|j${jsonLen}|m${masterLen}|o${JSON.stringify(overrides || {})}|rm${ratingMode}|pr${snapshotRevision || ''}`; }
@@ -331,33 +333,99 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     ratingModeButton.style.color = dtxr ? '#bbf7d0' : '';
   };
   const drawPanel = () => { if (panelEl) panelEl.innerHTML = enhancedHintPanel(activeConfig()); };
-  const saveInput = (input) => { const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const cfg = activeConfig(); const overrides = ensureOverrides(cfg); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(cfg); };
+  const saveInput = (input) => {
+    const key=input.getAttribute('data-wm-key')||'';
+    const value=input.value===''?NaN:Number(input.value);
+    if(!key || !Number.isFinite(value) || value<=0) return false;
+    const approvedDraft=input.dataset.wmProposalDraft==='approved';
+    const estimateDraft=input.dataset.wmProposalDraft==='estimate';
+    const verified=input.closest('tr')?.querySelector('[data-wm-verified]')?.checked===true;
+    // Rendering, prefilling or clicking a catalog candidate is never authority.
+    if(estimateDraft && !verified) return false;
+    if(estimateDraft || approvedDraft){
+      delete input.dataset.wmProposalDraft;
+      delete input.dataset.wmProposalReference;
+      input.title='Reviewer accepted this physical component mass explicitly.';
+    }
+    const cfg=activeConfig();
+    const overrides=ensureOverrides(cfg);
+    overrides.rigidWeight={...(overrides.rigidWeight||{}),[key]:value};
+    onSaveConfig(cfg);
+    input.style.borderColor='#10b981';
+    return true;
+  };
+  const stageDraft=(input,choice)=>{
+    if(!input || !choice || !(Number(choice.weight)>0))return false;
+    input.value=String(choice.weight);
+    input.dataset.wmProposalDraft=choice.approved?'approved':'estimate';
+    input.dataset.wmProposalReference=weightReviewChoiceLabel(choice);
+    input.title=(choice.rejected?'LENGTH MISMATCH: ':'')+
+      'UNAPPROVED REVIEW DRAFT — '+weightReviewChoiceLabel(choice);
+    input.style.borderColor=choice.approved?'#10b981':'#d9a441';
+    const reviewed=input.closest('tr')?.querySelector('[data-wm-verified]');
+    if(reviewed)reviewed.checked=false;
+    return true;
+  };
   const drawRows = (issues) => {
     if (!issues.length) { contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE / INST / Unknown (PCOM) nodes with ElementLengthMm &gt; 6 mm were found.</div>'; return; }
     const rows = issues.map((issue, rowIndex) => {
       const best = issue.candidates?.[0];
-      const initial = issue.weight && issue.weight > 0 ? issue.weight : (Number(issue.overrideWeight) > 0 ? issue.overrideWeight : '');
+      const sourceMass=issue.weight && issue.weight>0 ? issue.weight :
+        (Number(issue.overrideWeight)>0 ? issue.overrideWeight : '');
+      const choices=availableWeightReviewChoices(issue);
+      const proposal=sourceMass===''?preferredWeightReviewDraft(issue):null;
+      const initial=sourceMass!==''?sourceMass:(proposal?.weight??'');
+      const isDraft=sourceMass==='' && !!proposal;
       const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
       const inputStyle = `width:86px;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
-      const accepted = issue.massSuggestionOnly ? '' : (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
-      const rejected = issue.massSuggestionOnly ? '' : (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
+      const accepted=choices.map((choice,index)=>
+        `<button type="button" data-wm-choice="${rowIndex}" data-wm-choice-index="${index}"
+         data-advisory-weight="${choice.approved?'false':'true'}"
+         title="${attr('Review only — '+weightReviewChoiceLabel(choice)+' | '+choice.reason)}"
+         style="font-size:11px;padding:3px 6px;cursor:pointer;line-height:1.3;border:1px solid ${choice.rejected?'#ef4444':'#a78bfa'};border-radius:5px;background:#1e293b;color:#e2e8f0;">
+          ${esc(weightReviewChoiceLabel(choice))}</button>`).join('');
+      const rejected='';
       const unknown = issue.unknownComponentSuggestion;
       const unknownText = unknown?.ok
         ? `<span data-unknown-weight-suggestion="true" title="${attr('Advisory only · ' + unknown.referenceFamily + ' master ' + unknown.referenceLengthMm + 'mm / ' + unknown.referenceWeightKg + 'kg · threshold ' + unknown.thresholdMm + 'mm · no automatic XML/CII edit')}" style="font-size:11px;line-height:1.2;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;white-space:nowrap;">Length-rule ≈ ${esc(Number(unknown.suggestedKg).toFixed(3))} kg · ${esc(unknown.referenceFamily)}</span>`
         : unknown ? `<span data-unknown-weight-hold="true" title="${attr(unknown.reason || unknown.code)}" style="font-size:11px;padding:4px 7px;border:1px solid #a78bfa;border-radius:999px;color:#ddd6fe;">Length-rule HOLD · ${esc(unknown.code)}</span>` : '';
-      const chips = [accepted, unknownText, rejected].filter(Boolean).join('') || '<span class="model-converters-muted">No suggestion</span>';
+      const chips = [accepted, choices.length ? '' : unknownText, rejected].filter(Boolean).join('') || '<span class="model-converters-muted">No suggestion</span>';
       const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (methodLabel(best) || (hasPositiveReviewCandidate(issue) ? 'Review candidate' : 'Unresolved'));
       const refEndpoint = issue.componentRefEndpoint || componentRefEndpoint(issue.componentRefNo, issue.endpoint);
       const nodeDisplay = issue.nodeNumberDisplay || issue.nodeNumber;
       const ratingInfo = ratingDisplayInfo(issue);
-      return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc((issue.reviewCategory === 'UNKNOWN' || issue.componentType === 'PCOM') ? 'Unknown (PCOM)' : issue.componentType || '')}</td><td title="${attr([issue.sourceBoreAuthority || 'source bore not reconciled', issue.sourceOutsideDiameterMm ? `Source OD ${issue.sourceOutsideDiameterMm} mm` : '', issue.boreAuthorityMismatch ? `Preview/enriched DN ${issue.projectedBoreMm} differs; using source DN` : '', issue.sourceBoreHold ? 'HOLD: source physical identity ambiguous' : ''].filter(Boolean).join(' | '))}">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}${issue.boreAuthorityMismatch ? ' *' : ''}</td><td title="${attr(ratingInfo.title)}" style="${ratingInfo.style}">${esc(ratingInfo.shownRating || '')}</td><td title="${attr(issue.nodeNumber)}">${esc(nodeDisplay)}</td><td title="${attr(refEndpoint)}">${esc(refEndpoint)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSourcePath, issue.dtxrSuppressionReason, ratingInfo.dtxrRating ? `DTXR Rating ${ratingInfo.dtxrRating}#` : ''].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="${inputStyle}"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
+      return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc((issue.reviewCategory === 'UNKNOWN' || issue.componentType === 'PCOM') ? 'Unknown (PCOM)' : issue.componentType || '')}</td><td title="${attr([issue.sourceBoreAuthority || 'source bore not reconciled', issue.sourceOutsideDiameterMm ? `Source OD ${issue.sourceOutsideDiameterMm} mm` : '', issue.boreAuthorityMismatch ? `Preview/enriched DN ${issue.projectedBoreMm} differs; using source DN` : '', issue.sourceBoreHold ? 'HOLD: source physical identity ambiguous' : ''].filter(Boolean).join(' | '))}">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}${issue.boreAuthorityMismatch ? ' *' : ''}</td><td title="${attr(ratingInfo.title)}" style="${ratingInfo.style}">${esc(ratingInfo.shownRating || '')}</td><td title="${attr(issue.nodeNumber)}">${esc(nodeDisplay)}</td><td title="${attr(refEndpoint)}">${esc(refEndpoint)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSourcePath, issue.dtxrSuppressionReason, ratingInfo.dtxrRating ? `DTXR Rating ${ratingInfo.dtxrRating}#` : ''].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" data-wm-proposal-draft="${isDraft?(proposal.approved?'approved':'estimate'):''}" data-wm-proposal-reference="${attr(proposal?weightReviewChoiceLabel(proposal):'')}" value="${attr(initial)}" placeholder="kg" title="${attr(isDraft?'Review draft only; no mass written to source configuration':'Manual physical-component weight')}" style="${inputStyle};${isDraft?'border:1px solid #d9a441;':''}">
+        <label style="font-size:10px;display:block;white-space:nowrap;color:#e9c875;"><input type="checkbox" data-wm-verified> Reviewed</label>
+        <button type="button" data-wm-save-reviewed="${rowIndex}" style="margin-top:3px;font-size:10px;border:1px solid #406089;border-radius:4px;cursor:pointer;background:#102136;color:#e2e8f0;">Save reviewed</button></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
     }).join('');
     const cfg = activeConfig();
     const authorityText = ratingMode === 'dtxr' ? 'Explicit DTXR Rating mode' : 'Exact Rating shown in Preview';
     contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Rating authority: <strong>${esc(authorityText)}</strong>. Weight Match does not derive Rating again. Exact candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;table-layout:auto;"><thead><tr>${[['Status', 140], ['Branch', 280], ['Line Key', 110], ['ComponentType', 130], ['Bore', 90], ['Rating', 90], ['Node', 90], ['ComponentRefNo_Endpoint', 190], ['DTXR', 260], ['Valve Hint', 160], ['Length', 100], ['Weight (kg)', 110], ['Nearest Suggestions', 360]].map(([label, width]) => widthTh(label, width)).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
-    contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
+    contentEl.querySelectorAll('[data-wm-choice]').forEach(button=>button.addEventListener('click',()=>{
+      const rowIndex=Number(button.dataset.wmChoice);
+      const choice=availableWeightReviewChoices(localIssues[rowIndex])[Number(button.dataset.wmChoiceIndex)];
+      const input=contentEl.querySelectorAll('.mc-rigid-review-input')[rowIndex];
+      if(stageDraft(input,choice))status('Staged '+weightReviewChoiceLabel(choice)+'. Review then Save reviewed.', 'ok');
+    }));
+    contentEl.querySelectorAll('[data-wm-save-reviewed]').forEach(button=>button.addEventListener('click',()=>{
+      const input=contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmSaveReviewed)];
+      if(!input)return;
+      if(input.dataset.wmProposalDraft==='estimate' &&
+        !input.closest('tr')?.querySelector('[data-wm-verified]')?.checked){
+        status('Tick Reviewed for this estimated mass before saving a physical source weight.','bad');
+        return;
+      }
+      status(saveInput(input)?'Saved one explicitly reviewed physical weight.':'Enter a positive weight to save.','ok');
+    }));
   };
-  const fillBest = () => { let count = 0; contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => { const best = localIssues[index]?.candidates?.[0]; if (!best || best.preferred !== true || !isApprovedPhysicalMassCandidate(best, selectedWeight(best))) return; input.value = String(selectedWeight(best)); saveInput(input); count += 1; }); return count; };
+  const fillBest = () => {
+    let count=0;
+    contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input,index)=>{
+      if(input.value!=='' && !input.dataset.wmProposalDraft)return; // preserve manual values
+      if(stageDraft(input,preferredWeightReviewDraft(localIssues[index])))count++;
+    });
+    return count;
+  };
   const compute = async (opts = {}) => {
     let liveConfig = activeConfig();
     syncToggle(); syncRatingMode(); drawPanel();
@@ -418,9 +486,19 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   detailEl.querySelector('#mc-wm-refresh')?.addEventListener('click', () => compute({ force: true }));
   ratingModeButton?.addEventListener('click', () => { ratingMode = ratingMode === 'preview' ? 'dtxr' : 'preview'; invalidateXmlCiiWeightCache(); syncRatingMode(); compute({ force: true }); });
   toggleEl?.addEventListener('click', () => { invalidateXmlCiiWeightCache(); const cfg = activeConfig(); cfg.weight = plainObject(cfg.weight) ? cfg.weight : {}; cfg.weight.convertSmallLengthsInToMm = cfg.weight.convertSmallLengthsInToMm !== true; onSaveConfig(cfg); contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">Length conversion changed. Click <strong>Build Weight Data</strong> to recompute.</div>'; localIssues = []; syncToggle(); });
-  detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { const count = fillBest(); status(`Applied ${count} preferred weight(s)`, count ? 'ok' : 'bad'); });
+  detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => {
+    const count=fillBest();
+    status('Prefilled '+count+' review draft(s). None saved to source until individually Reviewed and saved.',count?'ok':'bad');
+  });
   panelEl?.addEventListener('change', () => { try { const cfg = applyWeightRulePanelConfig(panelEl, activeConfig()); cfg.weight.valveHintMapping = valveHintMappingRows(cfg); onSaveConfig(cfg); invalidateXmlCiiWeightCache(); contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">Weight keyword/factor rules changed. Click <strong>Build Weight Data</strong> to recompute.</div>'; localIssues = []; status('Weight rules saved'); } catch (error) { status(error?.message || String(error), 'bad'); } });
-  contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (input) saveInput(input); });
+  contentEl.addEventListener('input',event=>{
+    const input=event.target.closest?.('.mc-rigid-review-input');
+    if(input){delete input.dataset.wmProposalDraft;delete input.dataset.wmProposalReference;}
+  });
+  contentEl.addEventListener('change',event=>{
+    const input=event.target.closest?.('.mc-rigid-review-input');
+    if(input && !input.dataset.wmProposalDraft)saveInput(input); // explicit manual entry only
+  });
   syncToggle(); syncRatingMode(); drawPanel();
   if (typeof window !== 'undefined' && window.__xmlCiiPendingValidation) compute();
   else status('Ready to build with Preview Rating');

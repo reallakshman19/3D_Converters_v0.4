@@ -1,4 +1,4 @@
-import { renderXmlCiiAdaptedWorkflowShell } from './xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js?v=20261107-glrd-bore-family-r2';
+import { renderXmlCiiAdaptedWorkflowShell } from './xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js?v=20261107-choice-skip-trace-1';
 
 export const XML_CII_STANDALONE_UI_SMOKE_LABELS = Object.freeze([
   'Source type',

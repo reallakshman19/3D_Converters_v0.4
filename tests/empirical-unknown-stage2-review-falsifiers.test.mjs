@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { isApprovedPhysicalMassCandidate } from '../converters/xml-cii2019-core/physical-mass-approval.js';
+import { preferredWeightReviewDraft } from '../converters/xml-cii2019-core/weight-review-choices.js';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import test from 'node:test';
@@ -74,16 +75,23 @@ test('F02/F08: inferred fallback, non-preferred and no candidate refuse auto-app
   assert.equal(plan.appliedCount,1);
   assert.equal(plan.weightsByKey['B1::REAL'],15);
 });
-test('F04: both preferred bulk controls cannot persist inferred suggestions',()=>{
-  for(const p of [
+test('F04: both Weight Match bulk controls cannot directly save an inferred catalog mass',()=>{
+  for(const path of [
     'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js',
     'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js',
-  ]) {
-    const s=readFileSync(new URL('../'+p,import.meta.url),'utf8');
-    assert.match(s,/best\.preferred !== true/);
-    assert.match(s,/isApprovedPhysicalMassCandidate\(best, selectedWeight\(best\)\)/);
-    assert.match(s,/data-advisory-weight/);
-    assert.match(s,/import \{ isApprovedPhysicalMassCandidate \}/);
+  ]){
+    const src=readFileSync(new URL('../'+path,import.meta.url),'utf8');
+    assert.match(src,/data-advisory-weight/);
+    assert.match(src,/isApprovedPhysicalMassCandidate/);
+    if(path.includes('weight-match-renderer.js')){
+      assert.ok(src.includes('stageDraft(input,preferredWeightReviewDraft(localIssues[index]))'));
+      assert.ok(src.includes('if(estimateDraft && !verified) return false'));
+      assert.ok(src.includes('const fillBest = () =>'));
+      assert.equal(src.includes('input.value = String(selectedWeight(best)); saveInput(input)'),false);
+    }else{
+      assert.ok(src.includes('best.preferred !== true'));
+      assert.ok(src.includes('isApprovedPhysicalMassCandidate(best, selectedWeight(best))'));
+    }
   }
 });
 test('F02: standalone parity only maps explicit Owner overrides, never ranking auto mass',()=>{
@@ -111,39 +119,55 @@ test('F02 native helper: actual parity mass planner rejects inferred 23.803kg, k
     'route-gap perturbation cannot alter source weight');
 });
 
-test('F04 executable UI falsifier: both real fillBest bodies refuse unapproved mass',()=>{
+test('F04 executable UI falsifier: proposal buttons stage drafts; no catalog mass is saved',()=>{
   const paths=[
     'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js',
     'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js',
   ];
-  for(const path of paths) {
+  for(const path of paths){
     const src=readFileSync(new URL('../'+path,import.meta.url),'utf8');
-    const anchor='const fillBest = () => {';
-    const start=src.indexOf(anchor);
+    const marker='const fillBest = () => {';
+    const start=src.indexOf(marker);
     assert.ok(start>=0,path);
     const end=src.indexOf('return count;',start);
     assert.ok(end>start,path);
     const body=src.slice(start+'const fillBest = '.length,end+'return count;'.length)+' }';
-    for(const [candidate,expected] of [
+    for(const [candidate,oldExpected] of [
       [{selectedWeight:15,preferred:false},0],
       [{selectedWeight:15,preferred:true},0],
       [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',
         inferredWeight:true},0],
-      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',engineeringMassApproved:true,acceptedForCii:true},1],
-    ]) {
-      let writes=0;
-      const input={value:'',getAttribute:()=> 'B1::10020'};
+      [{selectedWeight:15,preferred:true,massAuthority:'APPROVED_SOURCE_MASS',
+        engineeringMassApproved:true,acceptedForCii:true},1],
+    ]){
+      let writes=0,stages=0;
+      const input={value:'',dataset:{},getAttribute:()=> 'B1::10020'};
       const sandbox={
-        localIssues:[{candidates:[candidate]}],
+        localIssues:[{candidates:[candidate],mapped:false}],
         contentEl:{querySelectorAll:()=>[input]},
         selectedWeight:v=>v?.selectedWeight??v?.weight??0,
         isApprovedPhysicalMassCandidate,
+        preferredWeightReviewDraft,
+        stageDraft:(field,proposal)=>{
+          if(!proposal)return false;
+          field.value=String(proposal.weight);
+          field.dataset={wmProposalDraft:proposal.approved?'approved':'estimate'};
+          stages++;
+          return true;
+        },
         saveInput:()=>{writes++;},
         Number,String,
       };
       const fill=runInNewContext('('+body+')',sandbox);
-      assert.equal(fill(),expected,path+' candidate '+JSON.stringify(candidate));
-      assert.equal(writes,expected,'must persist only explicitly authorized values');
+      const result=fill();
+      if(path.includes('weight-match-renderer.js')){
+        assert.equal(result,1,'new UI should prefill review draft regardless of master approval score');
+        assert.equal(stages,1);
+        assert.equal(writes,0,'prefill must NEVER be a source-weight write');
+      }else{
+        assert.equal(result,oldExpected,path+' candidate '+JSON.stringify(candidate));
+        assert.equal(writes,oldExpected,'legacy standalone must persist only approved sources');
+      }
     }
   }
 });

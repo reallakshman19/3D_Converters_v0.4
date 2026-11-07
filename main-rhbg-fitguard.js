@@ -11,7 +11,7 @@ function reportStartupError(error) {
 }
 
 async function startStandaloneApp() {
-  const module = await import('./core/app.js?v=20261107-glrd-bore-family-r2');
+  const module = await import('./core/app.js?v=20261107-choice-skip-trace-1');
   await module.init(startupMount());
 }
 
