@@ -6,6 +6,8 @@ import {rankXmlCiiWeightCandidates} from '../converters/xml-cii2019-core/weight-
 import {applyXmlCiiFlangeWeightFallbackToIssue} from '../converters/xml-cii2019-core/flange-weight-fallback.js';
 import {collectXmlCiiAutoRigidWeightsFromIssues}
   from '../converters/xml-cii2019-core/rigid-weight-auto-apply.js';
+import {mappedNodeWeights}
+  from '../tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js';
 
 function issue(lengthMm,extra={}) {
   const config={weight:{masterRows:DEFAULT_WEIGHT_MASTER_ROWS}};
@@ -85,4 +87,19 @@ test('F02: standalone parity only maps explicit Owner overrides, never ranking a
 test('F07: missing-master behavior change remains visible, not described as unchanged output',()=>{
   const s=readFileSync(new URL('../converters/empirical-weight/empirical-weight-estimator.js',import.meta.url),'utf8');
   assert.match(s,/return \{ \.\.\.details, ok: false/);
+});
+
+test('F02 native helper: actual parity mass planner rejects inferred 23.803kg, keeps explicit override',()=>{
+  const nodes=[{key:'B1::10020',branchName:'B1',nodeNumber:'10020',
+    componentType:'RIGID',weightMatch:{weight:23.803,selectedWeight:23.803,
+      inferredWeight:true,fallbackSuggestion:true,preferred:false}}];
+  const none=mappedNodeWeights(nodes,{overrides:{rigidWeight:{}}});
+  assert.equal(none.size,0,'preview-ranked estimate cannot be written into XML');
+  const approved=mappedNodeWeights(nodes,{overrides:{rigidWeight:{'B1::10020':15}}});
+  assert.equal(approved.size,1);
+  assert.equal(approved.get('B1|10020'),15,'only explicit saved override reaches XML');
+  const changedRoute=[{...nodes[0],lengthMm:763.4,
+    weightMatch:{...nodes[0].weightMatch,weight:150}}];
+  assert.equal(mappedNodeWeights(changedRoute,{overrides:{rigidWeight:{}}}).size,0,
+    'route-gap perturbation cannot alter source weight');
 });
