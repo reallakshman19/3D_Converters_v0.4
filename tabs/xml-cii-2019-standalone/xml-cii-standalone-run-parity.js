@@ -8,6 +8,7 @@
 // contains the Preview and Weight Match facts that were selected.
 
 import { enrichStandaloneDtxrAnnotations } from './xml-cii-standalone-dtxr-enrichment.js';
+import { xmlCiiWeightReviewNodeOverrideKey } from '../../converters/xml-cii2019-core/weight-match-model.js';
 import { createStandaloneRunParityEvidence } from './xml-cii-run-parity-evidence.js';
 
 const PARITY_MODULE_URL = new URL(
@@ -59,6 +60,9 @@ function recordExpected(entries, {
   scope,
   branchName,
   nodeNumber = '',
+  componentRefNo = '',
+  endpoint = '',
+  position = '',
   path,
   field,
   value,
@@ -67,7 +71,7 @@ function recordExpected(entries, {
 }) {
   const expected = text(value).trim();
   if (!expected) return;
-  entries.push({ scope, branchName, nodeNumber, path, field, expected, kind, source });
+  entries.push({ scope, branchName, nodeNumber, componentRefNo, endpoint, position, path, field, expected, kind, source });
 }
 
 const WEIGHT_BEARING_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
@@ -75,7 +79,10 @@ const WEIGHT_BEARING_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 export function mappedNodeWeights(nodeRows, config) {
   const weights = new Map();
   for (const nr of nodeRows || []) {
-    if (!WEIGHT_BEARING_TYPES.has(text(nr.componentType).toUpperCase())) continue;
+    // A sentinel -1 is not a unique CII node: 14 PCOM/VALV/FLAN owners
+    // share it on GLRD. Never convert an override into "branch|-1" mass.
+    if (!WEIGHT_BEARING_TYPES.has(text(nr.componentType).toUpperCase()) ||
+        !(Number(nr.nodeNumber)>0)) continue;
     const override = Number(config?.overrides?.rigidWeight?.[nr.key]);
     // Rank/preview candidates are NOT physical-mass authority. Only a
     // persisted explicit Owner override can enter the enriched XML here.
@@ -149,7 +156,7 @@ async function applyStandaloneProcessParity(xmlText, config, stagedJsonText, dia
         });
       }
 
-      const mapped = nodeWeights.get(`${branchName}|${nodeNumber}`);
+      const mapped = Number(nodeNumber)>0 ? nodeWeights.get(`${branchName}|${nodeNumber}`) : undefined;
       const existingWeight = numeric(childText(node, 'Weight'));
       if (mapped !== undefined && (existingWeight === null || existingWeight === 0) && setChildText(document, node, 'Weight', mapped)) {
         result.appliedFields += 1;
@@ -158,6 +165,48 @@ async function applyStandaloneProcessParity(xmlText, config, stagedJsonText, dia
           value: mapped, kind: 'number', source: 'weight-match',
         });
       }
+    }
+    // The only legal PCOM write is an exact saved endpoint-2 source key.
+    // No fallback to branch|-1, inferred masters, or a neighbouring flange.
+    const nodes=childrenByName(branch,'Node');
+    const overrides=config?.overrides?.rigidWeight || {};
+    const consumed=new Set();
+    for(const [nodeIndex,node] of nodes.entries()){
+      if(childText(node,'ComponentType').toUpperCase()!=='PCOM' ||
+         childText(node,'Endpoint')!=='2')continue;
+      const sourceKey=xmlCiiWeightReviewNodeOverrideKey(branchName,node,nodeIndex);
+      if(!Object.prototype.hasOwnProperty.call(overrides,sourceKey))continue;
+      const saved=Number(overrides[sourceKey]);
+      if(!Number.isFinite(saved) || saved<=0)
+        throw new Error('CII_PCOM_EXPLICIT_OVERRIDE_INVALID:'+sourceKey);
+      const ref=childText(node,'ComponentRefNo');
+      const pair=nodes.filter(n=>childText(n,'ComponentType').toUpperCase()==='PCOM' &&
+        childText(n,'ComponentRefNo')===ref);
+      if(pair.length!==2 || pair.filter(n=>childText(n,'Endpoint')==='1').length!==1 ||
+         pair.filter(n=>childText(n,'Endpoint')==='2').length!==1)
+        throw new Error('CII_PCOM_SOURCE_PAIR_AMBIGUOUS:'+sourceKey);
+      const start=pair.find(n=>childText(n,'Endpoint')==='1');
+      if(Number(childText(start,'Weight'))>0)
+        throw new Error('CII_PCOM_ENDPOINT1_MASS_CONFLICT:'+sourceKey);
+      const existing=numeric(childText(node,'Weight'));
+      if(existing!==null && existing>0 && Math.abs(existing-saved)>1e-9)
+        throw new Error('CII_PCOM_SOURCE_MASS_CONFLICT:'+sourceKey);
+      setChildText(document,node,'Weight',saved);
+      result.appliedFields++;
+      recordExpected(result.expectedEntries,{
+        scope:'node',branchName,nodeNumber:childText(node,'NodeNumber'),
+        componentRefNo:ref,endpoint:'2',position:childText(node,'Position'),
+        path:['Weight'],field:'weight',value:saved,kind:'number',
+        source:'explicit-saved-pcom-owner'
+      });
+      consumed.add(sourceKey);
+    }
+    // Explicit PCOM overrides targeting another row of this retained branch
+    // must not silently disappear in a run-parity success receipt.
+    for(const [key,value] of Object.entries(overrides)){
+      if(!key.startsWith(branchName+'::') || !key.endsWith('|PCOM'))continue;
+      if(!consumed.has(key))
+        throw new Error('CII_PCOM_SAVED_OWNER_NOT_FOUND:'+key);
     }
   }
 
