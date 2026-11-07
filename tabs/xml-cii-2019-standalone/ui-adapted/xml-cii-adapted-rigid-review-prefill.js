@@ -81,6 +81,8 @@ export function stageRigidReviewProposal(input, proposal) {
   input.value = String(weight);
   input.dataset.rigidSuggestionDraft = proposal.approved ? 'approved' : 'estimate';
   input.dataset.rigidSuggestionReference = name(proposal.reference);
+  // A new proposal invalidates any previous individual or bulk approval.
+  delete input.dataset.rigidReviewMethod;
   input.title = proposal.approved
     ? 'Approved source mass selected: ' + name(proposal.reference)
     : 'SUGGESTION DRAFT ONLY — verify this physical-component mass before Apply: ' + name(proposal.reference);
@@ -93,6 +95,7 @@ export function clearRigidReviewProposal(input) {
   if (!input) return;
   delete input.dataset.rigidSuggestionDraft;
   delete input.dataset.rigidSuggestionReference;
+  delete input.dataset.rigidReviewMethod;
   input.title = '';
   input.style.borderColor = '';
   const verified = input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
