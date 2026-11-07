@@ -1,0 +1,69 @@
+name: Empirical unknown component length suggestions
+on:
+  push:
+    branches:
+      - feat/unknown-component-weight-length-rules-20261107
+  pull_request:
+    paths:
+      - 'converters/empirical-weight/**'
+      - 'converters/xml-cii2019-core/flange-weight-fallback.js'
+      - 'tabs/empirical-weight-tuning-tab.js'
+      - 'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js'
+      - 'tests/empirical-unknown-*.test.mjs'
+      - 'scripts/verify-empirical-nearest-browser.mjs'
+      - '.github/workflows/empirical-unknown-component-length.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-empirical-and-standalone-advisory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and import checks
+        run: |
+          node --check converters/empirical-weight/unknown-component-length-suggestion.js
+          node --check converters/xml-cii2019-core/flange-weight-fallback.js
+          node --check tabs/empirical-weight-tuning-tab.js
+          node --check tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match.js
+          node --check scripts/verify-empirical-nearest-browser.mjs
+      - name: Unknown length rule and Weight Match non-auto-apply tests
+        run: |
+          node --test tests/empirical-unknown-component-length-suggestion.test.mjs
+          node --test tests/empirical-unknown-weight-match-advisory.test.mjs
+      - name: Existing nearest API, flange identity and Sandbox regression
+        run: |
+          node --test tests/empirical-weight-nearest-interpolation.test.mjs
+          node --test tests/empirical-weight-sandbox.test.mjs
+          node --test tests/empirical-weight-sandbox-ui-static.test.mjs
+          node tests/xml-cii-node460-flange-weight.test.mjs
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Serve browser Sandbox fixture
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/empirical-unknown-browser.log 2>&1 &
+          node -e "const u='http://127.0.0.1:4173'; let n=0; const p=async()=>{try{const r=await fetch(u); if(r.ok)return;}catch{}if(++n>60)process.exit(1);setTimeout(p,500)};p();"
+      - name: Browser unknown component classification and no-reclassification evidence
+        env:
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
+          EMPIRICAL_BROWSER_ARTIFACT_DIR: artifacts/empirical-unknown-browser
+        run: node scripts/verify-empirical-nearest-browser.mjs
+      - name: Upload browser screenshots and receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: empirical-unknown-component-${{ github.sha }}
+          path: |
+            artifacts/empirical-unknown-browser/**
+            /tmp/empirical-unknown-browser.log
+          if-no-files-found: warn
