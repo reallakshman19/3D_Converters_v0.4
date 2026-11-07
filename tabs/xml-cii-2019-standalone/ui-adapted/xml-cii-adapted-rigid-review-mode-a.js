@@ -59,7 +59,7 @@ function candidateButtons(issue, rowIndex) {
       candidate.fallbackSuggestion !== true && candidate.zeroFallback !== true;
     if (!sourceApproved) return `<span data-mode-a-rigid-advisory="true"
       title="Estimate only; no approved physical-component mass"
-      style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · review only</span>`;
+      style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · review only</span>`;
     return `<button type="button" class="mc-rigid-review-candidate"
       data-mode-a-rigid-approved="true"
       data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}"
