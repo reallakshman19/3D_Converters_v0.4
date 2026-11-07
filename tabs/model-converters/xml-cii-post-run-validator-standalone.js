@@ -1,4 +1,4 @@
-import { computeXmlCiiWeightIssues } from './converters/xmltocii2019_helper/weight-match-renderer.js?v=20260626-standalone-val-1';
+import { computeXmlCiiWeightIssues } from './converters/xmltocii2019_helper/weight-match-renderer.js?v=20261107-glrd-bore-family-r2';
 import { validateWeightSubsets } from '../../converters/xml-cii2019-core/weight-subset-validator.js';
 import { WorkflowModal } from './shared/WorkflowModal.js';
 import { getXmlCiiPreviewRuntimeConfig } from './shared/preview-filldown.js?v=20260626-smart-fill-1';
