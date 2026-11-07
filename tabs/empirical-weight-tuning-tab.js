@@ -255,7 +255,7 @@ export function renderEmpiricalWeightTuningTab(container, { context = null, emit
         <label>Pressure rating / class <input class="engineering-master-input" type="number" step="any" min="0" data-unknown="rating" value="${esc(unknownRating)}"></label>
       </div>
       <div class="engineering-master-banner warn">
-        Rule: length &lt; flange reference length + 6 mm → Weldneck Flange. Length &gt; boundary → Flanged Ball Valve-Reduced Bore. Exact boundary → HOLD.
+        Rule: length &lt; flange reference length + 6 mm → Weldneck Flange length estimate. Length = boundary → Weldneck Flange master weight as-is (no length scaling). Length &gt; boundary → Flanged Ball Valve-Reduced Bore length estimate.
         Estimate = selected master kg × (physical component length / master reference length). No automatic XML/CII mass edit.
       </div>
       <div class="engineering-master-muted" data-unknown="result">${esc(resultText)}</div>
