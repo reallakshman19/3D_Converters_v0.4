@@ -42,10 +42,24 @@ function primitiveSignature(value) {
 function dataSignature(value) {
   if (!value || typeof value !== 'object') return null;
   const seen = new WeakSet();
+  let first = true;
   try {
-    // Root toJSON runs before JSON.stringify's first replacer callback.
+    // JSON.stringify calls the root serializer before the replacer.
     if (typeof value.toJSON === 'function') return null;
-    return JSON.stringify(value, (_key, item) => {
+    return JSON.stringify(value, function exactDataSignature(key, item) {
+      if (first) {
+        first = false;
+      } else {
+        // Check the original descriptor: JSON.stringify invokes getters and
+        // nested toJSON methods before passing their substituted values here.
+        const descriptor = Object.getOwnPropertyDescriptor(this, key);
+        if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+          throw new Error('computed/invisible data');
+        }
+        const original = descriptor.value;
+        if (original && typeof original === 'object'
+          && typeof original.toJSON === 'function') throw new Error('custom serializer');
+      }
       if (item && typeof item === 'object') {
         if (seen.has(item)) throw new Error('shared/cyclic data');
         seen.add(item);
@@ -53,21 +67,17 @@ function dataSignature(value) {
         if (!isArray && Object.getPrototypeOf(item) !== Object.prototype
           && Object.getPrototypeOf(item) !== null) throw new Error('non-plain data');
         if (typeof item.toJSON === 'function') throw new Error('custom serializer');
-        // Validate *before* children are serialized so nested toJSON cannot
-        // replace real master values with a misleading unchanged signature.
-        for (const key of Reflect.ownKeys(item)) {
-          if (typeof key !== 'string') throw new Error('symbol-keyed data');
-          if (isArray && key === 'length') continue;
-          if (isArray && !/^(0|[1-9]\d*)$/.test(key)) {
-            throw new Error('array metadata');
-          }
-          const descriptor = Object.getOwnPropertyDescriptor(item, key);
-          if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
-            throw new Error('invisible or computed data');
-          }
-          const child = descriptor.value;
-          if (child && typeof child === 'object' && typeof child.toJSON === 'function') {
-            throw new Error('nested custom serializer');
+        // Check shape once per object, not one JS descriptor call per field:
+        // the replacer already performs descriptor checks for each value.
+        const visible = Object.keys(item);
+        const all = Reflect.ownKeys(item);
+        if (all.length !== visible.length + (isArray ? 1 : 0)) {
+          throw new Error('symbol/non-enumerable data');
+        }
+        if (isArray) {
+          if (visible.length !== item.length) throw new Error('sparse/extra array data');
+          for (let index = 0; index < visible.length; index++) {
+            if (visible[index] !== String(index)) throw new Error('non-index array key');
           }
         }
       } else if (['undefined', 'function', 'symbol', 'bigint'].includes(typeof item)
