@@ -140,15 +140,22 @@ rating**:
    length + **6 mm**, select the **Weldneck Flange** reference.
 3. If strictly **greater**, select the **Flanged Ball Valve-Reduced Bore**
    reference at the same bore DN/rating.
-4. Exact equality is `LENGTH_AT_DECISION_BOUNDARY` / **HOLD** (neither
-   strict rule applies). Missing same-class reference anchors are also HOLD.
+4. **Exact equality** (`componentLengthMm = flangeLengthMm + 6`) selects the
+   **same-bore, same-rating Weldneck Flange master weight as-is**, with
+   `lengthRatio: 1`, `method: FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE`,
+   and no length scaling. This requires an exact DN master reference;
+   when there is no exact flange master row, return
+   `EXACT_FLANGE_MASTER_REQUIRED_AT_TOLERANCE` (HOLD) rather than interpolating
+   a value and calling it an unchanged master weight.
 
 When no exact requested DN master row exists, the engine linearly interpolates
 **reference length and reference weight separately** between the nearest
 smaller/larger DN rows of that selected family and rating. It never borrows
 another family, target or rating, or uses one-sided extrapolation.
 
-The suggested weight then uses a **length-proportional heuristic**:
+For lengths **strictly below or above** the tolerance boundary, the suggested
+weight uses a **length-proportional heuristic**. The exact boundary instead
+uses the unmodified flange master weight:
 
 ```text
 suggestedKg = selectedReferenceKg * physicalComponentLengthMm
@@ -167,6 +174,8 @@ const result = suggestUnknownComponentLengthWeight({
 });
 // built-in reference flange: 109 mm, 15 kg; 109+6=115 mm.
 // advisory suggestedKg: 2.628 kg, not 15 kg.
+ // At 115.0 mm (109 + 6), advisory suggestedKg: exactly 15 kg,
+ // method: FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE (no length scaling).
 // For 371.2 mm, reduced-bore ball valve: 368 mm / 47 kg,
 // advisory suggestedKg: 47.409 kg.
 ```
