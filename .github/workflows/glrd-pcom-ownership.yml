@@ -1,0 +1,48 @@
+name: GLRD explicit PCOM mass ownership
+on:
+  push:
+    branches: [fix/glrd-pcom-explicit-mass-to-rigid-20261107]
+  pull_request:
+    paths:
+      - 'converters/scripts/xml_to_cii2019*.py'
+      - 'tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js'
+      - 'scripts/diagnose-glrd-pcom-owner.py'
+      - 'scripts/verify-glrd-pcom-owner.py'
+      - '.github/workflows/glrd-pcom-ownership.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-pcom-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Download SHA-pinned Owner GLRD source + stage
+        run: |
+          mkdir -p /tmp/glrd-pcom
+          root=https://raw.githubusercontent.com/reallakshman19/3D_Converters/3377b7f4baeeee5851e72dcc414d6c4a93f5a933/Benchmarks/XML-CII-2019/revamped
+          curl -fsSL --retry 3 "$root/GLRD-1000-PI-01%20-%20BM2.xml" -o "/tmp/glrd-pcom/GLRD-1000-PI-01 - BM2.xml"
+          curl -fsSL --retry 3 "$root/STF_2026Nov03-0839_managed_stage.json" -o /tmp/glrd-pcom/stage.json
+          echo '6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151  /tmp/glrd-pcom/GLRD-1000-PI-01 - BM2.xml' | sha256sum -c -
+          echo '1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746  /tmp/glrd-pcom/stage.json' | sha256sum -c -
+      - name: Diagnose native PCOM model graph
+        run: |
+          mkdir -p artifacts/glrd-pcom
+          python3 scripts/diagnose-glrd-pcom-owner.py "/tmp/glrd-pcom/GLRD-1000-PI-01 - BM2.xml" /tmp/glrd-pcom/stage.json > artifacts/glrd-pcom/native-geometry-diagnostic.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('artifacts/glrd-pcom/native-geometry-diagnostic.json'))
+          print('PCOM_ORIGINAL_GEOMETRY', data['pcomCount'],'edges',data['edges'],'rigid records',data['rigids'])
+          for row in data['records']:
+            print('PCOM_SPAN',row['ref'],row['spanMm'],row['candidates'])
+          PY
+      - name: Upload independent source/edge diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glrd-pcom-native-owner-${{ github.sha }}
+          path: artifacts/glrd-pcom/**
+          if-no-files-found: warn
