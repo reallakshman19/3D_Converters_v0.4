@@ -6,7 +6,8 @@
  * flange; L > threshold selects Flanged Ball Valve-Reduced Bore.
  * At L == flange length + 6mm, use the exact flange master weight AS-IS;
  * no physical-length scaling and no DN interpolation at this boundary.
- * Exact equality is intentionally unresolved. Component length is its
+ * At equality, only a genuinely exact, non-conflicting master cell is allowed.
+ * Component length is its
  * physical component span, NOT an incoming CII element/gap length.
  *
  * At the chosen family/bore/rating, interpolate reference length and mass
@@ -44,9 +45,12 @@ function massFromRow(row,target){
 }
 function lengthFromRow(row,target){
   // wtValveweights source length and RF-F/F are in millimetres.
-  return number(row.lengthMm??row.length??
-    (target==='BW KG'?row['BW-F/F']:row['RF-F/F'])??
-    row['Length (RF-F/F)']);
+  // Facing-specific dimensions outrank generic master "length". In
+  // particular BW-F/F must not accidentally use an RF-F/F value.
+  const facing = target==='BW KG'
+    ? number(row['BW-F/F']??row.bwFaceToFaceMm)
+    : number(row['RF-F/F']??row['Length (RF-F/F)']);
+  return facing ?? number(row.lengthMm??row.length);
 }
 function ratingOf(row){return number(row.Rating??row.rating);}
 function boreOf(row){return number(row.DN??row.boreMm??row.bore);}
@@ -64,23 +68,28 @@ function groupedReferenceRows(masterRows,family,rating,target){
     if(!groups.has(boreMm))groups.set(boreMm,[]);
     groups.get(boreMm).push({weightKg,lengthMm});
   }
-  return [...groups].map(([boreMm,rows])=>({
-    boreMm,
-    weightKg:median(rows.map(r=>r.weightKg)),
-    lengthMm:median(rows.map(r=>r.lengthMm)),
-    duplicateRows:rows.length,
-  })).sort((a,b)=>a.boreMm-b.boreMm);
+  return [...groups].map(([boreMm,rows])=>{
+    const masses=rows.map(r=>r.weightKg),lengths=rows.map(r=>r.lengthMm);
+    const conflict=Math.max(...masses)-Math.min(...masses)>1e-6 ||
+      Math.max(...lengths)-Math.min(...lengths)>1e-6;
+    return {boreMm,weightKg:median(masses),lengthMm:median(lengths),
+      duplicateRows:rows.length,conflict,
+      originals:rows.map(r=>({...r}))};
+  }).sort((a,b)=>a.boreMm-b.boreMm);
 }
 function referenceAtBore(points,boreMm,family,rating,target){
   const exact=points.find(p=>Math.abs(p.boreMm-boreMm)<1e-8);
   if(exact)return{
-    status:'EXACT_MASTER',
+    status:exact.conflict?'CONFLICTING_MASTER_CELL':'EXACT_MASTER',
     family,rating,target,boreMm,weightKg:exact.weightKg,lengthMm:exact.lengthMm,
     anchors:[exact],fraction:0,method:'EXACT_BORE_MASTER',
   };
   const lower=points.filter(p=>p.boreMm<boreMm).at(-1);
   const upper=points.find(p=>p.boreMm>boreMm);
   if(!lower||!upper)return null;
+  if(lower.conflict||upper.conflict)return {
+    status:'CONFLICTING_MASTER_CELL',anchors:[lower,upper],family,rating,target,boreMm
+  };
   const fraction=(boreMm-lower.boreMm)/(upper.boreMm-lower.boreMm);
   const weightKg=lower.weightKg+fraction*(upper.weightKg-lower.weightKg);
   const lengthMm=lower.lengthMm+fraction*(upper.lengthMm-lower.lengthMm);
@@ -115,6 +124,10 @@ export function createUnknownComponentLengthWeightSuggester({
       return refusal('UNKNOWN_COMPONENT_INPUT_INCOMPLETE',
         'Positive physical component length (mm), bore DN (mm), rating and supported weight target are required.');
     const flange=lookup(UNKNOWN_COMPONENT_REFERENCE_FLANGE,pressure,resolvedTarget,bore);
+    if(flange?.status==='CONFLICTING_MASTER_CELL')
+      return refusal('CONFLICTING_MASTER_CELL',
+        'Conflicting original master lengths or weights: no synthesized median can be called master as-is.',
+        {flange,boreMm:bore,rating:pressure,target:resolvedTarget});
     if(!flange)return refusal('FLANGE_REFERENCE_NOT_QUALIFIED',
       'No exact or two-sided interpolated Weldneck Flange length/weight reference for this bore, class and target.',
       {boreMm:bore,rating:pressure,target:resolvedTarget});
@@ -128,6 +141,10 @@ export function createUnknownComponentLengthWeightSuggester({
       ?'FLANGE_REFERENCE':'REDUCED_BORE_BALL_VALVE_REFERENCE';
     const reference=selector==='FLANGE_REFERENCE'?flange:
       lookup(UNKNOWN_COMPONENT_REFERENCE_VALVE,pressure,resolvedTarget,bore);
+    if(reference?.status==='CONFLICTING_MASTER_CELL')
+      return refusal('CONFLICTING_MASTER_CELL',
+        'Selected reference has conflicting original mass/length records.',
+        {reference,boreMm:bore,rating:pressure,target:resolvedTarget});
     if(!reference)return refusal('SELECTED_REFERENCE_NOT_QUALIFIED',
       'Selected component family has no same-rating/target exact or two-sided DN-interpolated reference.',
       {componentLengthMm:length,boreMm:bore,rating:pressure,target:resolvedTarget,
