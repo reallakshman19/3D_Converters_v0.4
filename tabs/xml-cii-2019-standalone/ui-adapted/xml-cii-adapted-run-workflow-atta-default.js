@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api-atta-default.js?v=20260803-atta-default-rest-closure-1';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
 import { buildXmlCiiWorkflowJobFromUiState } from '../xml-cii-workflow-ui-adapter.js';
@@ -37,10 +38,7 @@ function rigidCandidateButtons(issue, index) {
   return (issue.candidates || []).map((candidate) => {
     const value = candidate.suggestedWeight ?? candidate.weight;
     const scoreValue = Math.round((candidate.totalScore || candidate.score || 0) * 100);
-    const sourceApproved = candidate.massAuthority === 'APPROVED_SOURCE_MASS' &&
-      candidate.engineeringMassApproved === true &&
-      candidate.acceptedForCii === true && candidate.inferredWeight !== true &&
-      candidate.fallbackSuggestion !== true && candidate.zeroFallback !== true;
+    const sourceApproved = isApprovedPhysicalMassCandidate(candidate, value);
     if (!sourceApproved) {
       return `<span data-rigid-review-advisory="true"
         title="Unapproved empirical estimate, cannot copy to source mass"
@@ -167,9 +165,8 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
     rows.forEach((issue, index) => {
       const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
       const best = issue.candidates?.[0] || null;
-      if (input && best?.massAuthority === 'APPROVED_SOURCE_MASS' &&
-          best.engineeringMassApproved === true && best.acceptedForCii === true &&
-          !best.inferredWeight && !best.fallbackSuggestion && !best.zeroFallback)
+      if (input && isApprovedPhysicalMassCandidate(best,
+          best?.suggestedWeight ?? best?.weight))
         input.value = String(best.suggestedWeight ?? best.weight ?? '');
     });
     setStatus('Only approved source masses may be copied; empirical estimates remain read-only.', false);
