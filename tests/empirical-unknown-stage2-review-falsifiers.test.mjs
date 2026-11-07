@@ -75,9 +75,9 @@ test('F04: both preferred bulk controls cannot persist inferred suggestions',()=
   ]) {
     const s=readFileSync(new URL('../'+p,import.meta.url),'utf8');
     assert.match(s,/best\.preferred !== true/);
-    assert.match(s,/best\.massAuthority !== 'APPROVED_SOURCE_MASS'/);
+    assert.match(s,/isApprovedPhysicalMassCandidate\(best, selectedWeight\(best\)\)/);
     assert.match(s,/data-advisory-weight/);
-    assert.match(s,/best\.inferredWeight/);
+    assert.match(s,/import \{ isApprovedPhysicalMassCandidate \}/);
   }
 });
 test('F02: standalone parity only maps explicit Owner overrides, never ranking auto mass',()=>{
