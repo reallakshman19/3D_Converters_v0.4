@@ -2,6 +2,7 @@ import { extractXmlCiiRatingFromDtxr } from '../../../converters/xml-cii2019-cor
 import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { applyModeAWeightChanges } from './xml-cii-adapted-mode-a-weight-actions.js';
 import { modeAQualifiedExactWeightRow } from './xml-cii-adapted-mode-a-bulk-weight.js';
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import {
   createModeABatchSharedRef,
   createModeASourceProcessingRef,
@@ -59,6 +60,7 @@ function rerankRow(row, config, rating) {
     bestWeight: candidateWeight(best),
     bestScore: score(best),
     bestDescription: candidateDescription(best),
+    bestCandidate: best,
   };
 }
 
@@ -85,6 +87,7 @@ function setDtxrRatingMode(panel, result, stateRef, enabled) {
         bestWeight: row.bestWeight,
         bestScore: row.bestScore,
         bestDescription: row.bestDescription,
+        bestCandidate: row.bestCandidate || null,
       };
     }
     if (!enabled) {
@@ -103,6 +106,7 @@ function setDtxrRatingMode(panel, result, stateRef, enabled) {
     row.bestWeight = reranked.bestWeight;
     row.bestScore = reranked.bestScore;
     row.bestDescription = reranked.bestDescription;
+    row.bestCandidate = reranked.bestCandidate;
     row._modeAWeightDtxrBest = reranked.best;
     updateRowDom(panel, row);
     changed += 1;
@@ -117,13 +121,16 @@ function applyPreferredExact(panel, result, stateRef) {
     if (row._modeAWeightDtxrBest) {
       const best = row._modeAWeightDtxrBest;
       const weight = Number(candidateWeight(best));
-      if (!best.preferred || isUnsafeBulk(best) || !Number.isFinite(weight) || weight <= 0 || score(best) !== '100%') continue;
-      changes.push({ sourceId: row.sourceId, key: row.key, weight });
+      if (!best.preferred || isUnsafeBulk(best) ||
+          !isApprovedPhysicalMassCandidate(best, weight) ||
+          !Number.isFinite(weight) || weight <= 0 || score(best) !== '100%') continue;
+      changes.push({ sourceId: row.sourceId, key: row.key, weight, approvedCandidate: best });
       continue;
     }
     if (!modeAQualifiedExactWeightRow(row)) continue;
     const weight = Number(row.bestWeight);
-    if (Number.isFinite(weight) && weight > 0) changes.push({ sourceId: row.sourceId, key: row.key, weight });
+    if (Number.isFinite(weight) && weight > 0)
+      changes.push({ sourceId: row.sourceId, key: row.key, weight, approvedCandidate: row.bestCandidate });
   }
   if (!changes.length) return 0;
   if (!applyModeAWeightChanges(stateRef, changes, `Use all preferred exact weights (${changes.length})`)) return 0;
@@ -168,7 +175,7 @@ export function installModeAConsolidatedWeightTools(panel, result, stateRef) {
   const preferred = document.createElement('button');
   preferred.type = 'button';
   preferred.textContent = 'Use all ★ preferred (exact)';
-  preferred.title = 'Bulk-apply only 100% preferred direct weight-master candidates. Interpolated, extrapolated, inferred, factor and fallback candidates remain Review.';
+  preferred.title = 'Bulk-apply only source-mass-approved 100% candidates. A catalog-perfect match without physical mass authority remains read-only Review.';
   styleButton(preferred, true);
 
   const length = document.createElement('button');
@@ -193,7 +200,7 @@ export function installModeAConsolidatedWeightTools(panel, result, stateRef) {
 
   preferred.addEventListener('click', () => {
     const count = applyPreferredExact(panel, result, stateRef);
-    status.textContent = count ? `Applied ${count} preferred exact weight(s). Review rows were not bulk accepted.` : 'No unresolved preferred 100% direct weights available.';
+    status.textContent = count ? `Applied ${count} preferred exact weight(s). Review rows were not bulk accepted.` : 'No source-mass-approved preferred 100% weights available.';
     panel.querySelector('[data-mode-a-consolidated-build="weight"]')?.click();
   });
 
