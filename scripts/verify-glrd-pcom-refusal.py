@@ -103,7 +103,7 @@ refuse('preweighted-flange-entry',lambda:allocate_explicit_pcom_to_rigid(conflic
 clone={**source[0], 'ref':'134234934/DUPLICATE'}
 refuse('two-pcoms-one-rigid-pointer',lambda:allocate_explicit_pcom_to_rigid(model,source+[clone]),
        'CII_PCOM_RIGID_POINTER_REUSED')
-assert len(failures)==8,failures
+assert len(failures)==9,failures
 (out/'pcom-refusal-receipt.json').write_text(json.dumps(dict(schema='PCOM_REFUSAL_V1',
    refusedCount=len(failures),cases=failures),indent=2))
-print('GLRD_PCOM_8_FAIL_CLOSED_MUTANTS_PASS',json.dumps(failures))
+print('GLRD_PCOM_9_FAIL_CLOSED_MUTANTS_PASS',json.dumps(failures))
