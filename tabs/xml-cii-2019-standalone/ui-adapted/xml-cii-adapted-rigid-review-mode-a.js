@@ -52,7 +52,18 @@ function candidateButtons(issue, rowIndex) {
     const rawScore = Number(candidate.totalScore ?? candidate.score ?? 0);
     const score = Math.round((rawScore <= 1 ? rawScore * 100 : rawScore));
     const method = candidate.preferred ? 'exact' : (candidate.weightMethod || (candidate.inferredWeight ? 'inferred' : 'review'));
-    return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}" title="${attr(`${method} · ${score}% · ${candidate.typeDesc || candidate.valveType || candidate.type || ''}`)}" style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">${candidate.preferred ? '★ ' : ''}${esc(weight)} kg · ${score}%</button>`;
+    const sourceApproved = candidate.massAuthority === 'APPROVED_SOURCE_MASS' &&
+      candidate.engineeringMassApproved === true &&
+      candidate.acceptedForCii === true &&
+      candidate.inferredWeight !== true &&
+      candidate.fallbackSuggestion !== true && candidate.zeroFallback !== true;
+    if (!sourceApproved) return `<span data-mode-a-rigid-advisory="true"
+      title="Estimate only; no approved physical-component mass"
+      style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · review only</span>`;
+    return `<button type="button" class="mc-rigid-review-candidate"
+      data-mode-a-rigid-approved="true"
+      data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}"
+      title="Approved physical source mass" style="font-size:11px;padding:3px 6px;cursor:pointer;">${esc(weight)} kg · approved</button>`;
   }).join('');
 }
 
@@ -71,7 +82,7 @@ function rowMarkup(issue, rowIndex) {
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</td>
     <td title="${attr(issue.dtxrSourcePath || '')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="${attr(best ? (best.suggestedWeight ?? best.selectedWeight ?? best.weight ?? '') : '')}" placeholder="kg" style="width:78px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
+    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="" placeholder="kg" style="width:78px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;"></td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${candidateButtons(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}</td>
   </tr>`;
 }
@@ -83,7 +94,7 @@ function popupMarkup(rows, entries) {
       <div><div style="font-size:18px;font-weight:700;color:#9cc5ff;">Rigid Weights Need Review — Consolidated</div><div data-mode-a-rigid-summary style="font-size:12px;color:#94a3b8;margin-top:4px;">${rows.length} rigid node(s) across ${entries.length} XML file(s).</div></div>
       <button type="button" data-mode-a-rigid-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;">Cancel Batch Run</button>
     </div>
-    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only preferred exact candidates. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output.</div>
+    <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates remain read-only. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output.</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input type="search" data-mode-a-rigid-search placeholder="Search source / branch / node..." style="min-width:250px;padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;">
       <select data-mode-a-rigid-source style="padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;"><option value="">All XML files</option>${sourceOptions}</select>
@@ -157,7 +168,10 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       rows.forEach((row, index) => {
         const best = row.candidates?.[0];
         const value = Number(best?.suggestedWeight ?? best?.selectedWeight ?? best?.weight);
-        if (!best?.preferred || !Number.isFinite(value) || value <= 0) return;
+        if (!best?.preferred || best.massAuthority !== 'APPROVED_SOURCE_MASS' ||
+             best.engineeringMassApproved !== true || best.acceptedForCii !== true ||
+             best.inferredWeight || best.fallbackSuggestion || best.zeroFallback ||
+             !Number.isFinite(value) || value <= 0) return;
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
         if (input) { input.value = String(value); count += 1; }
       });
