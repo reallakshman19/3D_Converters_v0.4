@@ -11,6 +11,7 @@ Adds two narrow mechanics on top of xml_to_cii2019_direction:
 from __future__ import annotations
 
 from collections import Counter
+import json
 import math
 import sys
 
@@ -18,6 +19,7 @@ import xml_to_cii2019 as base
 import xml_to_cii2019_patched as patched
 import xml_to_cii2019_direction as direction
 from xml_to_cii2019_bend_radius_policy import apply_bend_radius_policy, publish_one_point_five_d
+from xml_to_cii2019_pcom_mass import source_explicit_pcom_components, allocate_explicit_pcom_to_rigid
 
 
 OPEN_END_COINCIDENT_TOLERANCE_MM = 0.5
@@ -174,6 +176,10 @@ def main() -> None:
     tee_desc_by_node = direction._tee_description_by_node(input_xml)
     insulation_density_map = patched._branch_insulation_density_map(input_xml)
     hydro_pressure_map = patched._branch_hydro_pressure_map(input_xml)
+    # Read physical sentinel (-1) PCOM endpoint pairs BEFORE native node
+    # pruning. Only a saved exact-key override present in the enriched engine
+    # XML can become candidate mass ownership.
+    explicit_pcom = source_explicit_pcom_components(input_xml, support_config)
     document = base._parse_xml_document(input_xml)
     component_specs = direction._component_type_restraint_specs(document, support_config)
     dtxr_specs, node_number_kind_map = patched._build_keyword_restraint_specs(input_xml, support_config)
@@ -203,13 +209,28 @@ def main() -> None:
         support_config,
     )  # type: ignore[assignment]
     base._build_sif_payload = direction._sif_payload_factory(tee_desc_by_node, support_config)  # type: ignore[assignment]
-    cii_text = base._build_cii_text(
-        model,
-        args.coords_mode,
-        base._resolve_template_version_line(args.template_cii),
-        args.weight_scale,
-        support_config,
-    )
+    pcom_owners, pcom_witnesses = allocate_explicit_pcom_to_rigid(model, explicit_pcom)
+    original_rigid_weight_for_edge = base._rigid_weight_for_edge
+    def _explicit_pcom_weight_for_edge(edge: base.Edge) -> float:
+        # The pointer was checked against the original source physical span
+        # and verified empty; all other existing mass owners are unchanged.
+        return pcom_owners.get(id(edge), original_rigid_weight_for_edge(edge))
+    try:
+        if pcom_owners:
+            base._rigid_weight_for_edge = _explicit_pcom_weight_for_edge
+        cii_text = base._build_cii_text(
+            model,
+            args.coords_mode,
+            base._resolve_template_version_line(args.template_cii),
+            args.weight_scale,
+            support_config,
+        )
+    finally:
+        base._rigid_weight_for_edge = original_rigid_weight_for_edge
+    for witness in pcom_witnesses:
+        print('PCOM_EXPLICIT_CII_RIGID_OWNER ' + json.dumps(
+            {**witness, 'ciiMassForceN': witness['massKg'] * args.weight_scale},
+            sort_keys=True), file=sys.stderr)
     args.output.write_text(cii_text, encoding="utf-8")
     if args.diagnostics_out:
         args.diagnostics_out.write_text(base._build_diagnostics_report(model), encoding="utf-8")
