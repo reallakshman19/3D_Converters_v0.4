@@ -72,6 +72,20 @@ test('exact 115mm tolerance boundary uses 109mm / 15kg flange AS-IS, no interpol
   assert.equal(longer.selector,'REDUCED_BORE_BALL_VALVE_REFERENCE');
   assert.equal(longer.atFlangeToleranceBoundary,false);
 });
+test('at tolerance boundary without an exact same-DN master, do not call DN interpolation as-is',()=>{
+  const masterRows=[
+    {TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:100,'RF/RTJ KG':10},
+    {TypeDesc:'Weldneck Flange',DN:100,Rating:900,length:200,'RF/RTJ KG':30},
+  ];
+  const boundary=createUnknownComponentLengthWeightSuggester({masterRows}).suggest({
+    componentLengthMm:156,boreMm:75,rating:900,
+  });
+  assert.equal(boundary.ok,false);
+  assert.equal(boundary.code,'EXACT_FLANGE_MASTER_REQUIRED_AT_TOLERANCE');
+  assert.equal(boundary.acceptedForCii,false);
+  assert.equal(boundary.flange.status,'DN_INTERPOLATED');
+});
+
 test('unknown DN interpolates BOTH reference weight and length across nearest DN master cells',()=>{
   const rows=[
     {TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:100,'RF/RTJ KG':10},
