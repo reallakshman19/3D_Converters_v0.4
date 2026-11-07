@@ -75,8 +75,10 @@ try{
   await page.locator('[data-unknown="length"]').fill('115');
   await page.locator('[data-unknown="length"]').press('Tab');
   assert.match(await page.locator('[data-unknown="result"]').innerText(),
-    /HOLD.*LENGTH_AT_DECISION_BOUNDARY/u);
-  receipt.tests.push({name:'Exactly flange length + 6mm is explicitly HOLD',result:'PASS'});
+    /15\.000 kg.*Weldneck Flange/u);
+  assert.match(await page.locator('[data-unknown="basis"]').innerText(),
+    /Selected reference 109 mm \/ 15 kg/u);
+  receipt.tests.push({name:'Exactly 109+6mm -> full 15kg Weldneck Flange unchanged (no interpolation)',result:'PASS'});
   await page.locator('[data-unknown="rating"]').fill('12345');
   await page.locator('[data-unknown="rating"]').press('Tab');
   assert.match(await page.locator('[data-unknown="result"]').innerText(),
