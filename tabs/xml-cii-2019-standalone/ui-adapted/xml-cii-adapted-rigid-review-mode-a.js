@@ -554,7 +554,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         reviewOnly=missing.length===0 && unreviewed.length>0;
         filter();
         if(unreviewed.length && !missing.length) showBulkReview();
-        const first=missing.length?missingRows()[0]:pendingReviewRows()[0];
+        const firstMissing=missing.length?missingRows()[0]:null;
         setStatus(
           (missing.length?'Enter a positive weight for '+missing.length+
               ' missing row(s) or choose explicit Skip blank; Show missing locates the source. '
@@ -562,7 +562,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
           (unreviewed.length?unreviewed.length+' estimate draft(s) are NOT independently reviewed. '+
             'Check Reviewed for each or use the explicit Review draft weights confirmation. ':'')+
           skipped.length+' intentional 0 kg skip(s). Nothing was applied.',true);
-        first?.scrollIntoView?.({block:'nearest'});
+        // After a 0-missing/109-unreviewed Apply, keep the explicit
+        // confirmation panel in view rather than scrolling past it to row 1.
+        firstMissing?.scrollIntoView?.({block:'nearest'});
         return;
       }
       overlay.remove();
