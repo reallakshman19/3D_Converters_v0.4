@@ -361,7 +361,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     return true;
   };
   const pendingDrafts=()=>[...contentEl.querySelectorAll('.mc-rigid-review-input[data-wm-proposal-draft]')]
-    .filter(input=>input.dataset.wmProposalDraft==='estimate' &&
+    .filter(input=>['estimate','approved'].includes(input.dataset.wmProposalDraft) &&
       input.value!=='' && Number(input.value)>0);
   const stageDraft=(input,choice)=>{
     if(!input || !choice || !(Number(choice.weight)>0))return false;
