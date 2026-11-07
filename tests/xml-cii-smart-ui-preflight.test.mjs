@@ -48,7 +48,7 @@ const rigidRows = [
   {
     key: 'A', branchName: '/ASIM-1885-PL-8"-M8810123-01/B4', boreMm: 200,
     rating: '900', node: '1360', lengthMm: 112, manualWeight: '', ratingConflict: false,
-    candidates: [{ suggestedWeight: 42.5, totalScore: .96, preferred: true, weightMethod: 'exact' }],
+    candidates: [{ suggestedWeight: 42.5, totalScore: .96, preferred: true, weightMethod: 'exact', massAuthority: 'APPROVED_SOURCE_MASS', engineeringMassApproved: true, acceptedForCii: true }],
   },
   {
     key: 'B', branchName: '/ASIM-1885-PL-8"-M8810123-01/B4', boreMm: 200,
@@ -67,6 +67,13 @@ assert.equal(rigidReceipt.metrics.safeCount, 1);
 assert.equal(rigidReceipt.metrics.reviewCount, 1);
 assert.equal(rigidReceipt.metrics.blockedCount, 1);
 assert.deepEqual(smartFillWeightMap(rigidReceipt), { A: 42.5 });
+const unapproved = structuredClone(rigidRows);
+delete unapproved[0].candidates[0].massAuthority;
+unapproved[0].candidates[0].engineeringMassApproved = false;
+const rejected = buildRigidSmartFillPreflight({ rows: unapproved });
+assert.equal(rejected.metrics.safeCount, 0,
+  'a preferred exact-looking candidate cannot qualify safe fill without source approval');
+assert.deepEqual(smartFillWeightMap(rejected), {});
 const ratingPlan = groupRatingPlan(rigidRows, '/ASIM-1885-PL-8"-M8810123-01|DN200', '900');
 assert.equal(ratingPlan.status, 'READY_TO_APPLY');
 assert.deepEqual(ratingPlan.updates, { C: '900' });
