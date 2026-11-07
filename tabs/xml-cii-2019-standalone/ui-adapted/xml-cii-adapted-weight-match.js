@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { createElement } from './xml-cii-adapted-dom.js';
 import { xmlCiiDryRunPreview } from './xml-cii-adapted-preview-dryrun.js';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -122,9 +123,7 @@ function methodLabel(candidate) {
 }
 
 function renderAcceptedChip(candidate, rowIndex, issue) {
-  if (candidate?.inferredWeight || candidate?.fallbackSuggestion ||
-      candidate?.massAuthority === 'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS' ||
-      candidate?.acceptedForCii === false) {
+  if (!isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate))) {
     const amount = selectedWeight(candidate);
     return `<span data-advisory-weight="true" title="Estimate only; cannot be applied as approved component mass" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · advisory only</span>`;
   }
@@ -548,7 +547,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     let count = 0;
     contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => {
       const best = localIssues[index]?.candidates?.[0];
-      if (!best || best.preferred !== true || best.massAuthority !== 'APPROVED_SOURCE_MASS' || best.inferredWeight || best.fallbackSuggestion || best.flangeWeightFallback || best.zeroFallback || Number(selectedWeight(best)) <= 0) return;
+      if (!best || best.preferred !== true || !isApprovedPhysicalMassCandidate(best, selectedWeight(best))) return;
       input.value = String(selectedWeight(best));
       saveInput(input);
       count += 1;
