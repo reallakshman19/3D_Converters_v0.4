@@ -16,6 +16,13 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-atta-default.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js'
+      - 'converters/xml-cii2019-core/physical-mass-approval.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-bulk-weight.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-consolidated.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-consolidated-easy-weight-ui.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-tools.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-actions.js'
+      - 'tests/xml-cii-mode-a-easy-weight.test.mjs'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
       - 'scripts/verify-empirical-ir-r2-browser.mjs'
       - 'tabs/xml-cii-2019-standalone/xml-cii-rigid-smart-fill.js'
@@ -54,12 +61,18 @@ jobs:
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-atta-default.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-bulk-weight.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-tools.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-weight-actions.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-consolidated.js
+          node --check converters/xml-cii2019-core/physical-mass-approval.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js
       - name: Unknown length rule and Weight Match non-auto-apply tests
         run: |
           node --test tests/empirical-unknown-component-length-suggestion.test.mjs
           node --test tests/empirical-unknown-weight-match-advisory.test.mjs
           node tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
+          node tests/xml-cii-mode-a-easy-weight.test.mjs
           node tests/xml-cii-smart-ui-preflight.test.mjs
           node --test tests/empirical-unknown-stage2-review-falsifiers.test.mjs
       - name: Existing nearest API, flange identity and Sandbox regression
