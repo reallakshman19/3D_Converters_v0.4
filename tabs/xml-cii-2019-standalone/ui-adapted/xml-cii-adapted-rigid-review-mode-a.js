@@ -401,8 +401,10 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       }
     });
     overlay.addEventListener('click',event=>{
-      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]'))
-        refreshMissingList();
+      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]')){
+        hideBulkReview(); // a replacement candidate invalidates earlier bulk attestation
+        filter();
+      }
     });
     overlay.addEventListener('input', event=>{
       if(event.target?.matches?.('.mc-rigid-review-input')){
@@ -463,7 +465,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
         if (input && stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
       });
-      setStatus(`Filled ${count} preferred exact suggestion(s). Review remaining rows manually.`, false);
+      hideBulkReview();
+      filter();
+      setStatus(`Filled ${count} independently approved source mass(es). Review remaining drafts before Run.`, false);
     });
 
     overlay.querySelector('[data-mode-a-rigid-refresh]')?.addEventListener('click', async () => {
