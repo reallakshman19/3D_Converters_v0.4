@@ -46,7 +46,7 @@ function dataSignature(value) {
         for (const key of Reflect.ownKeys(item)) {
           if (typeof key !== 'string') throw new Error('symbol-keyed data');
           if (isArray && key === 'length') continue;
-          if (isArray && !/^(0|[1-9]\\d*)$/.test(key)) {
+          if (isArray && !/^(0|[1-9]\d*)$/.test(key)) {
             throw new Error('array metadata');
           }
           const descriptor = Object.getOwnPropertyDescriptor(item, key);
