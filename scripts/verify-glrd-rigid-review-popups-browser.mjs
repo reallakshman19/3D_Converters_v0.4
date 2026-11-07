@@ -19,7 +19,7 @@ const sha=x=>createHash('sha256').update(x).digest('hex');
 assert.equal(sha(files.xml),'6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151','uploaded BM2 XML SHA');
 assert.equal(sha(files.stage),'1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746','uploaded stage JSON SHA');
 const masterRows=JSON.parse(files.master.toString('utf8'));
-assert.ok(Array.isArray(masterRows) && masterRows.length>1400,'published master must contain real rows');
+assert.ok(Array.isArray(masterRows) && masterRows.length===1595,'public master row count must match 1595 XLSX data rows');
 const errors=[],receipt={schema:'GLRD-RIGID-POPUP-UI-R1',sourceSha256:sha(files.xml),
  stagedSha256:sha(files.stage),weightMasterJsonSha256:sha(files.master),
  limits:['No live Pyodide converter', 'No emitted CII parity', 'Review UI only', 'Master JSON counterpart to uploaded weight XLSX']};
@@ -33,10 +33,20 @@ try{
    const {rankXmlCiiWeightCandidates}=await import('/converters/xml-cii2019-core/weight-valve-hints.js');
    const {applyXmlCiiFlangeWeightFallbackToIssue}=await import('/converters/xml-cii2019-core/flange-weight-fallback.js');
    const {proposedRigidReviewWeight}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js');
-   const config={weight:{masterRows}};
    const doc=new DOMParser().parseFromString(xml,'application/xml');
    const branches=doc.getElementsByTagName('Branch');
    const sourceNodes=doc.getElementsByTagName('Node');
+   // From uploaded Piping class master.xlsx: 93833 -> 900 and 13451 -> 150.
+   // This is a test fixture rating authority, not a production policy change.
+   const classRating={'93833':900,'13451':150};
+   const ratingByBranch={};
+   for(const branch of branches){
+     const branchName=branch.getElementsByTagName('Branchname')[0]?.textContent||'';
+     const cl=branchName.match(/-(\d{5})-\d{2}\/B\d+$/)?.[1];
+     if(!cl || !classRating[cl])throw Error('Missing uploaded master Rating for: '+branchName);
+     ratingByBranch[branchName]=classRating[cl];
+   }
+   const config={weight:{masterRows},overrides:{rating:ratingByBranch}};
    const issues=collectXmlCiiZeroRigidWeightIssues(xml,stage,config);
    window.__glrdAllIssues=issues;
    const selected=issues.find(x=>String(x.nodeNumber)==='60' && /\/B2$/.test(String(x.branchName)))
@@ -54,7 +64,9 @@ try{
       sourceKey:selected.key,branch:selected.branchName,physicalLength:selected.lengthMm,
       lengthProvenance:selected.elementLengthSource,bore:selected.boreMm,rating:900,
       candidateKg:prop?.weight??null,candidateFamily:prop?.reference??null,approved:prop?.approved??null,
-      typeCounts:issues.reduce((a,i)=>(a[i.componentType]=(a[i.componentType]||0)+1,a),{})};
+      typeCounts:issues.reduce((a,i)=>(a[i.componentType]=(a[i.componentType]||0)+1,a),{}),
+      classRatings:classRating,qualifiedDrafts:issues.filter(i=>
+        proposedRigidReviewWeight(applyXmlCiiFlangeWeightFallbackToIssue(i,config))).length};
  },{xml:files.xml.toString('utf8'),stage:files.stage.toString('utf8'),masterRows});
  receipt.census=facts;
  assert.equal(facts.branches,31);
@@ -72,6 +84,7 @@ try{
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),facts.reviewIssues);
  await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
  const fullPrefilled=await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft]').count();
+ assert.ok(fullPrefilled>0,'uploaded GLRD must provide qualified drafts after class Rating restoration');
  await page.screenshot({path:resolve(out,'glrd-full-consolidated-draft.png')});
  await page.locator('[data-mode-a-rigid-cancel]').click();
  assert.equal((await page.evaluate(async()=>await window.__glrdFullPromise)).cancelled,true);
