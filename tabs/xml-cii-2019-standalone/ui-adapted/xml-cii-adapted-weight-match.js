@@ -490,7 +490,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
 
   const drawRows = (issues) => {
     if (!issues.length) {
-      contentEl.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;">No actual RIGID / FLAN* / VALVE / INST nodes with ElementLengthMm &gt; 6 mm were found.</div>';
+      contentEl.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;">No actual RIGID / FLAN* / VALVE / INST / Unknown (PCOM) nodes with ElementLengthMm &gt; 6 mm were found.</div>';
       return;
     }
     const rows = issues.map((issue, rowIndex) => {
@@ -510,7 +510,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(statusText)}</td>
         <td title="${attr(issue.branchName)}" style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(issue.branchName)}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.lineKey || '')}</td>
-        <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.componentType || '')}</td>
+        <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc((issue.reviewCategory === 'UNKNOWN' || issue.componentType === 'PCOM') ? 'Unknown (PCOM)' : issue.componentType || '')}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.rating || '')}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(148,163,184,0.1);">${esc(issue.nodeNumber)}</td>

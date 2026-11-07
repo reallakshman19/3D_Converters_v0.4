@@ -285,12 +285,20 @@ export function isXmlCiiRigidNode(node) {
   return xmlText(node, 'ComponentType').toUpperCase() === 'RIGID' || Number(xmlText(node, 'Rigid')) === 2;
 }
 
+// Unknown is a WEIGHT-REVIEW category, never a mutation of the source
+// ComponentType: physical PCOM ownership/geometry must remain intact.
+export function xmlCiiWeightReviewCategory(componentType) {
+  const original = toText(componentType).trim().toUpperCase();
+  return original === 'PCOM' ? 'UNKNOWN' : original;
+}
+
 export function isXmlCiiWeightReviewNode(node, dtxr = '') {
   const compType = xmlText(node, 'ComponentType').toUpperCase();
   const nodeName = xmlText(node, 'NodeName').toUpperCase();
   const dtxrUpper = toText(dtxr).toUpperCase();
   const searchText = `${compType} ${nodeName} ${dtxrUpper}`;
   return isXmlCiiRigidNode(node) ||
+         compType === 'PCOM' || // Route source PCOM to PR #8 Unknown advisory review.
          compType.startsWith('INST') ||
          compType.startsWith('FLAN') ||
          compType.startsWith('VALV') ||
@@ -355,13 +363,19 @@ export function xmlCiiPhysicalComponentSpanLengthMm(nodes, nodeIdx) {
   const ref = toText(xmlText(node, 'ComponentRefNo')).trim().toUpperCase().replace(/^=/, '');
   const endpoint = xmlText(node, 'Endpoint');
   const origin = normalizePoint(xmlText(node, 'Position'));
-  if (!['FLAN', 'RIGID'].includes(type) || !ref || !['1', '2'].includes(endpoint) || !origin) return null;
+  if (!['FLAN', 'RIGID', 'PCOM'].includes(type) || !ref || !['1', '2'].includes(endpoint) || !origin) return null;
   const opposite = endpoint === '1' ? '2' : '1';
   const spans = [];
   for (const sibling of nodes || []) {
-    if (sibling === node || !['FLAN', 'RIGID'].includes(xmlText(sibling, 'ComponentType').toUpperCase())) continue;
+    if (sibling === node || !['FLAN', 'RIGID', 'PCOM'].includes(xmlText(sibling, 'ComponentType').toUpperCase())) continue;
     const siblingRef = toText(xmlText(sibling, 'ComponentRefNo')).trim().toUpperCase().replace(/^=/, '');
-    if (siblingRef !== ref || xmlText(sibling, 'Endpoint') !== opposite) continue;
+    const siblingType = xmlText(sibling, 'ComponentType').toUpperCase();
+    // Existing flanges legitimately bridge FLAN endpoint 1 to RIGID
+    // endpoint 2. PCOM must match PCOM only, never adjacent FLAN/RIGID.
+    const samePhysicalFamily = type === 'PCOM'
+      ? siblingType === 'PCOM' : ['FLAN', 'RIGID'].includes(siblingType);
+    if (siblingRef !== ref || !samePhysicalFamily ||
+        xmlText(sibling, 'Endpoint') !== opposite) continue;
     const point = normalizePoint(xmlText(sibling, 'Position'));
     if (!point) continue;
     const span = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
@@ -566,7 +580,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
         : (xmlCiiNearestNumberedNodeDisplay(branchNodeList, nodeIdx)
           || xmlCiiWeightReviewNodeFallbackId(node, nodeIdx)
           || nodeNumber);
-      rows.push({ key: xmlCiiWeightReviewNodeOverrideKey(branchName, node, nodeIdx), branchName, lineKey: branchContext.lineKey, nodeNumber, nodeNumberDisplay, nodeName: xmlText(node, 'NodeName'), endpoint: xmlText(node, 'Endpoint'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), boreMm, rating, requestedPipingClass: branchContext.requestedPipingClass, resolvedPipingClass: branchContext.resolvedPipingClass, pipingClassMatchMethod: branchContext.pipingClassMatchMethod, pipingClassNeedsReview: branchContext.pipingClassNeedsReview, pipingClassCandidates: branchContext.pipingClassCandidates, lengthMm, elementLengthSource: physicalSpan !== null ? 'component-ref-endpoint-span' : (explicitLength !== null ? 'ElementLengthMm' : 'computed-forward'), weight: mappedWeight, originalWeight: weight, overrideWeight, weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'), mapped: isMapped, status: isMapped ? 'mapped' : 'unresolved', dtxr: dtxrText, dtxrSource: dtxrResult?.source || '', dtxrMatchedBy: dtxrResult?.matchedBy || '', dtxrMatchedKey: dtxrResult?.matchedKey || '', dtxrSourcePath, dtxrStagedType: dtxrResult?.stagedType || '', dtxrSuppressed: Boolean(dtxrResult?.suppressed), dtxrSuppressionReason: dtxrResult?.suppressionReason || '', ranking, nodeHint: ranking.nodeHint, candidates: ranking.candidates.slice(0, 5), rejectedCandidates: ranking.rejectedCandidates.slice(0, 3) });
+      rows.push({ key: xmlCiiWeightReviewNodeOverrideKey(branchName, node, nodeIdx), branchName, lineKey: branchContext.lineKey, nodeNumber, nodeNumberDisplay, nodeName: xmlText(node, 'NodeName'), endpoint: xmlText(node, 'Endpoint'), componentType, reviewCategory: xmlCiiWeightReviewCategory(componentType), componentRefNo: xmlText(node, 'ComponentRefNo'), boreMm, rating, requestedPipingClass: branchContext.requestedPipingClass, resolvedPipingClass: branchContext.resolvedPipingClass, pipingClassMatchMethod: branchContext.pipingClassMatchMethod, pipingClassNeedsReview: branchContext.pipingClassNeedsReview, pipingClassCandidates: branchContext.pipingClassCandidates, lengthMm, elementLengthSource: physicalSpan !== null ? 'component-ref-endpoint-span' : (explicitLength !== null ? 'ElementLengthMm' : 'computed-forward'), weight: mappedWeight, originalWeight: weight, overrideWeight, weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'), mapped: isMapped, status: isMapped ? 'mapped' : 'unresolved', dtxr: dtxrText, dtxrSource: dtxrResult?.source || '', dtxrMatchedBy: dtxrResult?.matchedBy || '', dtxrMatchedKey: dtxrResult?.matchedKey || '', dtxrSourcePath, dtxrStagedType: dtxrResult?.stagedType || '', dtxrSuppressed: Boolean(dtxrResult?.suppressed), dtxrSuppressionReason: dtxrResult?.suppressionReason || '', ranking, nodeHint: ranking.nodeHint, candidates: ranking.candidates.slice(0, 5), rejectedCandidates: ranking.rejectedCandidates.slice(0, 3) });
     });
   }
   return rows;

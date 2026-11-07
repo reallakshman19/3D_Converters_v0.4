@@ -66,6 +66,34 @@ function renderChecklist(parent, report) {
   panel.appendChild(table(['ID', 'Label', 'Status', 'Severity', 'Blocking', 'Message'], rows(report.checklistRows), 'No checklist rows yet.'));
 }
 
+function renderRigidMassAudit(parent,state) {
+  const audit=state?.result?.diagnostics?.rigidMassAudit;
+  if(!audit)return;
+  const panel=section(parent,'Rigid Mass Ownership — Independent CII Audit');
+  const status=String(audit.status||'NOT_RUN');
+  panel.appendChild(createElement('p',
+    'Status: '+status+' · Engineering mass verified: NO · CII release: '+
+      (state?.result?.ciiText?'SOURCE-PARITY-ONLY (NOT ENGINEERING APPROVED)':'HELD'),
+    'model-converters-workflow-detail-note'));
+  panel.appendChild(table(['ID','Value'],[
+    {id:'Element count',Value:audit.elementCount??'NOT_RUN'},
+    {id:'Rigid pointers audited',Value:audit.auditedRigidCount??'NOT_RUN'},
+    {id:'Flagged elements',Value:audit.summary?.flaggedElements??'NOT_RUN'},
+    {id:'Audit exception',Value:audit.errorCode||'none'},
+  ],'No independent mass audit evidence.'));
+  const flags=Array.isArray(audit.flags)?audit.flags:[];
+  if(flags.length) {
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Component','Reason'],
+      flags.slice(0,30).map(f=>({
+        Element:f.element,Nodes:f.from+' → '+f.to,'Rigid pointer':f.rigidPointer,
+        'Weight (N)':f.weightN,Component:f.physicalComponentRef||'UNRESOLVED',Reason:f.code,
+      })),'No flagged masses.'));
+    if(flags.length>30)panel.appendChild(createElement('p',
+      'Showing first 30 of '+flags.length+' flags. Download Diagnostics JSON for full evidence.',
+      'model-converters-workflow-detail-note'));
+  }
+}
+
 function renderArtifacts(parent, state, report) {
   const panel = section(parent, 'Output Artifacts / Downloads');
   panel.appendChild(table(['Kind', 'Artifact', 'Available', 'Filename', 'Bytes'], rows(report.artifactRows), 'No artifact rows yet.'));
@@ -277,6 +305,7 @@ export function renderStandaloneOutputRunPanel(card, stateOrRef, render) {
   card.append(title, desc);
   renderSummary(card, report);
   renderChecklist(card, report);
+  renderRigidMassAudit(card, state);
   renderReadinessCard(card, config);
   renderRunOptions(card, stateRef, state, render);
   renderRunControls(card, stateRef, state, report, render);

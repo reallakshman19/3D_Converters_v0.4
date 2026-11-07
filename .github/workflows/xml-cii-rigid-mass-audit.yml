@@ -1,0 +1,75 @@
+name: XML-CII rigid mass ownership audit
+on:
+  push:
+    branches:
+      - audit/xml-cii-rigid-api-weight-20261106
+  pull_request:
+    paths:
+      - 'converters/xml-cii2019-core/rigid-weight-empirical-audit.js'
+      - 'tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-output-run.js'
+      - 'tests/rigid-weight-empirical-audit.test.mjs'
+      - 'tests/rigid-weight-run-gate.integration.test.mjs'
+      - 'tests/xml-cii-preview-run-parity-closure.test.mjs'
+      - 'tests/fixtures/xml-cii-standalone/rigid-mass-browser-harness.html'
+      - 'scripts/verify-xml-cii-rigid-browser.mjs'
+      - 'scripts/verify-pcom-unknown-review-browser.mjs'
+      - 'converters/xml-cii2019-core/weight-match-model.js'
+      - '.github/workflows/xml-cii-rigid-mass-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-and-production-empirical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check module syntax
+        run: |
+          node --check converters/xml-cii2019-core/rigid-weight-empirical-audit.js
+          node --check tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js
+          node --check tests/rigid-weight-empirical-audit.test.mjs
+          node --check tests/rigid-weight-run-gate.integration.test.mjs
+          node --check scripts/verify-xml-cii-rigid-browser.mjs
+          node --check scripts/verify-pcom-unknown-review-browser.mjs
+          node --check converters/xml-cii2019-core/weight-match-model.js
+      - name: Test rigid ownership, release gate and the production empirical weight API
+        run: |
+          node tests/rigid-weight-empirical-audit.test.mjs
+          node tests/rigid-weight-run-gate.integration.test.mjs
+          node --test tests/xml-cii-preview-run-parity-closure.test.mjs
+
+      - name: Install Playwright Chromium for real DOM qualification
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start application static server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/xml-cii-rigid-server.log 2>&1 &
+          node -e "const u='http://127.0.0.1:4173'; let n=0; const p=async()=>{try{const r=await fetch(u); if(r.ok)return;}catch{}if(++n>60)process.exit(1);setTimeout(p,500)};p();"
+
+      - name: Chromium actual Output/Run service and panel custody
+        env:
+          XML_CII_BROWSER_BASE_URL: http://127.0.0.1:4173
+          XML_CII_BROWSER_ARTIFACT_DIR: artifacts/xml-cii-rigid-mass-browser
+        run: node scripts/verify-xml-cii-rigid-browser.mjs
+
+      - name: Chromium actual PCOM Unknown source-length review classification
+        run: node scripts/verify-pcom-unknown-review-browser.mjs
+
+      - name: Upload Chromium screenshot and qualification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xml-cii-rigid-browser-${{ github.sha }}
+          path: |
+            artifacts/xml-cii-rigid-mass-browser/**
+            /tmp/xml-cii-rigid-server.log
+          if-no-files-found: warn

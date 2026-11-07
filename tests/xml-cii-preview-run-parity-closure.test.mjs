@@ -76,7 +76,7 @@ test('workflow fails closed and never calls the engine when parity is unverified
   assert.equal(result.ciiText, null);
 });
 
-test('workflow sends the verified browser-enriched XML to the engine unchanged', async () => {
+test('workflow sends verified browser-enriched XML unchanged but withholds fabricated CII without mass audit', async () => {
   const verifiedXml = '<Root><Branch><Branchname>/LINE-A/B1</Branchname></Branch></Root>';
   const digest = digestXmlCiiParityText(verifiedXml);
   let engineCalls = 0;
@@ -122,8 +122,11 @@ test('workflow sends the verified browser-enriched XML to the engine unchanged',
   });
 
   assert.equal(engineCalls, 1);
-  assert.equal(result.ok, true);
-  assert.equal(result.ciiText, 'CII FROM VERIFIED XML');
+  assert.equal(result.ok, false);
+  assert.equal(result.ciiText, '');
+  assert.equal(result.error, 'RIGID_MASS_CONSERVATION_HOLD');
+  assert.equal(result.diagnostics.rigidMassAudit.status, 'NOT_RUN');
+  assert.equal(result.diagnostics.rigidMassEngineeringQualified, false);
   assert.equal(result.diagnostics.converterInputReleased, true);
   assert.equal(result.diagnostics.converterInputDigest, digest);
   assert.equal(result.diagnostics.runParityEvidence.ok, true);

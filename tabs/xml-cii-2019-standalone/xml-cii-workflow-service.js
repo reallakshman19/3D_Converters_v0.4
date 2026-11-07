@@ -3,6 +3,7 @@ import { runXmlCii2019StandaloneEngineJob } from './xml-cii-workflow-engine-clie
 import { createWorkflowDiagnostics, normalizeWorkflowResult } from './xml-cii-workflow-types.js';
 import { applyStandaloneSifFacts } from './xml-cii-standalone-sif-apply.js';
 import { enrichStandaloneXmlForRun } from './xml-cii-standalone-run-parity.js';
+import { auditRigidWeightFromXml, holdDuplicateRigidMassOutput } from '../../converters/xml-cii2019-core/rigid-weight-empirical-audit.js';
 
 function parseSupportConfig(raw) {
   try {
@@ -127,6 +128,44 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
     normalized.diagnostics.runParityEvidence = parity.evidence;
     normalized.diagnostics.converterInputReleased = true;
     normalized.diagnostics.converterInputDigest = parity.evidence.engineInputDigest;
+  }
+  // Independently inspect the ACTUAL emitted ELEMENTS/pointers/RIGID records.
+  // Empirical API estimates are advisory for recognized valve/flange families;
+  // they are never used to manufacture pipe/PCOM mass or change CII weights.
+  if (normalized.ok && ['cii-only', 'both'].includes(engineJob.options?.outputMode) &&
+      !normalized.ciiText) {
+    return holdDuplicateRigidMassOutput(normalized, {
+      schema: 'xml-cii2019-rigid-empirical-ownership-audit/v2',
+      status: 'NOT_RUN', massVerified: false, errorCode: 'CII_OUTPUT_MISSING',
+    });
+  }
+  if (normalized.ciiText) {
+    let audit;
+    try {
+      const config = parseSupportConfig(engineJob.supportConfigJson);
+      // Audit the exact native CII input, not an earlier XML when a reviewed
+      // TopoFix transaction changed the geometry. Missing transaction custody HOLDS.
+      const ciiSourceIsTopoFix = normalized.ciiInputSource === 'topofix';
+      if (ciiSourceIsTopoFix && (!normalized.topoFixCommitted || !normalized.topoFixXmlText))
+        throw new Error('RIGID_AUDIT_TOPOFIX_INPUT_MISSING');
+      const actualCiiInputXml = ciiSourceIsTopoFix
+        ? normalized.topoFixXmlText : engineJob.sourceText;
+      audit = auditRigidWeightFromXml({
+        ciiText: normalized.ciiText,
+        xmlText: actualCiiInputXml,
+        weightMasterRows: config?.weight?.masterRows,
+        kgToNewtonScale: engineJob.options?.kgToNewton === false ? 1 : 10,
+      });
+    } catch (error) {
+      audit = {
+        schema: 'xml-cii2019-rigid-empirical-ownership-audit/v2',
+        status: 'NOT_RUN',
+        massVerified: false,
+        authority: 'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
+        errorCode: String(error?.message || 'RIGID_MASS_AUDIT_UNAVAILABLE').split(':')[0],
+      };
+    }
+    return holdDuplicateRigidMassOutput(normalized, audit);
   }
   return normalized;
 }
