@@ -143,3 +143,68 @@ test('master changes during a different ranking miss cannot revive older result'
   assert.deepStrictEqual(after, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }));
   assert.equal(cache.stats.rankInvalidations, 1);
 });
+
+test('toJSON cannot hide a changed master weight from the cache signature', () => {
+  const config = { weight: { masterRows: masterRows() } };
+  // The config is not included in ranking outputs. Unlike a master-row
+  // serializer, this leaves cached results cloneable on the old candidate.
+  config.weight.toJSON = () => ({ fixed: 'misleading signature' });
+  const cache = createPreviewPerBuildCache();
+  const initial = cache.rankWeight(context, config, { includeRejected: true });
+  config.weight.masterRows[0].weight = 23;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  assert.notDeepStrictEqual(changed, initial);
+  assert.deepStrictEqual(
+    changed, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }),
+  );
+  assert.equal(cache.stats.rankHits, 0);
+});
+
+test('non-enumerable ranking inputs fail open rather than reusing stale results', () => {
+  const row = masterRows()[0];
+  Object.defineProperty(row, 'weight', {
+    value: 10, enumerable: false, writable: true, configurable: true,
+  });
+  const config = { weight: { masterRows: [row] } };
+  const cache = createPreviewPerBuildCache();
+  const initial = cache.rankWeight(context, config, { includeRejected: true });
+  row.weight = 29;
+  const changed = cache.rankWeight(context, config, { includeRejected: true });
+  assert.notDeepStrictEqual(changed, initial);
+  assert.deepStrictEqual(
+    changed, rankXmlCiiWeightCandidates(context, config, { includeRejected: true }),
+  );
+  assert.equal(cache.stats.rankHits, 0);
+});
+
+test('hidden or accessor-backed context fields fail open to fresh rankings', () => {
+  const config = { weight: { masterRows: masterRows() } };
+  const hidden = { ...context };
+  Object.defineProperty(hidden, 'boreMm', {
+    value: 50, enumerable: false, writable: true, configurable: true,
+  });
+  const hiddenCache = createPreviewPerBuildCache();
+  const before = hiddenCache.rankWeight(hidden, config, { includeRejected: true });
+  hidden.boreMm = 80;
+  const after = hiddenCache.rankWeight(hidden, config, { includeRejected: true });
+  assert.notDeepStrictEqual(after, before);
+  assert.deepStrictEqual(
+    after, rankXmlCiiWeightCandidates(hidden, config, { includeRejected: true }),
+  );
+  assert.equal(hiddenCache.stats.rankHits, 0);
+
+  let bore = 50;
+  const computed = { ...context };
+  Object.defineProperty(computed, 'boreMm', {
+    enumerable: true, configurable: true, get() { return bore; },
+  });
+  const getterCache = createPreviewPerBuildCache();
+  const first = getterCache.rankWeight(computed, config, { includeRejected: true });
+  bore = 80;
+  const second = getterCache.rankWeight(computed, config, { includeRejected: true });
+  assert.notDeepStrictEqual(second, first);
+  assert.deepStrictEqual(
+    second, rankXmlCiiWeightCandidates(computed, config, { includeRejected: true }),
+  );
+  assert.equal(getterCache.stats.rankHits, 0);
+});

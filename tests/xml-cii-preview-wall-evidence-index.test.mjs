@@ -88,3 +88,19 @@ test('Preview wall authority performs one staged indexing pass per invocation', 
   assert.match(source, /collectIndexedStagedBranchWallEvidence\(stagedEvidenceIndex, branchName\)/);
   assert.doesNotMatch(source, /collectStagedBranchWallEvidence\(stagedJsonText, branchName\)/);
 });
+
+test('a malformed unrelated owner does not poison the staged index', () => {
+  const stage = JSON.stringify([{
+    type: 'PIPE',
+    attributes: { OWNER: '/FOREIGN-2"/B1' },
+    name: { toString: null },
+  }]);
+  const index = indexStagedBranchWallEvidence(stage);
+  assert.deepStrictEqual(
+    collectIndexedStagedBranchWallEvidence(index, '/REQUESTED-2"/B1'), [],
+  );
+  assert.throws(
+    () => collectIndexedStagedBranchWallEvidence(index, '/FOREIGN-2"/B7'),
+    TypeError,
+  );
+});

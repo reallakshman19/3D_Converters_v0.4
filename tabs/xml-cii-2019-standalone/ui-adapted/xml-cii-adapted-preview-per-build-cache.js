@@ -9,32 +9,77 @@ import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core
 function primitiveSignature(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const parts = [];
-  for (const [key, item] of Object.entries(value)) {
-    const kind = item === null ? 'null' : typeof item;
-    if (!['null', 'undefined', 'string', 'boolean', 'number'].includes(kind)) return null;
-    const exact = kind === 'number'
-      ? (Object.is(item, -0) ? '-0' : Number.isNaN(item) ? 'NaN'
-        : item === Infinity ? '+Infinity' : item === -Infinity ? '-Infinity' : String(item))
-      : kind === 'null' || kind === 'undefined' ? '' : item;
-    parts.push([key, kind, exact]);
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string') return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      // No hidden, accessor-backed, or inherited field can be trusted as
+      // identical across calls: fail open to a fresh ranking calculation.
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null;
+      const item = descriptor.value;
+      const kind = item === null ? 'null' : typeof item;
+      if (!['null', 'undefined', 'string', 'boolean', 'number'].includes(kind)) return null;
+      const exact = kind === 'number'
+        ? (Object.is(item, -0) ? '-0' : Number.isNaN(item) ? 'NaN'
+          : item === Infinity ? '+Infinity' : item === -Infinity ? '-Infinity' : String(item))
+        : kind === 'null' || kind === 'undefined' ? '' : item;
+      parts.push([key, kind, exact]);
+    }
+    return JSON.stringify(parts);
+  } catch {
+    return null;
   }
-  return JSON.stringify(parts);
 }
 
 /**
- * Cache reuse requires unchanged JSON-like master content, not object identity
- * alone. Exotic graphs fail open to recalculation instead of guessing.
+ * Return an exact-content signature only for ordinary data records.
+ * JSON.stringify invokes toJSON before its replacer: a custom serializer
+ * can hide changes to fields that the ranking engine actually reads.
+ * Reject it, accessors and invisible properties; recompute instead.
  */
 function dataSignature(value) {
   if (!value || typeof value !== 'object') return null;
   const seen = new WeakSet();
+  let first = true;
   try {
-    return JSON.stringify(value, (_key, item) => {
+    // JSON.stringify calls the root serializer before the replacer.
+    if (typeof value.toJSON === 'function') return null;
+    return JSON.stringify(value, function exactDataSignature(key, item) {
+      if (first) {
+        first = false;
+      } else {
+        // Check the original descriptor: JSON.stringify invokes getters and
+        // nested toJSON methods before passing their substituted values here.
+        const descriptor = Object.getOwnPropertyDescriptor(this, key);
+        if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+          throw new Error('computed/invisible data');
+        }
+        const original = descriptor.value;
+        if (original && typeof original === 'object'
+          && typeof original.toJSON === 'function') throw new Error('custom serializer');
+      }
       if (item && typeof item === 'object') {
         if (seen.has(item)) throw new Error('shared/cyclic data');
         seen.add(item);
-        if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype
+        const isArray = Array.isArray(item);
+        if (!isArray && Object.getPrototypeOf(item) !== Object.prototype
           && Object.getPrototypeOf(item) !== null) throw new Error('non-plain data');
+        if (typeof item.toJSON === 'function') throw new Error('custom serializer');
+        // Check shape once per object, not one JS descriptor call per field:
+        // the replacer already performs descriptor checks for each value.
+        const visible = Object.keys(item);
+        const all = Reflect.ownKeys(item);
+        if (all.length !== visible.length + (isArray ? 1 : 0)) {
+          throw new Error('symbol/non-enumerable data');
+        }
+        if (isArray) {
+          if (visible.length !== item.length) throw new Error('sparse/extra array data');
+          for (let index = 0; index < visible.length; index++) {
+            if (visible[index] !== String(index)) throw new Error('non-index array key');
+          }
+        }
       } else if (['undefined', 'function', 'symbol', 'bigint'].includes(typeof item)
         || (typeof item === 'number' && !Number.isFinite(item))) {
         throw new Error('unsupported data');
