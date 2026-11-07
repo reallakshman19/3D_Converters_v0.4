@@ -133,17 +133,44 @@ test('missing selected reduced-bore reference must fail, not fall back to flange
   assert.equal(missing.code,'SELECTED_REFERENCE_NOT_QUALIFIED');
   assert.equal(missing.selector,'REDUCED_BORE_BALL_VALVE_REFERENCE');
 });
-test('same DN duplicates use median as existing empirical master catalog policy',()=>{
+test('conflicting duplicated master cells HOLD instead of inventing exact master',()=>{
   const s=createUnknownComponentLengthWeightSuggester({masterRows:[
     {TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:108,'RF/RTJ KG':14},
     {TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:110,'RF/RTJ KG':16},
   ]}).suggest;
-  const r=s({componentLengthMm:109,boreMm:50,rating:900});
-  assert.equal(r.reference.weightKg,15);
-  assert.equal(r.reference.lengthMm,109);
-  assert.equal(r.reference.anchors[0].duplicateRows,2);
-  assert.equal(r.suggestedKg,15);
+  const r=s({componentLengthMm:115,boreMm:50,rating:900});
+  assert.equal(r.ok,false);
+  assert.equal(r.code,'CONFLICTING_MASTER_CELL');
+  assert.equal(r.flange.status,'CONFLICTING_MASTER_CELL');
+  assert.equal(r.flange.anchors[0].duplicateRows,2);
+  assert.equal(r.flange.anchors[0].originals.length,2);
+  assert.equal(r.acceptedForCii,false);
 });
+test('identical duplicate source cells still identify one exact original master',()=>{
+  const rows=Array.from({length:2},()=>({
+    TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:109,'RF/RTJ KG':15
+  }));
+  const r=createUnknownComponentLengthWeightSuggester({masterRows:rows}).suggest({
+    componentLengthMm:115,boreMm:50,rating:900
+  });
+  assert.equal(r.ok,true);
+  assert.equal(r.suggestedKg,15);
+  assert.equal(r.reference.status,'EXACT_MASTER');
+  assert.equal(r.reference.anchors[0].duplicateRows,2);
+});
+test('BW target-specific face-to-face length outranks generic RF length',()=>{
+  const s=createUnknownComponentLengthWeightSuggester({masterRows:[{
+    TypeDesc:'Weldneck Flange',DN:50,Rating:900,length:109,
+    'RF-F/F':109,'BW-F/F':160,'RF/RTJ KG':15,'BW KG':20
+  }]}).suggest;
+  const r=s({componentLengthMm:100,boreMm:50,rating:900,target:'BW KG'});
+  assert.equal(r.ok,true);
+  assert.equal(r.referenceLengthMm,160);
+  assert.equal(r.referenceWeightKg,20);
+  assert.equal(r.suggestedKg,12.5);
+});
+
+
 test('no scenario authorizes automatic CII or XML source mass mutation',()=>{
   const s=createUnknownComponentLengthWeightSuggester().suggest;
   for(const L of [12.7,19.1,109,114.9,115.1,368,371.2,1000]){
