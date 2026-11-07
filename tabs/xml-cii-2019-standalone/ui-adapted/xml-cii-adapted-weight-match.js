@@ -122,6 +122,12 @@ function methodLabel(candidate) {
 }
 
 function renderAcceptedChip(candidate, rowIndex, issue) {
+  if (candidate?.inferredWeight || candidate?.fallbackSuggestion ||
+      candidate?.massAuthority === 'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS' ||
+      candidate?.acceptedForCii === false) {
+    const amount = selectedWeight(candidate);
+    return `<span data-advisory-weight="true" title="Estimate only; cannot be applied as approved component mass" style="font-size:11px;padding:3px 6px;border:1px solid #a78bfa;border-radius:999px;">≈ ${esc(amount)}kg · advisory only</span>`;
+  }
   const value = selectedWeight(candidate);
   const label = desc(candidate);
   const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`, candidate?.weightWarning || ''].filter(Boolean).join(' | ');
@@ -455,7 +461,7 @@ function bindAdaptedWeightMatchPanel(detailEl, stateRef, render) {
     let count = 0;
     contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => {
       const best = localIssues[index]?.candidates?.[0];
-      if (!best || Number(selectedWeight(best)) <= 0 || best.zeroFallback) return;
+      if (!best || best.preferred !== true || best.massAuthority !== 'APPROVED_SOURCE_MASS' || best.inferredWeight || best.fallbackSuggestion || best.flangeWeightFallback || best.zeroFallback || Number(selectedWeight(best)) <= 0) return;
       input.value = String(selectedWeight(best));
       saveInput(input);
       count += 1;
