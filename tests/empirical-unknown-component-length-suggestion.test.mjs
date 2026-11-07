@@ -171,6 +171,33 @@ test('BW target-specific face-to-face length outranks generic RF length',()=>{
 });
 
 
+test('actual imported master row shape (_raw and Type codes) preserves flange +6mm and reduced-bore selection',()=>{
+  const rows=[
+    {_sourceRowIndex:252,bore:'50',rating:'900',length:'109',valveType:'Flg',weight:'15',
+      _raw:{Type:'Flg',DN:'50',Rating:'900',TypeDesc:'Weldneck Flange',
+        'RF-F/F':'109','RF/RTJ KG':'15','BW-F/F':'0','BW KG':'0'}},
+    {_sourceRowIndex:974,bore:'50',rating:'900',length:'368',valveType:'VLV3',weight:'47',
+      _raw:{Type:'VLV3',DN:'50',Rating:'900',TypeDesc:'Flanged Ball Valve-Reduced Bore',
+        'RF-F/F':'368','RF/RTJ KG':'47','BW-F/F':'368','BW KG':'28'}},
+  ];
+  const suggest=createUnknownComponentLengthWeightSuggester({masterRows:rows}).suggest;
+  const flange=suggest({componentLengthMm:115,boreMm:50,rating:900});
+  assert.equal(flange.ok,true,JSON.stringify(flange));
+  assert.equal(flange.referenceFamily,'Weldneck Flange');
+  assert.equal(flange.suggestedKg,15);
+  assert.equal(flange.method,'FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE');
+  assert.equal(flange.engineeringMassApproved,false);
+  const valve=suggest({componentLengthMm:371.2,boreMm:50,rating:900});
+  assert.equal(valve.ok,true,JSON.stringify(valve));
+  assert.equal(valve.referenceFamily,'Flanged Ball Valve-Reduced Bore');
+  assert.equal(valve.suggestedKg,47.409);
+  assert.equal(valve.acceptedForCii,false);
+  assert.equal(suggest({componentLengthMm:115,boreMm:50,rating:150}).ok,false,
+    'wrong rating cannot be borrowed');
+  assert.equal(suggest({componentLengthMm:115,boreMm:50,rating:900,target:'BW KG'}).ok,false,
+    'BW target with explicit zero BW flange face length must not borrow 109mm RF geometry');
+});
+
 test('no scenario authorizes automatic CII or XML source mass mutation',()=>{
   const s=createUnknownComponentLengthWeightSuggester().suggest;
   for(const L of [12.7,19.1,109,114.9,115.1,368,371.2,1000]){
