@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-bulk-review-gate-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-weights-pyodide-fix-1';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
