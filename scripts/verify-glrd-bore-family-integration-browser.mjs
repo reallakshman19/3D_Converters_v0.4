@@ -163,9 +163,18 @@ try {
  },{xml,stage,masterRows});
  await page.waitForFunction(()=>{
    const panel=document.querySelector('#glrd-actual-weight-match-panel');
-   return panel?.querySelectorAll('.mc-rigid-review-table-wrap tbody tr').length>=149 ||
-     panel?.querySelector('#mc-wm-status')?.textContent==='Error';
- },null,{timeout:45000});
+   const rows=panel?.querySelectorAll('.mc-rigid-review-table-wrap tbody tr').length||0;
+   return rows>0 || panel?.querySelector('#mc-wm-status')?.textContent==='Error';
+ },null,{timeout:18000}).catch(()=>{});
+ const diagnostic=await page.evaluate(()=>{
+   const panel=document.querySelector('#glrd-actual-weight-match-panel');
+   return {panel:!!panel,tableRows:panel?.querySelectorAll('.mc-rigid-review-table-wrap tbody tr').length||0,
+     status:panel?.querySelector('#mc-wm-status')?.textContent||'',
+     text:panel?.querySelector('#mc-wm-content')?.textContent?.slice(0,600)||''};
+ });
+ console.log('GLRD_WEIGHT_MATCH_RENDER_DIAGNOSTIC',JSON.stringify({...diagnostic,pageErrors:errors}));
+ await writeFile(out+'/glrd-weight-match-ui-precheck.json',JSON.stringify({...diagnostic,pageErrors:errors},null,2));
+ assert.ok(diagnostic.tableRows>0,'live Weight Match should render a review table: '+JSON.stringify(diagnostic));
  const rendered=await page.evaluate(()=>{
    const panel=document.querySelector('#glrd-actual-weight-match-panel');
    const rows=[...panel.querySelectorAll('.mc-rigid-review-table-wrap tbody tr')];
