@@ -90,7 +90,8 @@ try {
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114,
    'unreviewed 109 estimates must refuse publication even after zero skip');
  assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/review 109/i);
- await page.locator('[data-mode-a-rigid-show-missing]').click();
+ if((await page.locator('[data-mode-a-rigid-show-missing]').innerText()).startsWith('Show all'))
+   await page.locator('[data-mode-a-rigid-show-missing]').click();
  const alternativeSelectors=await page.locator('[data-mode-a-rigid-choice]').count();
  if(alternativeSelectors){
    const choice=page.locator('[data-mode-a-rigid-choice]').first();
