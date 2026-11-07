@@ -1,4 +1,5 @@
 import { applyXmlCiiRigidWeightOverrides } from './weight-match-model.js';
+import { isApprovedPhysicalMassCandidate } from './physical-mass-approval.js';
 
 function text(value) { return value === undefined || value === null ? '' : String(value).trim(); }
 function numberValue(value) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : null; }
@@ -6,20 +7,12 @@ function selectedWeight(candidate = {}) { return numberValue(candidate?.selected
 function bestCandidate(issue = {}) { return issue?.ranking?.best || (Array.isArray(issue?.candidates) ? issue.candidates[0] : null) || null; }
 function candidateMethod(candidate = {}) { return text(candidate.weightMethod || candidate.method || candidate.semanticReason || candidate.typeDesc); }
 function autoApplyReason(issue = {}, candidate = null) {
-  // Source approval is separate from displaying an empirical suggestion.
-  // Never promote inferred, interpolated or fallback mass via a "preferred"
-  // flag, a label or an issue-level flangeWeightFallback flag.
-  if (!candidate || issue?.massAuthority !== 'APPROVED_SOURCE_MASS' ||
-      candidate?.massAuthority !== 'APPROVED_SOURCE_MASS' ||
+  // A source-mass authority record is required independently of a ranked
+  // candidate, and all candidate writers share the same predicate.
+  if (issue?.massAuthority !== 'APPROVED_SOURCE_MASS' ||
       candidate?.preferred !== true ||
-      candidate?.inferredWeight === true ||
-      candidate?.fallbackSuggestion === true ||
-      candidate?.flangeWeightFallback === true ||
-      candidate?.zeroFallback === true ||
-      candidate?.acceptedForCii === false ||
-      candidate?.engineeringMassApproved === false) return '';
-  const weight = selectedWeight(candidate);
-  if (weight === null || weight <= 0) return '';
+      !isApprovedPhysicalMassCandidate(candidate, selectedWeight(candidate)))
+    return '';
   return 'approved-source-mass';
 }
 
