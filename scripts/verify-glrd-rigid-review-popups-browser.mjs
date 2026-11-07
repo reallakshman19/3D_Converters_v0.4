@@ -29,7 +29,7 @@ try{
  page.on('pageerror',e=>errors.push(String(e)));
  await page.goto(base+'/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
  const facts=await page.evaluate(async ({xml,stage,masterRows})=>{
-   const {collectXmlCiiZeroRigidWeightIssues}=await import('/converters/xml-cii2019-core/weight-match-model.js');
+   const {collectModeARigidWeightReviewIssues}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
    const {rankXmlCiiWeightCandidates}=await import('/converters/xml-cii2019-core/weight-valve-hints.js');
    const {applyXmlCiiFlangeWeightFallbackToIssue}=await import('/converters/xml-cii2019-core/flange-weight-fallback.js');
    const {proposedRigidReviewWeight}=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-prefill.js');
@@ -47,8 +47,11 @@ try{
      ratingByBranch[branchName]=classRating[cl];
    }
    const config={weight:{masterRows},overrides:{rating:ratingByBranch}};
-   const issues=collectXmlCiiZeroRigidWeightIssues(xml,stage,config);
+   const sourceState={sourceText:xml,stagedJsonText:stage};
+   const issues=await collectModeARigidWeightReviewIssues(sourceState,config);
    window.__glrdAllIssues=issues;
+   window.__glrdConfig=config;
+   window.__glrdSourceState=sourceState;
    const selected=issues.find(x=>String(x.nodeNumber)==='60' && /\/B2$/.test(String(x.branchName)))
       || issues.find(x=>String(x.nodeNumber)==='60');
    if(!selected)throw Error('GLRD source endpoint node 60 not classified in collector');
@@ -65,8 +68,20 @@ try{
       lengthProvenance:selected.elementLengthSource,bore:selected.boreMm,rating:900,
       candidateKg:prop?.weight??null,candidateFamily:prop?.reference??null,approved:prop?.approved??null,
       typeCounts:issues.reduce((a,i)=>(a[i.componentType]=(a[i.componentType]||0)+1,a),{}),
-      classRatings:classRating,qualifiedDrafts:issues.filter(i=>
-        proposedRigidReviewWeight(applyXmlCiiFlangeWeightFallbackToIssue(i,config))).length};
+      classRatings:classRating,
+      qualifiedDrafts:issues.filter(i=>proposedRigidReviewWeight(i)).length,
+      proposalByType:issues.reduce((m,i)=>{
+        const type=i.reviewCategory||i.componentType||'OTHER';
+        const key=type+':'+(proposedRigidReviewWeight(i)?'DRAFT':'NO_DRAFT');
+        m[key]=(m[key]||0)+1;return m;
+      },{}),
+      noDraftReasons:issues.filter(i=>!proposedRigidReviewWeight(i)).reduce((m,i)=>{
+        const reason=!i.rating?'NO_RATING'
+          :(i.unknownComponentSuggestion&&!i.unknownComponentSuggestion.ok?'UNKNOWN_HOLD_'+i.unknownComponentSuggestion.code
+            :i.elementLengthSource==='computed-forward'?'UNTRUSTED_ROUTE_LENGTH'
+              :'NO_QUALIFIED_SAME_FAMILY_CANDIDATE');
+        m[reason]=(m[reason]||0)+1;return m;
+      },{})};
  },{xml:files.xml.toString('utf8'),stage:files.stage.toString('utf8'),masterRows});
  receipt.census=facts;
  assert.equal(facts.branches,31);
@@ -78,13 +93,19 @@ try{
  await page.evaluate(async()=>{
    const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
    window.__glrdFullPromise=m.openModeAConsolidatedRigidWeightReviewPopup([
-     {sourceId:'BM2-SOURCE',fileName:'GLRD-1000-PI-01 - BM2.xml',issues:window.__glrdAllIssues}
+     {sourceId:'BM2-SOURCE',fileName:'GLRD-1000-PI-01 - BM2.xml',
+      state:window.__glrdSourceState,config:window.__glrdConfig,issues:window.__glrdAllIssues}
    ]);
  });
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),facts.reviewIssues);
  await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
  const fullPrefilled=await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft]').count();
  assert.ok(fullPrefilled>0,'uploaded GLRD must provide qualified drafts after class Rating restoration');
+ assert.equal(fullPrefilled,facts.qualifiedDrafts,'bulk drafts must match pure source-proposal policy');
+ await page.locator('[data-mode-a-rigid-apply]').click();
+ assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),facts.reviewIssues,
+   'unreviewed full-queue Apply must not close or mutate the batch');
+ assert.match(await page.locator('[data-mode-a-rigid-status]').innerText(),/missing|review/i);
  await page.screenshot({path:resolve(out,'glrd-full-consolidated-draft.png')});
  await page.locator('[data-mode-a-rigid-cancel]').click();
  assert.equal((await page.evaluate(async()=>await window.__glrdFullPromise)).cancelled,true);
