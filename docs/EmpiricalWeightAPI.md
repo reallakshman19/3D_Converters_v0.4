@@ -128,6 +128,65 @@ gate. Default production routing remains
 exact → A2 matrix → A1 equation (unchanged). This feature must be qualified
 before opt-in routing is promoted for production.
 
+## Unknown component physical-length suggestion (review only)
+
+For an **unknown or unresolved physical component**, the user-defined 6 mm
+selector chooses a reference master family at the **same bore DN and pressure
+rating**:
+
+1. Resolve the **Weldneck Flange** reference length and weight (exact master
+   DN or two-sided nearest DN bracketing).
+2. If physical component length is strictly **less** than flange reference
+   length + **6 mm**, select the **Weldneck Flange** reference.
+3. If strictly **greater**, select the **Flanged Ball Valve-Reduced Bore**
+   reference at the same bore DN/rating.
+4. Exact equality is `LENGTH_AT_DECISION_BOUNDARY` / **HOLD** (neither
+   strict rule applies). Missing same-class reference anchors are also HOLD.
+
+When no exact requested DN master row exists, the engine linearly interpolates
+**reference length and reference weight separately** between the nearest
+smaller/larger DN rows of that selected family and rating. It never borrows
+another family, target or rating, or uses one-sided extrapolation.
+
+The suggested weight then uses a **length-proportional heuristic**:
+
+```text
+suggestedKg = selectedReferenceKg * physicalComponentLengthMm
+                                    / selectedReferenceLengthMm
+```
+
+The DN interpolation is a genuine two-anchor interpolation; length-proportional
+scaling is a heuristic, not a validated component-mass model, and may be
+one-sided extrapolation beyond the reference length. Both calculations and
+their original anchors are disclosed.
+
+```js
+import { suggestUnknownComponentLengthWeight } from './converters/empirical-weight/index.js';
+const result = suggestUnknownComponentLengthWeight({
+  componentLengthMm: 19.1, boreMm: 50, rating: 900, target: 'RF/RTJ KG',
+});
+// built-in reference flange: 109 mm, 15 kg; 109+6=115 mm.
+// advisory suggestedKg: 2.628 kg, not 15 kg.
+// For 371.2 mm, reduced-bore ball valve: 368 mm / 47 kg,
+// advisory suggestedKg: 47.409 kg.
+```
+
+The Empirical Weight Tuning **Sandbox** has separate unknown-component
+length/bore/rating inputs and shows the selected reference and anchors.
+Unresolved Weight Match rows with a physical same-component endpoint span
+or explicit `ElementLengthMm` show a **non-clickable advisory** in addition
+to their existing candidate list. Computed-forward CII gap/route lengths are
+not trusted as physical component lengths for these suggestions.
+
+**No release authority:** An unknown component's source mass and whether a
+connection has physical pipe, gasket or empty-gap material are not established
+by the reference family selected. A `PCOM` must never be reclassified as a
+flange or valve. Suggestions do not write `Weight`, CII `RIGID`, overrides,
+or bulk preferred candidates; the existing Native Final mass-conservation
+and PR #5/#6 safety controls remain independent. The 19.1 mm CII connection
+length may differ from its actual 12.7 mm PCOM physical span: use the **real
+component length**, not the CII element length, when requesting a suggestion.
+
 ## Extrapolation
 
 The default production call does not extrapolate outside the validated Approach 1 size range. A caller must opt in:
