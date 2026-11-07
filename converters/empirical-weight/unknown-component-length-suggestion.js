@@ -4,6 +4,8 @@
  *
  * Frozen user rule: L < (weldneck flange length + 6 mm) selects weldneck
  * flange; L > threshold selects Flanged Ball Valve-Reduced Bore.
+ * At L == flange length + 6mm, use the exact flange master weight AS-IS;
+ * no physical-length scaling and no DN interpolation at this boundary.
  * Exact equality is intentionally unresolved. Component length is its
  * physical component span, NOT an incoming CII element/gap length.
  *
@@ -117,24 +119,32 @@ export function createUnknownComponentLengthWeightSuggester({
       'No exact or two-sided interpolated Weldneck Flange length/weight reference for this bore, class and target.',
       {boreMm:bore,rating:pressure,target:resolvedTarget});
     const thresholdMm=flange.lengthMm+toleranceMm;
-    if(Math.abs(length-thresholdMm)<=1e-7)
-      return refusal('LENGTH_AT_DECISION_BOUNDARY',
-        'Length exactly equals flange reference length + 6 mm; neither strict user rule applies.',
+    const atFlangeToleranceBoundary=Math.abs(length-thresholdMm)<=1e-7;
+    if(atFlangeToleranceBoundary&&flange.status!=='EXACT_MASTER')
+      return refusal('EXACT_FLANGE_MASTER_REQUIRED_AT_TOLERANCE',
+        'At flange length + 6 mm, use the same-bore/rating flange master weight as-is. No DN interpolation at the boundary.',
         {componentLengthMm:length,boreMm:bore,rating:pressure,flange,thresholdMm,toleranceMm});
-    const selector=length<thresholdMm?'FLANGE_REFERENCE':'REDUCED_BORE_BALL_VALVE_REFERENCE';
+    const selector=length<thresholdMm||atFlangeToleranceBoundary
+      ?'FLANGE_REFERENCE':'REDUCED_BORE_BALL_VALVE_REFERENCE';
     const reference=selector==='FLANGE_REFERENCE'?flange:
       lookup(UNKNOWN_COMPONENT_REFERENCE_VALVE,pressure,resolvedTarget,bore);
     if(!reference)return refusal('SELECTED_REFERENCE_NOT_QUALIFIED',
       'Selected component family has no same-rating/target exact or two-sided DN-interpolated reference.',
       {componentLengthMm:length,boreMm:bore,rating:pressure,target:resolvedTarget,
         selector,flange,thresholdMm});
-    const lengthRatio=length/reference.lengthMm;
+    // User tolerance: at EXACT flange length + 6 mm the flange weight is
+    // a direct master suggestion; do not scale mass by 115/109.
+    const lengthRatio=atFlangeToleranceBoundary?1:length/reference.lengthMm;
     const suggestedKg=reference.weightKg*lengthRatio;
     if(!Number.isFinite(suggestedKg)||suggestedKg<=0)
       return refusal('UNKNOWN_COMPONENT_SUGGESTION_INVALID','Invalid positive suggested weight.');
     return {
       ok:true,kind:'UNKNOWN_COMPONENT_MASS_SUGGESTION',
-      status:'ADVISORY_NOT_APPLIED',method:'REFERENCE_LENGTH_PROPORTIONAL_HEURISTIC',
+      status:'ADVISORY_NOT_APPLIED',
+      method:atFlangeToleranceBoundary
+        ?'FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE'
+        :'REFERENCE_LENGTH_PROPORTIONAL_HEURISTIC',
+      atFlangeToleranceBoundary,
       selector,referenceFamily:reference.family,
       componentRefNo,componentLengthMm:length,boreMm:bore,rating:pressure,
       target:resolvedTarget,toleranceMm,thresholdMm,flange,
@@ -142,12 +152,15 @@ export function createUnknownComponentLengthWeightSuggester({
       referenceWeightKg:reference.weightKg,lengthRatio,
       suggestedKg:Math.round(suggestedKg*1000)/1000,
       suggestedKgUnrounded:suggestedKg,
-      isExtrapolatedBeyondReferenceLength:length>reference.lengthMm,
-      confidence:'LOW_HEURISTIC',engineeringMassApproved:false,acceptedForCii:false,
+      isExtrapolatedBeyondReferenceLength:!atFlangeToleranceBoundary&&length>reference.lengthMm,
+      confidence:atFlangeToleranceBoundary?'EXACT_FLANGE_MASTER_TOLERANCE':'LOW_HEURISTIC',
+      engineeringMassApproved:false,acceptedForCii:false,
       massAuthority:'ESTIMATE_ONLY_NOT_APPROVED_COMPONENT_MASS',
-      reason:selector==='FLANGE_REFERENCE'
-        ? 'Physical length is shorter than flange master length + 6 mm.'
-        : 'Physical length is longer than flange master length + 6 mm.',
+      reason:atFlangeToleranceBoundary
+        ? 'Physical length equals flange master length + 6 mm: use original flange master weight without scaling.'
+        : selector==='FLANGE_REFERENCE'
+          ? 'Physical length is shorter than flange master length + 6 mm.'
+          : 'Physical length is longer than flange master length + 6 mm.',
     };
   }
   return Object.freeze({suggest});
