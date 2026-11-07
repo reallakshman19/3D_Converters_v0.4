@@ -138,6 +138,21 @@ function compactWeightRow(source, row) {
     bestWeight: candidateWeight(best),
     bestScore: candidateScore(best),
     bestDescription: candidateDescription(best),
+    // Preserve candidate source-mass provenance: score/description are not approval.
+    bestCandidate: best ? {
+      selectedWeight: candidateWeight(best),
+      massAuthority: best.massAuthority || '',
+      engineeringMassApproved: best.engineeringMassApproved === true,
+      acceptedForCii: best.acceptedForCii === true,
+      preferred: best.preferred === true,
+      inferredWeight: best.inferredWeight === true,
+      fallbackSuggestion: best.fallbackSuggestion === true,
+      flangeWeightFallback: best.flangeWeightFallback === true,
+      zeroFallback: best.zeroFallback === true,
+      specialFactorRule: best.specialFactorRule === true,
+      weightMethod: best.weightMethod || '',
+      sourceRef: best.sourceRef || null,
+    } : null,
     candidateCount: Array.isArray(row?.candidates) ? row.candidates.length : 0,
   };
 }
