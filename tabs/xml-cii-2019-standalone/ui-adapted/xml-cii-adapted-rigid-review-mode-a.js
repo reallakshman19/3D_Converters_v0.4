@@ -196,6 +196,19 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       filter();
     };
     bindCandidateButtons(overlay, rows);
+    overlay.addEventListener('input', event=>{
+      if(event.target?.matches?.('.mc-rigid-review-input')) clearRigidReviewProposal(event.target);
+    });
+    overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
+      let filled=0,skipped=0;
+      rows.forEach((row,index)=>{
+        const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+        const proposal=proposedRigidReviewWeight(row);
+        if(!input || !proposal || (input.value && !input.dataset.rigidSuggestionDraft)) {skipped++;return;}
+        if(stageRigidReviewProposal(input,proposal))filled++; else skipped++;
+      });
+      setStatus(`Prefilled ${filled} review draft(s); ${skipped} unavailable or entered manually. Verify each estimated mass before Apply.`,filled===0);
+    });
     search?.addEventListener('input', filter);
     source?.addEventListener('change', filter);
 
@@ -206,7 +219,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         const value = Number(best?.suggestedWeight ?? best?.selectedWeight ?? best?.weight);
         if (!best?.preferred || !isApprovedPhysicalMassCandidate(best, value)) return;
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
-        if (input) { input.value = String(value); count += 1; }
+        if (input && stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
       });
       setStatus(`Filled ${count} preferred exact suggestion(s). Review remaining rows manually.`, false);
     });
@@ -244,7 +257,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
 
     overlay.querySelector('[data-mode-a-rigid-apply]')?.addEventListener('click', () => {
       const updates = {};
-      const missing = [];
+      const missing = [], unreviewed = [];
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
@@ -252,6 +265,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         if (!Number.isFinite(numeric) || numeric <= 0) {
           missing.push(`${sourceId}:${key}`);
           input.style.borderColor = '#ef4444';
+          return;
+        }
+        if(rigidReviewProposalNeedsVerification(input)){
+          unreviewed.push(`${sourceId}:${key}`);
+          input.style.borderColor='#d9a441';
           return;
         }
         input.style.borderColor = '#31455f';
@@ -265,8 +283,8 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].ratingsByKey[key] = text(input.value);
       });
-      if (missing.length) {
-        setStatus(`Enter a positive weight for all ${missing.length} remaining row(s), or cancel the batch run.`, true);
+      if(missing.length || unreviewed.length){
+        setStatus(`${missing.length} missing mass(es); ${unreviewed.length} unreviewed suggestion draft(s). No updates applied. Verify each estimated mass or enter approved source weight.`,true);
         return;
       }
       overlay.remove();
