@@ -183,7 +183,7 @@ try {
    const byRef=ref=>rows.find(tr=>tr.querySelectorAll('td')[7]?.textContent?.includes('/'+ref+'_2'));
    const read=ref=>{
      const tr=byRef(ref),td=tr?[...tr.querySelectorAll('td')]:[];
-     return {ref,present:!!tr,bore:td[4]?.textContent?.trim()||'',
+     return {ref,present:!!tr,status:td[0]?.textContent?.trim()||'',bore:td[4]?.textContent?.trim()||'',
        boreEvidence:td[4]?.title||'',rating:td[5]?.textContent?.trim()||'',
        suggestion:td[12]?.textContent?.trim()||'',
        candidateButtons:td[12]?.querySelectorAll('[data-wm-candidate]').length||0,
@@ -195,6 +195,8 @@ try {
  });
  console.log('GLRD_ACTUAL_WEIGHT_MATCH_UI',JSON.stringify(rendered));
  assert.equal(rendered.rows,149,'real Weight Match must include original 135 components plus 14 PCOM');
+ assert.match(rendered.summary,/0 unresolved/,'rows with advisory candidates are not unresolved');
+ assert.ok(rendered.targetRefs.every(r=>r.status!=='Unresolved'),'display valid proposals as Review candidate');
  for(const ref of ['8045','8050','8014']){
    const row=rendered.targetRefs.find(x=>x.ref===ref);
    assert.equal(row.bore,'150 mm *',ref+' displayed corrected source DN');
