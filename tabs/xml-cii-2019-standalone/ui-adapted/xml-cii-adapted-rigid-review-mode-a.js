@@ -152,16 +152,20 @@ function popupMarkup(rows, entries) {
 
 function collectCurrentValues(overlay) {
   const weights = new Map();
+  const skips = new Set();
   const ratings = new Map();
   overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
     const numeric = Number(input.value);
-    if (Number.isFinite(numeric) && numeric > 0 && input.dataset.rigidSuggestionDraft !== 'estimate')
+    if(input.dataset.rigidSkippedZero === 'true' && input.value === '0')
+      skips.add(input.dataset.reviewId || '');
+    if (input.value !== '' && Number.isFinite(numeric) && numeric > 0 &&
+        input.dataset.rigidSuggestionDraft !== 'estimate')
       weights.set(input.dataset.reviewId || '', numeric);
   });
   overlay.querySelectorAll('.mc-rigid-review-rating-input').forEach((input) => {
     if (text(input.value)) ratings.set(input.dataset.reviewId || '', text(input.value));
   });
-  return { weights, ratings };
+  return { weights, skips, ratings };
 }
 
 function bindCandidateButtons(overlay, rows) {
@@ -172,6 +176,18 @@ function bindCandidateButtons(overlay, rows) {
     if(input && button.dataset.modeARigidApproved==='true' &&
        Number.isFinite(weight) && weight>0)
       stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
+  }));
+  overlay.querySelectorAll('[data-mode-a-rigid-choice]').forEach(select=>select.addEventListener('change',()=>{
+    const index=Number(select.dataset.modeARigidChoice);
+    const choice=availableWeightReviewChoices(rows[index])[Number(select.value)];
+    const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+    if(!input || !choice || !Number.isFinite(choice.weight) || choice.weight<=0)return;
+    delete input.dataset.rigidSkippedZero;
+    stageRigidReviewProposal(input,{
+      weight:choice.weight,approved:choice.approved&&!choice.rejected,
+      reference:weightReviewChoiceLabel(choice),
+    });
+    input.dataset.rigidChoiceIndex=select.value;
   }));
   overlay.querySelectorAll('[data-mode-a-rigid-propose]').forEach(button=>button.addEventListener('click',()=>{
     const index=Number(button.dataset.modeARigidPropose);
@@ -194,28 +210,91 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
     const summary = overlay.querySelector('[data-mode-a-rigid-summary]');
     const search = overlay.querySelector('[data-mode-a-rigid-search]');
     const source = overlay.querySelector('[data-mode-a-rigid-source]');
+    const missingButton=overlay.querySelector('[data-mode-a-rigid-show-missing]');
+    const missingList=overlay.querySelector('[data-mode-a-rigid-missing-list]');
+    let missingOnly=false;
     const initialRatings = new Map([...overlay.querySelectorAll('.mc-rigid-review-rating-input')]
       .map(input=>[input.dataset.reviewId||'',text(input.value)]));
     const setStatus = (message, bad = false) => { if (status) { status.textContent = message; status.style.color = bad ? '#ef4444' : '#10b981'; } };
+    const missingRows=()=>[...overlay.querySelectorAll('[data-mode-a-rigid-review-row]')].filter(tr=>{
+      const input=tr.querySelector('.mc-rigid-review-input');
+      const weight=input?.value === '' ? null : Number(input?.value);
+      return !(Number.isFinite(weight) && weight>0) &&
+        !(input?.dataset.rigidSkippedZero==='true' && input?.value==='0');
+    });
+    const refreshMissingList=()=>{
+      const missing=missingRows();
+      if(missingButton)missingButton.textContent=(missingOnly?'Show all':'Show missing')+' ('+missing.length+')';
+      if(missingList){
+        missingList.style.display=missing.length?'block':'none';
+        missingList.textContent=missing.length
+          ? 'Missing '+missing.length+' physical weights (click Show missing to isolate).\n'+
+            missing.map((tr,index)=>{
+              const issue=rows.find(row=>row.reviewId===tr.dataset.reviewId);
+              return (index+1)+'. '+(issue?.fileName||issue?.sourceId||'XML')+
+                ' | '+(issue?.branchName||'-')+
+                ' | node '+(issue?.nodeNumberDisplay||issue?.nodeNumber||'-')+
+                ' | ref '+(issue?.componentRefNo||'missing source ref')+
+                '_'+(issue?.endpoint||'?')+
+                ' | '+(issue?.dtxr||'DTXR unavailable');
+            }).join('\n')
+          : '';
+      }
+      return missing;
+    };
     const filter = () => {
       const q = text(search?.value).toLowerCase();
       const sourceId = source?.value || '';
+      const missingSet=new Set(missingOnly?missingRows():[]);
       overlay.querySelectorAll('[data-mode-a-rigid-review-row]').forEach((tr) => {
-        const show = (!sourceId || tr.dataset.sourceId === sourceId) && (!q || (tr.dataset.search || '').includes(q));
+        const show = (!sourceId || tr.dataset.sourceId === sourceId) &&
+          (!q || (tr.dataset.search || '').includes(q)) &&
+          (!missingOnly || missingSet.has(tr));
         tr.style.display = show ? '' : 'none';
       });
+      refreshMissingList();
     };
-    const draw = (preserve = new Map()) => {
+    const draw = (preserve = new Map(), skipped = new Set()) => {
       rows = flattenModeARigidReviewEntries(workingEntries);
       if (body) body.innerHTML = rows.map(rowMarkup).join('');
-      overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => { if (preserve.has(input.dataset.reviewId || '')) input.value = preserve.get(input.dataset.reviewId || ''); });
+      overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
+        const id=input.dataset.reviewId||'';
+        if(preserve.has(id)) input.value=preserve.get(id);
+        if(skipped.has(id)){input.value='0';input.dataset.rigidSkippedZero='true';
+          input.title='Intentionally skipped: 0 kg, no source mass assigned';}
+      });
       if (summary) summary.textContent = `${rows.length} rigid node(s) across ${new Set(rows.map((row) => row.sourceId)).size} XML file(s).`;
       bindCandidateButtons(overlay, rows);
       filter();
     };
     bindCandidateButtons(overlay, rows);
     overlay.addEventListener('input', event=>{
-      if(event.target?.matches?.('.mc-rigid-review-input')) clearRigidReviewProposal(event.target);
+      if(event.target?.matches?.('.mc-rigid-review-input')){
+        clearRigidReviewProposal(event.target);
+        delete event.target.dataset.rigidSkippedZero;
+        delete event.target.dataset.rigidChoiceIndex;
+        refreshMissingList();
+      }
+    });
+    missingButton?.addEventListener('click',()=>{
+      missingOnly=!missingOnly;
+      filter();
+      if(missingOnly)missingRows()[0]?.scrollIntoView?.({block:'nearest'});
+    });
+    overlay.querySelector('[data-mode-a-rigid-skip-blanks]')?.addEventListener('click',()=>{
+      const missing=missingRows();
+      for(const tr of missing){
+        const input=tr.querySelector('.mc-rigid-review-input');
+        if(!input || input.value!=='')continue; // never overwrite a typed zero or manual positive
+        clearRigidReviewProposal(input);
+        input.value='0';
+        input.dataset.rigidSkippedZero='true';
+        input.title='EXPLICIT 0 kg SKIP — no verified physical-component mass; no source mass assigned.';
+        input.style.borderColor='#fbbf24';
+      }
+      const count=missing.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.rigidSkippedZero==='true').length;
+      setStatus(count+' blank row(s) marked 0 kg SKIPPED. These remain zero mass; they are not approved source weights.',false);
+      filter();
     });
     overlay.querySelector('[data-mode-a-rigid-apply-suggestions]')?.addEventListener('click',()=>{
       let filled=0,skipped=0;
@@ -263,7 +342,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         entry.config = config;
         entry.issues = await collectModeARigidWeightReviewIssues(entry.state, config);
       }
-      draw(current.weights);
+      draw(current.weights,current.skips);
       setStatus(`Suggestions refreshed for ${workingEntries.length} XML file(s).`, false);
       if (button) button.disabled = false;
     });
@@ -275,11 +354,20 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
 
     overlay.querySelector('[data-mode-a-rigid-apply]')?.addEventListener('click', () => {
       const updates = {};
-      const missing = [], unreviewed = [];
+      const missing = [], unreviewed = [], skipped = [];
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
-        const numeric = Number(input.value);
+        const numeric = input.value==='' ? NaN : Number(input.value);
+        if(input.dataset.rigidSkippedZero==='true' && input.value==='0'){
+          updates[sourceId] ||= {ratingsByKey:{},weightsByKey:{},skippedByKey:{}};
+          updates[sourceId].skippedByKey[key]={
+            skipped:true,weightKg:0,reason:'EXPLICIT_ZERO_MASS_SKIP_NO_SOURCE_AUTHORITY',
+          };
+          skipped.push(sourceId+':'+key);
+          input.style.borderColor='#fbbf24';
+          return;
+        }
         if (!Number.isFinite(numeric) || numeric <= 0) {
           missing.push(`${sourceId}:${key}`);
           input.style.borderColor = '#ef4444';
@@ -302,7 +390,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         updates[sourceId].ratingsByKey[key] = text(input.value);
       });
       if(missing.length || unreviewed.length){
-        setStatus(`Enter a positive weight for ${missing.length} missing row(s). Independently review ${unreviewed.length} estimate draft(s) before Apply. No updates applied.`,true);
+        missingOnly=missing.length>0;
+        filter();
+        setStatus(`Missing ${missing.length} row(s) (source references listed below). Review ${unreviewed.length} estimated draft(s) before Apply. ${skipped.length} intentional 0 kg skip(s). No updates applied.`,true);
+        const first=missingRows()[0];
+        first?.scrollIntoView?.({block:'nearest'});
         return;
       }
       overlay.remove();
