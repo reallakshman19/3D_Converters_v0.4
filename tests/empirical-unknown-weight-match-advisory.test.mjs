@@ -44,7 +44,11 @@ test('length=flange+6 displays full 15kg flange as-is, without applying a weight
   assert.equal(r.unknownComponentSuggestion.method,'FLANGE_MASTER_AS_IS_AT_6MM_TOLERANCE');
   assert.equal(r.unknownComponentSuggestion.acceptedForCii,false);
   assert.equal(r.unknownComponentSuggestion.engineeringMassApproved,false);
-  assert.deepEqual(r.candidates,[]);
+  // Legacy fallback may still expose a separate manual candidate,
+  // but it must now agree with the source master (15kg, never 15.826kg).
+  assert.equal(r.candidates?.[0]?.selectedWeight,15);
+  assert.equal(r.candidates?.[0]?.weightMethod,'flange-master-at-6mm-tolerance');
+  assert.equal(r.candidates?.[0]?.preferred,false);
 });
 test('master row absent is not silently substituted by a different rating',()=>{
   const c={weight:{masterRows:[{TypeDesc:'Weldneck Flange',Rating:150,DN:50,length:109,'RF/RTJ KG':15}]}};
