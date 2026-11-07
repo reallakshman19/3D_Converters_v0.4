@@ -1,3 +1,4 @@
+import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 function text(value) { return value === undefined || value === null ? '' : String(value).trim(); }
 function number(value) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : null; }
 function norm(value) { return text(value).toUpperCase().replace(/\s+/g, ' '); }
@@ -6,7 +7,11 @@ function reviewDescription(value) { return /INTERPOLAT|EXTRAPOLAT|FACTOR|FALLBAC
 
 export function modeAQualifiedExactWeightRow(row = {}) {
   const weight = number(row.bestWeight);
-  return Boolean(weight !== null && weight > 0 && scorePercent(row.bestScore) === 100 && !reviewDescription(row.bestDescription));
+  // A perfect catalog score never establishes source-mass approval.
+  return Boolean(weight !== null && weight > 0 && scorePercent(row.bestScore) === 100 &&
+    !reviewDescription(row.bestDescription) &&
+    row?.bestCandidate?.preferred === true &&
+    isApprovedPhysicalMassCandidate(row.bestCandidate, weight));
 }
 
 export function modeAWeightGroupKey(row = {}) {
@@ -17,7 +22,11 @@ export function modeAWeightGroupKey(row = {}) {
 }
 
 function changeForRow(row) {
-  return { sourceId: row.sourceId, fileName: row.fileName, branchName: row.branchName, key: row.key, nodeNumber: row.nodeNumber, componentRefNo: row.componentRefNo, weight: number(row.bestWeight) };
+  return { sourceId: row.sourceId, fileName: row.fileName, branchName: row.branchName,
+    key: row.key, nodeNumber: row.nodeNumber, componentRefNo: row.componentRefNo,
+    weight: number(row.bestWeight),
+    // Writer independently re-verifies this identity/weight approval claim.
+    approvedCandidate: row.bestCandidate };
 }
 
 export function buildModeAWeightProjectMatchPlan(rows = []) {
@@ -45,7 +54,9 @@ export function buildModeAWeightFillPlan(rows = [], sourceRow = {}) {
 
 export function buildModeAWeightUsePlan(row = {}) {
   const weight = number(row.bestWeight);
-  if (weight === null || weight <= 0 || !text(row.key)) return null;
-  const qualifiedExact = modeAQualifiedExactWeightRow(row);
-  return { change: changeForRow(row), qualifiedExact, requiresReview: !qualifiedExact };
+  // A review confirmation is not approval of an empirical catalog match.
+  // Unknown candidates are suggestions only; there is no click-through "Use".
+  if (weight === null || weight <= 0 || !text(row.key) ||
+      !modeAQualifiedExactWeightRow(row)) return null;
+  return { change: changeForRow(row), qualifiedExact: true, requiresReview: false };
 }
