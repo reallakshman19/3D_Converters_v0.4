@@ -77,6 +77,9 @@ def main():
     p.add_argument("--after-root",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
     args=p.parse_args()
+    args.out=args.out.resolve()
+    args.before_root=args.before_root.resolve()
+    args.after_root=args.after_root.resolve()
     args.out.mkdir(parents=True,exist_ok=True)
     source=args.inputs/"GLRD-1000-PI-01 - BM2.xml"
     stage=args.inputs/"STF_2026Nov03-0839_managed_stage.json"
