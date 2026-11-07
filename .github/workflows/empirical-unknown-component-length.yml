@@ -35,6 +35,7 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-rigid-review-tools.js'
       - 'tests/xml-cii-rigid-review-prefill.test.mjs'
       - 'scripts/verify-glrd-rigid-review-popups-browser.mjs'
+      - 'scripts/verify-glrd-bm2-native-parity.py'
       - 'scripts/verify-empirical-nearest-browser.mjs'
       - '.github/workflows/empirical-unknown-component-length.yml'
   workflow_dispatch:
@@ -126,16 +127,24 @@ jobs:
           master="https://raw.githubusercontent.com/reallakshman19/3D_Converters/25db94769994751bb0fb6e6d83a578efd9ac8162/docs/docs/Masters"
           curl --retry 3 --fail --location --silent --show-error "$root/GLRD-1000-PI-01%20-%20BM2.xml" -o "/tmp/glrd-inputs/GLRD-1000-PI-01 - BM2.xml"
           curl --retry 3 --fail --location --silent --show-error "$root/STF_2026Nov03-0839_managed_stage.json" -o /tmp/glrd-inputs/STF_2026Nov03-0839_managed_stage.json
+          curl --retry 3 --fail --location --silent --show-error "$root/LL_BM2.xlsx" -o /tmp/glrd-inputs/LL_BM2.xlsx
           curl --retry 3 --fail --location --silent --show-error "$master/wtValveweights.json" -o /tmp/glrd-inputs/wtValveweights.json
           cd /tmp/glrd-inputs
           echo "6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151  GLRD-1000-PI-01 - BM2.xml" | sha256sum -c -
           echo "1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746  STF_2026Nov03-0839_managed_stage.json" | sha256sum -c -
+          echo "73496a1277cd1f39de823d57180ee0d8c4b1d72241923f1e558af2c7c805d007  LL_BM2.xlsx" | sha256sum -c -
       - name: Chromium real GLRD full review census + standalone/ATTA/Mode A draft/approval
         env:
           GLRD_INPUT_DIR: /tmp/glrd-inputs
           EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4173
           EMPIRICAL_BROWSER_ARTIFACT_DIR: artifacts/empirical-unknown-browser
         run: node scripts/verify-glrd-rigid-review-popups-browser.mjs
+
+      - name: Native GLRD BM2 unedited CII output parity on original source/staged/linelist
+        run: |
+          git fetch --no-tags --depth=1 origin e0939f05833d37fba201ba748aa09372560dc051
+          git worktree add --detach /tmp/glrd-v04-main e0939f05833d37fba201ba748aa09372560dc051
+          python3 scripts/verify-glrd-bm2-native-parity.py --inputs /tmp/glrd-inputs --before-root /tmp/glrd-v04-main --after-root . --out artifacts/glrd-native-parity
 
       - name: Upload browser screenshots and receipt
         if: always()
@@ -144,5 +153,6 @@ jobs:
           name: empirical-unknown-component-${{ github.sha }}
           path: |
             artifacts/empirical-unknown-browser/**
+            artifacts/glrd-native-parity/**
             /tmp/empirical-unknown-browser.log
           if-no-files-found: warn
