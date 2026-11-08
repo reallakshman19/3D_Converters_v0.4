@@ -29,7 +29,15 @@ export function phase6ComparableReference(issue={}) {
   if(!family||bore===null||length===null||!sourceRating||
      !Number.isFinite(tolerance))return null;
   for(const candidate of issue.candidates||[]){
-    const kg=positive(candidate?.selectedWeight??candidate?.suggestedWeight??candidate?.weight);
+    // The comparison denominator is the original master weight in kg,
+    // never an interpolated or scaled suggested kg. At ±6 mm an extrapolated
+    // candidate may still carry a valid *unscaled* reference master row.
+    const method=String(candidate?.weightMethod??candidate?.method??'');
+    const masterKg=positive(candidate?.masterWeight??candidate?.weight);
+    const derived=/interpolat|extrapolat|factor|fallback|infer|heuristic/i.test(method);
+    if(derived && (/interpolat|factor|fallback|infer|heuristic/i.test(method) ||
+       positive(candidate?.masterWeight)===null))continue;
+    const kg=masterKg;
     const refL=positive(candidate?.rowLength),refDN=positive(candidate?.rowBore);
     if(kg===null||refL===null||refDN===null||
       Math.abs(refL-length)>tolerance+EPS || Math.abs(refDN-bore)>=1 ||
@@ -39,8 +47,6 @@ export function phase6ComparableReference(issue={}) {
       candidate?.inferredWeight===true || candidate?.fallbackSuggestion===true ||
       candidate?.flangeWeightFallback===true || candidate?.zeroFallback===true ||
       candidate?.specialFactorRule===true ||
-      /interpolat|extrapolat|factor|fallback|infer|heuristic/i.test(
-        String(candidate?.weightMethod??candidate?.method??'')) ||
       !isWeightMasterPhysicalFamilyMatch(candidate,family))continue;
     const approved=isApprovedPhysicalMassCandidate(candidate,kg);
     return {
