@@ -55,6 +55,8 @@ try{
   await page.locator('[data-phase6-refresh-review]').click();
   assert.match(await page.locator('[data-phase6-status]').innerText(),/114 unresolved/i);
   assert.equal(await page.locator('[data-phase6-source-summary] tbody tr').count(),1);
+  assert.equal(await page.locator('[data-phase6-ledger-row]').count(),114,
+    'Phase 6 keeps a source-keyed read-only mass audit ledger');
   await page.locator('[data-phase6-open-review]').click();
   assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
   assert.equal(await page.locator('[data-rigid-suggestion-verified]').count(),0,
@@ -98,6 +100,13 @@ try{
   await page.locator('[data-phase6-refresh-review]').click();
   assert.match(await page.locator('[data-phase6-status]').innerText(),/0 unresolved/i,
     'Run/Phase 6 must honor prior five intentional skipped zero-mass records');
+  assert.equal(await page.locator('[data-phase6-ledger-row]').count(),114,
+    '109 accepted masses and five editable skip decisions remain inspectable');
+  await page.locator('[data-phase6-ledger]').evaluate(el=>el.open=true);
+  await page.locator('[data-phase6-ledger-filter]').selectOption('skipped');
+  assert.equal(await page.locator('[data-phase6-ledger-row]:visible').count(),5);
+  await page.locator('[data-phase6-ledger-filter]').selectOption('reviewed');
+  assert.equal(await page.locator('[data-phase6-ledger-row]:visible').count(),109);
   // Re-extract from the NEW Phase 6 UI's actual committed config, not from
   // the old Weight Match controls, and compare its enriched XML byte-for-byte.
   const reextracted=await page.evaluate(async()=>{
