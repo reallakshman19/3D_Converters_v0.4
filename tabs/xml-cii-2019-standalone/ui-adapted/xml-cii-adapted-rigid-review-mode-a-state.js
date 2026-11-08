@@ -67,7 +67,15 @@ export function applyModeAConsolidatedRigidReviewUpdates(state = {}, updates = {
       const bucket = object(overrides, 'rigidWeight');
       for (const [key, value] of Object.entries(weights)) {
         const numeric = Number(value);
-        if (text(key) && Number.isFinite(numeric) && numeric > 0) bucket[key] = numeric;
+        if (text(key) && Number.isFinite(numeric) && numeric > 0) {
+          bucket[key] = numeric;
+          // A subsequent approved or manual source mass replaces a prior skip.
+          if(overrides.rigidWeightSkipped)delete overrides.rigidWeightSkipped[key];
+          // Old receipts cannot independently approve a different new mass.
+          const previous=overrides.rigidWeightReviewReceipts?.[key];
+          if(previous && Math.abs(Number(previous.weightKg)-numeric)>1e-9)
+            delete overrides.rigidWeightReviewReceipts[key];
+        }
       }
     }
     const receipts=patch.reviewReceiptsByKey && typeof patch.reviewReceiptsByKey==='object'
