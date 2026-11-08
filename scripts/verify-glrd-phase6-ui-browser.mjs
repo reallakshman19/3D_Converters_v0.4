@@ -68,6 +68,21 @@ try{
   await page.locator('[data-mode-a-rigid-cancel]').click();
   assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
     'cancel must not persist even a draft');
+  // Phase 6 must allow partial manual mass saves while 113 other physical
+  // components remain unresolved, without accidentally starting conversion.
+  await page.locator('[data-phase6-open-review]').click();
+  await page.locator('.mc-rigid-review-input').first().fill('59');
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const partial=await page.evaluate(()=>{
+    const cfg=JSON.parse(window.__phase6Ref.current.supportConfigJson);
+    return {positive:Object.keys(cfg.overrides.rigidWeight||{}).length,
+      output:window.__phase6Ref.current.result};
+  });
+  assert.deepEqual(partial,{positive:1,output:null},
+    'a single manual mass may save independently without running CII or fabricating other weights');
+  await page.locator('[data-phase6-undo]').click();
+  assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
+    'undo must revert the partial manual edit exactly');
   await page.locator('[data-phase6-open-review]').click();
   await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
   assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count(),109);
