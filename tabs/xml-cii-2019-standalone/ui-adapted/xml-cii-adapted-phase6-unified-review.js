@@ -86,7 +86,9 @@ export async function phase6CollectReviewEntries(stateRef, modeA = false) {
       stagedJsonText:await sourceText(row.state,'stagedJsonText','stagedJsonFile')};
     if(!state.sourceText.trim())throw new Error('Source XML missing for '+row.fileName);
     const config=xmlCiiEnrichedConfigFromState(state);
-    const issues=await collectModeARigidWeightReviewIssues(state,config);
+    const issues=await collectModeARigidWeightReviewIssues(state,config,{
+      includeSkipped:true, // A skipped mass stays re-editable in Phase 6.
+    });
     entries.push({...row,state,config,issues});
   }
   return entries;
@@ -146,19 +148,27 @@ function phase6SaveAdvancedSettings(stateRef, modeA, nextConfig, render) {
   render?.();
 }
 
+function isExplicitZeroSkip(entry, issue) {
+  const record=entry.config?.overrides?.rigidWeightSkipped?.[issue.key];
+  return record?.skipped===true && Number(record.weightKg)===0;
+}
+
 function summaryHtml(entries) {
   return `<table data-phase6-source-summary style="border-collapse:collapse;width:100%;font-size:12px;margin:8px 0;">
     <thead><tr style="background:#1e293b;color:#e8f2ff;">
       <th style="text-align:left;padding:8px;">XML source</th>
       <th style="text-align:right;padding:8px;">Requires review</th>
       <th style="text-align:right;padding:8px;">Suggested drafts</th>
+      <th style="text-align:right;padding:8px;">Intentional 0kg skips</th>
       <th style="text-align:left;padding:8px;">Scope</th></tr></thead>
     <tbody>${entries.map(entry=>{
-      const suggestions=entry.issues.filter(issue=>issue.candidates?.length ||
-        issue.unknownComponentSuggestion?.ok).length;
+      const skipped=entry.issues.filter(issue=>isExplicitZeroSkip(entry,issue)).length;
+      const suggestions=entry.issues.filter(issue=>!isExplicitZeroSkip(entry,issue) &&
+        (issue.candidates?.length||issue.unknownComponentSuggestion?.ok)).length;
       return `<tr><td style="padding:7px;border-bottom:1px solid #334155;">${esc(entry.fileName)}</td>
-        <td style="padding:7px;text-align:right;">${entry.issues.length}</td>
+        <td style="padding:7px;text-align:right;">${entry.issues.length-skipped}</td>
         <td style="padding:7px;text-align:right;">${suggestions}</td>
+        <td style="padding:7px;text-align:right;">${skipped}</td>
         <td style="padding:7px;">${esc(entry.alias||'Source-local')}</td>
       </tr>`;
     }).join('')}</tbody></table>`;
@@ -243,8 +253,13 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   const load=async()=>{
     const entries=await phase6CollectReviewEntries(stateRef,modeA);
     if(output)output.innerHTML=summaryHtml(entries);
-    setStatus(entries.reduce((n,e)=>n+e.issues.length,0)+
-      ' unresolved source physical masses across '+entries.length+' XML file(s).');
+    const unresolved=entries.reduce((n,e)=>n+
+      e.issues.filter(issue=>!isExplicitZeroSkip(e,issue)).length,0);
+    const skipped=entries.reduce((n,e)=>n+
+      e.issues.filter(issue=>isExplicitZeroSkip(e,issue)).length,0);
+    setStatus(unresolved+' unresolved source physical masses across '+
+      entries.length+' XML file(s); '+skipped+
+      ' previously skipped 0kg physical components (re-editable).');
     return entries;
   };
   refresh?.addEventListener('click',async()=>{
