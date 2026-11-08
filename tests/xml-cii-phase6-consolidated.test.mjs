@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
-  applyPhase6SingleReview,applyPhase6ModeAReview,phase6ReviewSingleSourceId
+  applyPhase6SingleReview,applyPhase6ModeAReview,phase6ReviewSingleSourceId,phase6RuleSettingsOnly
 } from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js';
 
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
@@ -99,4 +99,33 @@ test('Run readiness and propagation remain connected without the deprecated Weig
   assert.match(propagation,/explicit-phase6-source-override/);
   assert.match(run,/await consolidatedRigidReview\(/,
     'run must still independently recheck even if Phase 6 was never visited');
+});
+
+test('advanced settings reuse reference rules without sharing source-specific master data',()=>{
+  const input={masterRows:[{DN:150,Rating:900,weight:59}],
+    finalizedMatches:[{key:'B::1',weight:59}],
+    valveHintLengthToleranceMm:6,convertSmallLengthsInToMm:true,
+    semanticKeywordRules:[{code:'BALL',patterns:['BALL']}],
+    specialValveFactorRules:[],
+    valveHintMapping:[{type:'BALL',label:'Ball'}]};
+  const shared=phase6RuleSettingsOnly(input);
+  assert.equal(shared.masterRows,undefined);
+  assert.equal(shared.finalizedMatches,undefined);
+  assert.equal(shared.valveHintLengthToleranceMm,6);
+  assert.equal(shared.convertSmallLengthsInToMm,true);
+  assert.equal(shared.semanticKeywordRules.length,1);
+});
+test('replacing an old mass clears its stale receipt and prior explicit skip',()=>{
+  const original={supportConfigJson:JSON.stringify({overrides:{
+    rigidWeight:{'A::1':19},
+    rigidWeightReviewReceipts:{'A::1':{reviewed:true,weightKg:19}},
+    rigidWeightSkipped:{'A::1':{skipped:true,weightKg:0}},
+  }})};
+  const changed=applyPhase6SingleReview(original,{[sourceId]:{
+    weightsByKey:{'A::1':21},
+  }});
+  const cfg=JSON.parse(changed.supportConfigJson);
+  assert.equal(cfg.overrides.rigidWeight['A::1'],21);
+  assert.equal(cfg.overrides.rigidWeightReviewReceipts['A::1'],undefined);
+  assert.equal(cfg.overrides.rigidWeightSkipped['A::1'],undefined);
 });
