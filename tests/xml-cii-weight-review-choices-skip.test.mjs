@@ -91,15 +91,28 @@ test('Skip blank refuses to erase a positive saved source mass',()=>{
     BM2:{skippedByKey:{'KEY-APPROVED':{skipped:true,weightKg:0}}}
   }),/Cannot skip source mass with existing positive override/);
 });
-test('rendered modal has visible source-ref and multiple-choice and missing-row controls',async()=>{
-  const {modeARigidCandidateMarkup}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
-  const html=modeARigidCandidateMarkup({
-    ...sample,rating:900,nodeNumber:818,nodeNumberDisplay:818
-  },0);
-  assert.match(html,/Other reference lengths \/ weights/);
-  assert.match(html,/data-mode-a-rigid-choice="0"/);
-  assert.match(html,/368mm/);
-  assert.match(html,/381mm/);
+test('consolidated popup uses clickable buttons and no dropdown or Use draft',async()=>{
+  const {modeARigidCandidateMarkup,modeARigidSelectableSuggestions}=
+    await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+  const issue={componentType:'FLAN',dtxr:'WELDING NECK FLANGE SCH 40S 900#',
+    boreMm:80,rating:900,lengthMm:109,reviewLengthToleranceMm:6,
+    candidates:[
+      {selectedWeight:15,typeDesc:'Weldneck Flange',rowLength:109,rowBore:80,rowRating:'900',preferred:true},
+      {selectedWeight:16,typeDesc:'Weldneck Flange',rowLength:115,rowBore:80,rowRating:'900',lengthQualified:true},
+      {selectedWeight:19,typeDesc:'Weldneck Flange',rowLength:115.01,rowBore:80,rowRating:'900'},
+      {selectedWeight:22,typeDesc:'Weldneck Flange',rowLength:109,rowBore:100,rowRating:'900'},
+      {selectedWeight:23,typeDesc:'Weldneck Flange',rowLength:109,rowBore:80,rowRating:'1500'},
+      {selectedWeight:24,typeDesc:'Blind Flange',rowLength:109,rowBore:80,rowRating:'900'},
+    ]};
+  const choices=modeARigidSelectableSuggestions(issue);
+  assert.deepEqual(choices.map(c=>c.weight),[15,16],
+    'only exact DN, class, family and 0..6mm length delta alternatives');
+  const html=modeARigidCandidateMarkup(issue,0);
+  assert.equal((html.match(/<button /g)||[]).length,2);
+  assert.match(html,/data-mode-a-rigid-candidate="0"/);
+  assert.match(html,/16 kg/);
+  assert.match(html,/L=115 mm/);
+  assert.doesNotMatch(html,/Other reference lengths|Choose an alternative|Use draft|advisory only|<select/);
 });
 
 test('explicit review receipts remain separate from weights and zero skips',()=>{
