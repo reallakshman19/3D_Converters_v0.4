@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-const version='20261107-weights-pyodide-fix-1';
+const version='20261108-rigid-choice-buttons-1';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js'],
@@ -30,7 +30,7 @@ test('source-bore and strict physical-family ranking are used in both visible ro
   for(const src of [wm,mode]){
     assert.match(src,/reconcileXmlCiiWeightMatchSourceBores\(/);
     assert.match(src,/rankXmlCiiWeightCandidates\(/);
-    assert.match(src,/20261107-weights-pyodide-fix-1/);
+    assert.match(src,/20261108-rigid-choice-buttons-1/);
   }
 });
 test('normal evidence remains advisory, explicit approval gate and PCOM path stay intact',()=>{
