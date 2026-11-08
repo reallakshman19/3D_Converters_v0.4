@@ -157,6 +157,18 @@ try{
   assert.equal(await page.locator('[data-phase6-fill-similar]').count(),1);
   const target=mappedInputs.first();
   const originalMass=Number(await target.inputValue());
+  await page.locator('[data-phase6-nearest]').click();
+  assert.equal(Number(await target.inputValue()),originalMass,
+    'nearest fill must never overwrite an approved or manually saved mass');
+  await page.locator('[data-phase6-fill-similar]').click();
+  assert.equal(Number(await target.inputValue()),originalMass,
+    'group exact fill must never overwrite a saved mass');
+  await page.locator('[data-phase6-find-exact]').click();
+  assert.equal(await page.locator('[data-phase6-find-exact]').innerText(),'Show All Weights');
+  await page.locator('[data-phase6-find-exact]').click();
+  assert.equal(await page.locator('[data-mode-a-rigid-review-row]:visible').count(),114);
+  assert.equal(await page.locator('[data-phase6-popup-counters]').count(),1);
+  assert.match(await page.locator('[data-phase6-popup-counters]').innerText(),/109 existing masses/);
   const key=await target.getAttribute('data-issue-key');
   const changedMass=originalMass+2;
   await target.fill(String(changedMass));
