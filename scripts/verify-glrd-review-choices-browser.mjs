@@ -112,6 +112,10 @@ try {
  assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true,
    'blocked Apply must open actionable confirmation panel, not a red dead end');
  assert.match(await page.locator('[data-mode-a-rigid-bulk-review-summary]').innerText(),/109 unapproved/);
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-table] tbody tr').count(),109,
+   'every pending estimated source mass, not just the first 12, must be visible in the scrollable table');
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-table] th').count(),7);
+ assert.match(await page.locator('[data-mode-a-rigid-bulk-review-table]').innerText(),/Component reference \/ endpoint/);
  assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true,
    'no bulk approval until reviewer explicitly attests independent verification');
  assert.equal(await page.locator('[data-mode-a-rigid-show-unreviewed]').innerText(),'Show all (109)');
