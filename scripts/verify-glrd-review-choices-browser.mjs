@@ -20,7 +20,7 @@ try {
  const census=await page.evaluate(async ({xml,stage,masterRows})=>{
    const {collectModeARigidWeightReviewIssues,openModeAConsolidatedRigidWeightReviewPopup,
      modeARigidSelectableSuggestions}=
-     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-weights-pyodide-fix-1');
+     await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261108-rigid-choice-buttons-1');
    const d=new DOMParser().parseFromString(xml,'application/xml');
    const ratingByBranch={};
    for(const branch of d.getElementsByTagName('Branch')){
@@ -177,7 +177,7 @@ try {
  // weights, 5 zero skips, 0 missing, Apply blocked on 109 Reviewed flags.
  // Only an explicit independent review acknowledgment unlocks the modal.
  await page.evaluate(async()=>{
-   const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-weights-pyodide-fix-1');
+   const m=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261108-rigid-choice-buttons-1');
    window.__glrdFiveSkipPromise=m.openModeAConsolidatedRigidWeightReviewPopup(window.__glrdReviewEntries);
  });
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
