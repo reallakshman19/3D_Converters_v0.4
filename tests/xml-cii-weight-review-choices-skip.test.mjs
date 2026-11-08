@@ -115,6 +115,34 @@ test('consolidated popup uses clickable buttons and no dropdown or Use draft',as
   assert.doesNotMatch(html,/Other reference lengths|Choose an alternative|Use draft|advisory only|<select/);
 });
 
+test('Blind Flange 46.343 kg extrapolated estimate is a clickable primary button',async()=>{
+  const {modeARigidCandidateMarkup,modeARigidSelectableSuggestions}=
+    await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+  const blind={componentType:'FLAN',dtxr:'BLIND FLANGE 900#',
+    boreMm:80,rating:900,lengthMm:112.2,
+    candidates:[{selectedWeight:46.343,referenceFamily:'Blind Flange',
+      typeDesc:'Blind Flange',weightMethod:'length-extrapolated',inferredWeight:true,
+      rowBore:80,rowRating:'900',rowLength:80}]};
+  assert.deepEqual(modeARigidSelectableSuggestions(blind).map(x=>x.weight),[46.343]);
+  const html=modeARigidCandidateMarkup(blind,3);
+  assert.match(html,/data-mode-a-rigid-candidate="3"/);
+  assert.match(html,/data-mode-a-rigid-weight="46.343"/);
+  assert.match(html,/≈ 46.343 kg · Blind Flange · estimate only/);
+  assert.doesNotMatch(html,/advisory only|Other reference lengths|Choose an alternative|Use draft|<select/);
+});
+test('Weldneck Flange 9.689 kg extrapolation is a clickable primary button',async()=>{
+  const {modeARigidCandidateMarkup}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+  const html=modeARigidCandidateMarkup({
+    componentType:'FLAN',dtxr:'WELDING NECK FLANGE 900#',
+    boreMm:40,rating:900,lengthMm:109,
+    candidates:[{selectedWeight:9.689,referenceFamily:'Weldneck Flange',
+      weightMethod:'length-extrapolated',inferredWeight:true,
+      rowBore:40,rowRating:'900',rowLength:82}]
+  },1);
+  assert.match(html,/≈ 9.689 kg · Weldneck Flange · length-extrapolated/);
+  assert.match(html,/data-mode-a-rigid-candidate="1"/);
+});
+
 test('explicit review receipts remain separate from weights and zero skips',()=>{
   const result=applyModeAConsolidatedRigidReviewUpdates(state,{BM2:{
     weightsByKey:{'KEY-REVIEWED':17,'KEY-MANUAL':7},
