@@ -65,6 +65,28 @@ try{
   assert.match(await blind.locator('[data-mode-a-rigid-candidate]').first().innerText(),
     /≈ 46\.343 kg · Blind Flange/);
   const initial=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  assert.equal(await page.locator('[data-phase6-approve-all]').count(),1);
+  assert.equal(await page.locator('[data-phase6-deviation40]').count(),1);
+  assert.match(await page.locator('.mc-rigid-review-dialog thead').innerText(),/Reference \(kg\)/);
+  assert.match(await page.locator('.mc-rigid-review-dialog thead').innerText(),/Error %/);
+  // Exercise real DTXR -> Preview toggle, recompute candidates and ensure no
+  // Rating was saved without the explicit Save button.
+  const dtxrRow=page.locator('[data-mode-a-rigid-review-row]')
+    .filter({hasText:'900#'}).first();
+  const dtxrInput=dtxrRow.locator('.mc-rigid-review-rating-input');
+  const previewRating=await dtxrInput.inputValue();
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),'Use Rating shown in Preview');
+  assert.equal(await dtxrInput.inputValue(),'900');
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),'Use Rating as per DTXR');
+  assert.equal(await dtxrInput.inputValue(),previewRating);
+  assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
+    'DTXR/Preview toggle alone cannot write any Rating or physical mass');
   await page.locator('[data-mode-a-rigid-cancel]').click();
   assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
     'cancel must not persist even a draft');
@@ -252,5 +274,67 @@ try{
     sourceIsolation:'source-keyed',approvalReused:false,
     undoRestoredExactConfig:true,
   },null,2));
+  // Exercise a verified same-DN/Class catalog reference with a deliberately
+  // incorrect mapped mass. The ±40% tool MUST NOT auto-approve/commit it.
+  await page.locator('[data-phase6-open-review]').click();
+  const candidate=page.locator('[data-mode-a-rigid-review-row]')
+    .filter({has:page.locator('[data-phase6-reference-kg]:not([data-phase6-reference-kg=""])')})
+    .filter({has:page.locator('.mc-rigid-review-input[data-original-weight]:not([data-original-weight=""])')})
+    .first();
+  assert.equal(await candidate.count(),1,'GLRD must have a length-qualified matching reference');
+  const compKey=await candidate.locator('.mc-rigid-review-input').getAttribute('data-issue-key');
+  const refKg=Number(await candidate.locator('[data-phase6-reference-kg]').getAttribute('data-phase6-reference-kg'));
+  assert.ok(refKg>0);
+  await candidate.locator('.mc-rigid-review-input').fill(String(refKg*2));
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  await page.locator('[data-phase6-open-review]').click();
+  const changedRow=page.locator('[data-mode-a-rigid-review-row]')
+    .filter({has:page.locator('[data-issue-key="'+compKey.replace(/"/g,'')+'"]')}).first();
+  const changedInput=page.locator('.mc-rigid-review-input[data-issue-key="'+compKey.replace(/"/g,'')+'"]');
+  assert.equal(Number(await changedInput.inputValue()),refKg*2);
+  assert.match(await changedInput.locator('xpath=..').locator('xpath=..')
+    .locator('[data-phase6-error-pct]').innerText(),/\+100\.0%/);
+  assert.match(await page.locator('[data-phase6-deviation40]').innerText(),/\([1-9]/);
+  await page.locator('[data-phase6-deviation40]').click();
+  assert.equal(Number(await changedInput.inputValue()),refKg);
+  assert.equal(await changedInput.getAttribute('data-rigid-suggestion-draft'),'estimate');
+  assert.equal(await changedInput.getAttribute('data-rigid-review-method'),null);
+  // Saving an unapproved drafted correction must be refused.
+  const pendingConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),
+    pendingConfig,'threshold button must not commit without explicit review');
+  await page.locator('[data-phase6-approve-all]').click();
+  assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true);
+  assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
+  await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+  await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const accepted=await page.evaluate(key=>{
+    const c=JSON.parse(window.__phase6Ref.current.supportConfigJson);
+    return {kg:Number(c.overrides.rigidWeight[key]),
+      reviewed:c.overrides.rigidWeightReviewReceipts?.[key]?.reviewed===true};
+  },compKey);
+  assert.deepEqual(accepted,{kg:refKg,reviewed:true});
+  await page.locator('[data-phase6-undo]').click();
+  const undoneComparison=await page.evaluate(key=>
+    Number(JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rigidWeight[key]),compKey);
+  assert.equal(undoneComparison,refKg*2,'Undo restores the prior mass, not the reference');
+  await writeFile(resolve(out,'phase6-deviation40-review-receipt.json'),JSON.stringify({
+    sourceKey:compKey,referenceKg:refKg,existingMassKg:refKg*2,
+    signedErrorPct:100,thresholdPercent:40,
+    stagedOnly:true,noAutoApproval:true,
+    reviewedViaExplicitAttestation:true,undoRestoresExistingMass:true,
+  },null,2));
+  // Restore the approved GLRD simulated review fixture after the separate
+  // deliberate-error experiment. This is NOT a production mass edit.
+  await page.evaluate(config=>{
+    window.__phase6Ref.current={
+      ...window.__phase6Ref.current, supportConfigJson:config,
+      phase6Undo:null,result:null,outputRunReadinessReport:null
+    };
+    window.__phase6Render();
+  },originalCommittedConfig);
+
   console.log('GLRD_PHASE6_ACTUAL_UI_PASS',JSON.stringify(record));
 }finally{await browser.close();}
