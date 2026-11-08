@@ -34,6 +34,19 @@ test('mapped mass 59 -> 61 is source-local, invalidates stale attestation and ca
   assert.equal(undone.phase6Undo,null);
 });
 
+test('Undo refuses a previous mass ledger when source XML or staged JSON changed',()=>{
+  const baseline={sourceText:'<model>A</model>',stagedJsonText:'{"version":1}',
+    supportConfigJson:JSON.stringify({overrides:{rigidWeight:{'B::2':59}}})};
+  const updated=applyPhase6SingleReview(baseline,{
+    [sourceId]:{weightsByKey:{'B::2':61}},
+  });
+  const changedXml={...updated,sourceText:'<model>B</model>'};
+  const changedStage={...updated,stagedJsonText:'{"version":2}'};
+  assert.equal(undoPhase6Review(changedXml),changedXml);
+  assert.equal(undoPhase6Review(changedStage),changedStage);
+  assert.equal(undoPhase6Review(updated).supportConfigJson,baseline.supportConfigJson);
+});
+
 test('cross-source mass edits and undo cannot change another XML model',()=>{
   const a='BRANCH::ref_2';
   const cfg1=JSON.stringify({overrides:{rigidWeight:{[a]:59}}});
