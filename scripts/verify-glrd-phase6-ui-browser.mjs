@@ -146,6 +146,10 @@ try{
   // approval receipt to a changed value.
   const originalCommittedConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
   await page.locator('[data-phase6-open-review]').click();
+  assert.equal(await page.locator('[data-phase6-row-details]').count(),114,
+    'every source component must expose the full evidence without horizontal scrolling');
+  await page.locator('[data-phase6-row-details]').first().evaluate(el=>el.open=true);
+  assert.match(await page.locator('[data-phase6-row-details]').first().innerText(),/Weight Source/);
   await page.screenshot({path:resolve(out,'phase6-full-weight-workbench-editable.png'),fullPage:true});
   const mappedInputs=page.locator('.mc-rigid-review-input[data-original-weight]:not([data-original-weight=""])');
   assert.equal(await mappedInputs.count(),109,'all 109 mapped masses must be editable');
