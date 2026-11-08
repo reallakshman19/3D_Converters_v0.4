@@ -12,9 +12,9 @@ const positive = value => {
 };
 
 /**
- * Show old-style alternative master lengths without weakening the exact
- * physical-family + bore + class matching gate. These are labelled COMPARISON
- * ONLY, never added to ranked candidates, and NEVER used for bulk prefill.
+ * Expose only nearby (±6 mm) reference lengths for comparison. Cross-DN or
+ * cross-Class entries remain COMPARISON ONLY, never ranked or bulk-prefilled.
+ * Out-of-tolerance lengths must not appear as nearest suggestions.
  */
 export function comparisonWeightMasterReferences(issue={}, config={}, limit=6) {
   const rows=Array.isArray(config?.weight?.masterRows)?config.weight.masterRows:[];
@@ -33,6 +33,10 @@ export function comparisonWeightMasterReferences(issue={}, config={}, limit=6) {
     const refWeight=positive(raw['RF/RTJ KG']??raw.weight??raw.Weight);
     if(!Number.isFinite(refBore)||!Number.isFinite(refLength)||refLength<=0||
        !refRating||refWeight===null)continue;
+    // Nearest Suggestions is a physical-length window, not an unrestricted
+    // catalog of nearby bores/classes. The cap is fixed at ±6 mm.
+    const delta=Math.abs(componentLength-refLength);
+    if(!Number.isFinite(componentLength)||componentLength<=0||delta>6+1e-6)continue;
     const exactBore=Math.abs(bore-refBore)<.5, exactRating=rating===refRating;
     if(exactBore && exactRating)continue; // normal ranked candidate is authority
     const adjacentBore=exactRating && Math.abs(bore-refBore)<=Math.max(bore*.6,30);
@@ -45,7 +49,7 @@ export function comparisonWeightMasterReferences(issue={}, config={}, limit=6) {
       selectedWeight:refWeight,
       typeDesc:refType,
       rowLength:refLength,
-      lengthDelta:Number.isFinite(componentLength)?Math.abs(componentLength-refLength):null,
+      lengthDelta:delta,
       referenceOnly:true,
       rowBore:refBore,rowRating:refRating,
       sourceBore:bore,sourceRating:rating,
@@ -66,9 +70,17 @@ export function comparisonWeightMasterReferences(issue={}, config={}, limit=6) {
 export function availableWeightReviewChoices(issue = {}) {
   if (issue?.sourceBoreHold) return [];
   const choices = [], seen = new Set();
-  const add = (candidate, rejected = false) => {
+  const add = (candidate, rejected = false, alternative = false) => {
     const weight = positive(candidate?.selectedWeight ?? candidate?.suggestedWeight ?? candidate?.weight);
     if (weight === null || candidate?.zeroFallback) return;
+    // Preserve the primary qualified/extrapolated estimate, but never render
+    // alternative master references beyond the Owner's ±6 mm display gate.
+    if (rejected || alternative) {
+      const physicalLength = Number(issue.lengthMm);
+      const masterLength = Number(candidate?.rowLength);
+      if (!(physicalLength > 0) || !(masterLength > 0) ||
+          Math.abs(physicalLength - masterLength) > 6 + 1e-6) return;
+    }
     const family = name(candidate?.referenceFamily || candidate?.typeDesc ||
       candidate?.valveType || candidate?.type || 'Master reference');
     const length = Number(candidate?.rowLength);
@@ -92,7 +104,7 @@ export function availableWeightReviewChoices(issue = {}) {
     });
   };
   if (!issue?.massSuggestionOnly) {
-    for (const candidate of issue?.candidates || []) add(candidate);
+    (issue?.candidates || []).forEach((candidate, index) => add(candidate, false, index > 0));
     // A mismatched reference is visible as a DIFFERENT physical-length option,
     // not as an exact approved suggestion. Explicit Reviewed action is required.
     for (const candidate of issue?.rejectedCandidates || []) add(candidate, true);
