@@ -23,6 +23,13 @@ export const PHASE6_DEVIATION_LIMIT_PCT=40;
 export function phase6ComparableReference(issue={}) {
   if(issue.sourceBoreHold)return null;
   const family=classifySourceWeightFamily(issue);
+  const explicitType=String(issue.componentType??'').trim().toUpperCase();
+  // A conflicting XML component type and DTXR description is not a verified
+  // physical-family match, even if the description happens to match a catalog.
+  if((explicitType.startsWith('VALV')||explicitType==='VLV') &&
+      family.family!=='VALVE')return null;
+  if(explicitType.startsWith('FLAN') &&
+      !['FLANGE','BLIND'].includes(family.family))return null;
   const bore=positive(issue.boreMm), length=positive(issue.lengthMm);
   const sourceRating=rating(issue.rating);
   const tolerance=Math.min(6,Math.max(0,Number(issue.reviewLengthToleranceMm??6)));
