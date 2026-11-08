@@ -88,7 +88,9 @@ export async function phase6CollectReviewEntries(stateRef, modeA = false) {
     if(!state.sourceText.trim())throw new Error('Source XML missing for '+row.fileName);
     const config=xmlCiiEnrichedConfigFromState(state);
     const issues=await collectModeARigidWeightReviewIssues(state,config,{
-      includeSkipped:true, // A skipped mass stays re-editable in Phase 6.
+      includeSkipped:true,includeMapped:true,
+      // The full Phase 6 workbench keeps existing approved and XML masses
+      // editable. The conversion-time gate continues to collect only missing.
     });
     entries.push({...row,state,config,issues});
   }
@@ -164,10 +166,11 @@ function summaryHtml(entries) {
       <th style="text-align:left;padding:8px;">Scope</th></tr></thead>
     <tbody>${entries.map(entry=>{
       const skipped=entry.issues.filter(issue=>isExplicitZeroSkip(entry,issue)).length;
-      const suggestions=entry.issues.filter(issue=>!isExplicitZeroSkip(entry,issue) &&
+      const mapped=entry.issues.filter(issue=>issue.mapped).length;
+      const suggestions=entry.issues.filter(issue=>!issue.mapped && !isExplicitZeroSkip(entry,issue) &&
         (issue.candidates?.length||issue.unknownComponentSuggestion?.ok)).length;
       return `<tr><td style="padding:7px;border-bottom:1px solid #334155;">${esc(entry.fileName)}</td>
-        <td style="padding:7px;text-align:right;">${entry.issues.length-skipped}</td>
+        <td style="padding:7px;text-align:right;">${entry.issues.length-skipped-mapped}</td>
         <td style="padding:7px;text-align:right;">${suggestions}</td>
         <td style="padding:7px;text-align:right;">${skipped}</td>
         <td style="padding:7px;">${esc(entry.alias||'Source-local')}</td>
@@ -192,8 +195,12 @@ export function phase6MassLedger(entries = []) {
         sourceId:entry.sourceId,fileName:entry.fileName,
         key:issue.key,branchName:issue.branchName||'',
         ref:(issue.componentRefNo||'')+(issue.endpoint?'_'+issue.endpoint:''),
-        status:zero?'skipped':'pending',
-        kg:zero?0:null,
+        status:zero?'skipped':issue.mapped ? (
+          (()=>{const receipt=overrides.rigidWeightReviewReceipts?.[issue.key];
+            return receipt?.reviewed===true &&
+              Math.abs(Number(receipt.weightKg)-Number(issue.weight))<1e-9
+              ?'reviewed':'saved';})()) : 'pending',
+        kg:zero?0:(issue.mapped?Number(issue.weight):null),
         suggestedKg:Number(proposed)>0?Number(proposed):null,
       });
     }
@@ -363,7 +370,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
       statusFilter?.addEventListener('change',applyFilter);
     }
     const unresolved=entries.reduce((n,e)=>n+
-      e.issues.filter(issue=>!isExplicitZeroSkip(e,issue)).length,0);
+      e.issues.filter(issue=>!issue.mapped&&!isExplicitZeroSkip(e,issue)).length,0);
     const skipped=entries.reduce((n,e)=>n+
       e.issues.filter(issue=>isExplicitZeroSkip(e,issue)).length,0);
     setStatus(unresolved+' unresolved source physical masses across '+
@@ -385,9 +392,13 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         setStatus('No missing physical-component masses. Nothing changed.');
         return;
       }
-      const result=await openModeAConsolidatedRigidWeightReviewPopup(pending);
+      const result=await openModeAConsolidatedRigidWeightReviewPopup(pending,{phase6:true});
       if(result.cancelled){
         setStatus('Rigid-mass review cancelled. No source mass was changed.');
+        return;
+      }
+      if(!Object.keys(result.updates||{}).length){
+        setStatus('No source weight or Rating changed.');
         return;
       }
       if(modeA){
