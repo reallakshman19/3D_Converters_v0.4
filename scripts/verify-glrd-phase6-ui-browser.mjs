@@ -331,8 +331,55 @@ try{
     stagedOnly:true,noAutoApproval:true,
     reviewedViaExplicitAttestation:true,undoRestoresExistingMass:true,
   },null,2));
+  // A distinct real-GLRD Rating test: a Preview/override Rating of 300
+  // conflicts with DTXR Class 900. Selecting DTXR must rerank the same row
+  // and SAVE ONLY that source-specific Rating, with exact Undo.
+  await page.evaluate(({config,key})=>{
+    const next=JSON.parse(config);
+    next.overrides.rating[key]='300';
+    const state=window.__phase6Ref.current;
+    window.__phase6Ref.current={
+      ...state,supportConfigJson:JSON.stringify(next),phase6Undo:null,
+      masterContext:{...state.masterContext,config:next},
+      result:null,outputRunReadinessReport:null,
+    };
+    window.__phase6Render();
+  },{config:originalCommittedConfig,key:compKey});
+  await page.locator('[data-phase6-open-review]').click();
+  await page.locator('.mc-rigid-review-dialog').waitFor({state:'visible'});
+  const ratingInputs=page.locator('.mc-rigid-review-rating-input');
+  const ratingKeys=await ratingInputs.evaluateAll(elements=>
+    elements.map(input=>input.dataset.issueKey));
+  const ratingIndex=ratingKeys.indexOf(compKey);
+  assert.ok(ratingIndex>=0,'DTXR Rating test key must retain original component identity');
+  const ratingInput=ratingInputs.nth(ratingIndex);
+  assert.equal(await ratingInput.inputValue(),'300',
+    'explicit Preview Rating override is the initial authority');
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await ratingInput.inputValue(),'900',
+    'operator explicitly switches from Preview 300 to DTXR 900');
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),
+    'Use Rating shown in Preview');
+  const beforeRatingSave=await page.evaluate(()=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson));
+  assert.equal(beforeRatingSave.overrides.rating[compKey],'300',
+    'DTXR selection and reranking alone must not modify saved Rating');
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const savedRating=await page.evaluate(key=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rating[key],compKey);
+  assert.equal(savedRating,'900','explicit Save persists the selected DTXR Rating');
+  await page.locator('[data-phase6-undo]').click();
+  const undoneRating=await page.evaluate(key=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rating[key],compKey);
+  assert.equal(undoneRating,'300','Undo restores prior Preview Rating and config custody');
+  await writeFile(resolve(out,'phase6-dtxr-save-undo-receipt.json'),JSON.stringify({
+    sourceKey:compKey,originalPreviewRating:'300',selectedDtxrRating:'900',
+    noMutationUntilSave:true,savedOnlyOnExplicitApply:true,undoRestoredOriginal:true,
+  },null,2));
   // Restore the approved GLRD simulated review fixture after the separate
-  // deliberate-error experiment. This is NOT a production mass edit.
+  // deliberate-error and Rating experiments. Not a production mass edit.
   await page.evaluate(config=>{
     window.__phase6Ref.current={
       ...window.__phase6Ref.current, supportConfigJson:config,
