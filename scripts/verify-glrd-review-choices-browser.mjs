@@ -18,10 +18,9 @@ try {
  await page.goto((process.env.EMPIRICAL_BROWSER_BASE_URL||'http://127.0.0.1:4173')+
    '/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
  const census=await page.evaluate(async ({xml,stage,masterRows})=>{
-   const {collectModeARigidWeightReviewIssues,openModeAConsolidatedRigidWeightReviewPopup}=
+   const {collectModeARigidWeightReviewIssues,openModeAConsolidatedRigidWeightReviewPopup,
+     modeARigidSelectableSuggestions}=
      await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js?v=20261107-weights-pyodide-fix-1');
-   const {availableWeightReviewChoices}=
-     await import('/converters/xml-cii2019-core/weight-review-choices.js?v=20261107-weights-pyodide-fix-1');
    const d=new DOMParser().parseFromString(xml,'application/xml');
    const ratingByBranch={};
    for(const branch of d.getElementsByTagName('Branch')){
@@ -36,7 +35,7 @@ try {
    const issues=await collectModeARigidWeightReviewIssues(state,config);
    const alternatives=issues.map(issue=>({
      ref:issue.componentRefNo,node:issue.nodeNumberDisplay||issue.nodeNumber,
-     choices:availableWeightReviewChoices(issue)
+     choices:modeARigidSelectableSuggestions(issue)
    })).filter(x=>x.choices.length>1);
    window.__glrdReviewEntries=[
      {sourceId:'GLRD-BM2',fileName:'GLRD-1000-PI-01 - BM2.xml',state,config,issues}
@@ -50,6 +49,24 @@ try {
  assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
  assert.equal(await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft]').count(),0,
    'opening popup never commits an empirical mass');
+ // The five real DN80 Class900 Blind Flange extrapolations must be single
+ // clickable "estimate only" buttons like the old UI, not passive chips.
+ const blindRow=page.locator('[data-mode-a-rigid-review-row]')
+   .filter({hasText:'BLIND FLANGE 900#'}).first();
+ assert.equal(await blindRow.count(),1,'real GLRD missing Blind Flange row');
+ const blindButton=blindRow.locator('[data-mode-a-rigid-candidate]').first();
+ assert.equal(await blindButton.count(),1,'estimate-only mass must be a clickable button');
+ assert.match(await blindButton.innerText(),/≈ 46\\.343 kg · Blind Flange · estimate only/i);
+ assert.equal(await blindRow.locator('select[data-mode-a-rigid-choice]').count(),0);
+ assert.equal(await blindRow.locator('[data-mode-a-rigid-propose]').count(),0);
+ await blindButton.click();
+ assert.equal(await blindRow.locator('.mc-rigid-review-input').inputValue(),'46.343');
+ assert.equal(await blindRow.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate',
+   'click stages, never silently approves, 46.343 kg');
+ assert.equal(await blindRow.locator('.mc-rigid-review-input').getAttribute('data-rigid-review-method'),null);
+ await blindRow.locator('.mc-rigid-review-input').fill('');
+ // Restore original Owner five missing rows before the 5→3→0 sequence.
+ assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (114)');
  assert.equal(await page.locator('[data-mode-a-rigid-show-missing]').innerText(),'Show missing (114)');
  await page.locator('[data-mode-a-rigid-apply-suggestions]').click();
  const drafts=await page.locator('.mc-rigid-review-input[data-rigid-suggestion-draft="estimate"]').count();
@@ -101,19 +118,21 @@ try {
  await page.screenshot({path:resolve(output,'glrd-blocked-apply-explicit-review-step.png')});
  if((await page.locator('[data-mode-a-rigid-show-missing]').innerText()).startsWith('Show all'))
    await page.locator('[data-mode-a-rigid-show-missing]').click();
- const alternativeSelectors=await page.locator('[data-mode-a-rigid-choice]').count();
- if(alternativeSelectors){
-   const choice=page.locator('[data-mode-a-rigid-choice]').first();
-   const options=await choice.locator('option').allTextContents();
-   assert.ok(options.length>2,'must offer multiple reference lengths/weights');
-   assert.ok(options.some(x=>x.includes('master L=')),'must disclose reference length');
-   // An alternate master is a proposal only; no per-row qualification UI
-   // remains, and selection must not silently grant bulk approval.
-   await choice.selectOption({index:2});
-   const tr=choice.locator('xpath=ancestor::tr');
-   assert.equal(await tr.locator('[data-rigid-suggestion-verified]').count(),0);
-   assert.equal(await tr.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
-   assert.equal(await tr.locator('.mc-rigid-review-input').getAttribute('data-rigid-review-method'),null);
+ const alternativeRows=await page.evaluate(()=>[...document.querySelectorAll('[data-mode-a-rigid-review-row]')]
+   .filter(tr=>tr.querySelectorAll('[data-mode-a-rigid-candidate]').length>1).length);
+ const alternativeButtons=await page.locator('[data-mode-a-rigid-candidate]').count();
+ assert.ok(alternativeButtons>=109,'all positive catalog or extrapolated values must be clickable');
+ assert.equal(await page.locator('select[data-mode-a-rigid-choice],[data-mode-a-rigid-propose]').count(),0,
+   'no dropdowns, no Use draft, no non-clickable advisory chips');
+ if(alternativeRows){
+   const multiple=page.locator('[data-mode-a-rigid-review-row]')
+     .filter({has:page.locator('[data-mode-a-rigid-candidate][data-mode-a-rigid-option="1"]')}).first();
+   const second=multiple.locator('[data-mode-a-rigid-candidate][data-mode-a-rigid-option="1"]');
+   const weight=await second.getAttribute('data-mode-a-rigid-weight');
+   await second.click();
+   assert.equal(await multiple.locator('.mc-rigid-review-input').inputValue(),weight);
+   assert.equal(await multiple.locator('.mc-rigid-review-input').getAttribute('data-rigid-review-method'),null);
+   assert.equal(await multiple.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
  }
  // Acceptance simulation ONLY: a reviewer would have to verify the physical
  // masses independently before giving this exact, non-default attestation.
@@ -246,7 +265,7 @@ try {
    glrdRows:census.count,draftPrefills:drafts,
    initialMissing:missingStart,afterManualMissing:3,afterSkipMissing:0,
    multipleChoiceRows:census.alternatives.length,examples:census.alternatives.slice(0,10),
-   alternativeSelectors:alternativeSelectors,
+   alternativeButtons:alternativeButtons,
    reviewGateBeforeCheckbox:'BLOCKED',simulatedReviewedMasses:111,
    explicitZeroSkips:3,verifiedState,
    ownerExactScreenshotRepro:{
@@ -263,7 +282,7 @@ try {
  await writeFile(resolve(output,'glrd-choice-skip-trace-receipt.json'),JSON.stringify(receipt,null,2));
  console.log('GLRD_CHOICE_SKIP_TRACE_PASS',JSON.stringify({
    rows:114,drafts,initialMissing:missingStart.length,afterManualMissing:3,afterSkipMissing:0,
-   alternatives:census.alternatives.length,alternativeSelectors,
+   alternatives:census.alternatives.length,alternativeButtons,
    zeroOverrides:verifiedState.zeroMassInOverrides,
    screenshotFiveSkips:5,screenshotReviewed:109,screenshotCompleted:true}));
 } finally {await browser.close()}
