@@ -35,8 +35,10 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
   };
   const result=applyModeAConsolidatedRigidReviewUpdates(virtual,updates);
   const supportConfigJson=result.sourceBatch.sources[0].supportConfigJson;
+  if(supportConfigJson===state.supportConfigJson)return state;
   return {
     ...state,supportConfigJson,
+    phase6Undo:{mode:'single',supportConfigJson:state.supportConfigJson||'{}'},
     masterContext:state.masterContext
       ? {...state.masterContext,config:parse(supportConfigJson)}
       : state.masterContext,
@@ -48,6 +50,9 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
 
 export function applyPhase6ModeAReview(state = {}, updates = {}) {
   if(!Object.keys(updates).length)return state;
+  const original=Object.fromEntries((state.sourceBatch?.sources||[])
+    .filter(source=>Object.prototype.hasOwnProperty.call(updates,source.sourceId))
+    .map(source=>[source.sourceId,source.supportConfigJson||'{}']));
   const applied=applyModeAConsolidatedRigidReviewUpdates(state,updates);
   const sources=(applied.sourceBatch?.sources||[]).map(source=>
     updates[source.sourceId] ? {
@@ -56,9 +61,40 @@ export function applyPhase6ModeAReview(state = {}, updates = {}) {
         outputRunReadinessReport:null,result:null},
     } : source);
   return syncActiveModeASource(normalizeModeABatchState({
-    ...applied,sourceBatch:{...applied.sourceBatch,sources},
+    ...applied,phase6Undo:{mode:'batch',sourceConfigs:original},
+    sourceBatch:{...applied.sourceBatch,sources},
     weightMatchResult:null,outputRunReadinessReport:null,
     batchRunResult:null,result:null,
+  }));
+}
+
+/** Undo the LAST saved Phase 6 transaction, including mass receipt and skip
+ * custody. Never undo an unrelated source or a later conversion run.
+ */
+export function undoPhase6Review(state = {}) {
+  const saved=state.phase6Undo;
+  if(!saved)return state;
+  if(saved.mode==='single'){
+    const supportConfigJson=saved.supportConfigJson||'{}';
+    return {...state,phase6Undo:null,supportConfigJson,
+      weightMatchResult:null,result:null,outputRunReadinessReport:null,
+      masterContext:state.masterContext?{...state.masterContext,
+        config:parse(supportConfigJson)}:state.masterContext};
+  }
+  if(saved.mode!=='batch')return state;
+  const sourceConfigs=saved.sourceConfigs||{};
+  const sources=(state.sourceBatch?.sources||[]).map(source=>
+    Object.prototype.hasOwnProperty.call(sourceConfigs,source.sourceId)
+      ? {...source,supportConfigJson:sourceConfigs[source.sourceId],
+        workflow:{...(source.workflow||{}),result:null,
+          outputRunReadinessReport:null,weightMatchResult:null}}
+      : source);
+  const active=sources.find(source=>source.sourceId===state.sourceBatch?.activeSourceId);
+  return syncActiveModeASource(normalizeModeABatchState({
+    ...state,phase6Undo:null,result:null,batchRunResult:null,
+    outputRunReadinessReport:null,weightMatchResult:null,
+    supportConfigJson:active?.supportConfigJson||state.supportConfigJson,
+    sourceBatch:{...state.sourceBatch,sources},
   }));
 }
 
@@ -281,12 +317,15 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
       .catch(error=>{card.textContent='InputXML weight review unavailable: '+error.message;});
     return;
   }
-  const sourceCount=modeA?modeAExecutionRows(stateRef).length:1;
+  const executionSources=modeA?modeAExecutionRows(stateRef):[];
+  const sourceCount=modeA?executionSources.length:1;
   const config=modeA
     ? xmlCiiEnrichedConfigFromState(modeAExecutionRows(stateRef)[0]?.state||snapshot)
     : xmlCiiEnrichedConfigFromState(snapshot);
-  const overrideCount=count(config.overrides?.rigidWeight);
-  const receiptCount=count(config.overrides?.rigidWeightReviewReceipts);
+  const sourceConfigs=modeA?executionSources.map(row=>
+    xmlCiiEnrichedConfigFromState(row.state)):[config];
+  const overrideCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeight),0);
+  const receiptCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeightReviewReceipts),0);
   card.innerHTML=`
     <div class="model-converters-workflow-detail-title">
       Rigid Weights Need Review — Consolidated
@@ -301,6 +340,10 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         data-phase6-open-review>Review / Edit Rigid Weights</button>
       <button type="button" class="model-converters-download-btn"
         data-phase6-refresh-review>Recheck missing weights</button>
+      <button type="button" class="model-converters-download-btn"
+        data-phase6-undo ${snapshot.phase6Undo?'':'disabled'}
+        title="Restore the last saved source-mass transaction with its receipts and skips">
+        ↶ Undo Last Change</button>
       <span style="color:#9cc5ff;font-size:12px;">${sourceCount} XML source(s) ·
         ${overrideCount} saved positive masses · ${receiptCount} review receipts
       </span>
@@ -323,6 +366,17 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   const output=card.querySelector('[data-phase6-sources]');
   const review=card.querySelector('[data-phase6-open-review]');
   const refresh=card.querySelector('[data-phase6-refresh-review]');
+  card.querySelector('[data-phase6-undo]')?.addEventListener('click',()=>{
+    const before=modeA?modeARawState(stateRef):stateRef.current;
+    if(!before?.phase6Undo)return;
+    const next=undoPhase6Review(before);
+    if(modeA)replaceModeAState(stateRef,next);
+    else{
+      stateRef.current=next;
+      if(next.masterContext)saveMasterContextToLocalStorage(next.masterContext);
+    }
+    render?.();
+  });
   const reportTarget=card.querySelector('[data-phase6-validation]');
   const sourceRows=modeA?modeAExecutionRows(stateRef):[];
   let selectedSourceId=sourceRows[0]?.source?.sourceId||'';
