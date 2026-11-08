@@ -251,8 +251,14 @@ try {
     assert.equal(await modeAPage.locator('[data-rigid-smart-toolbar]').count(),0,
       'incompatible eight-column dashboard must not show Mode A false blocked metrics');
     assert.equal(await modeAPage.locator('.mc-rigid-review-input').inputValue(),'');
-    assert.match(await modeAPage.locator('[data-mode-a-rigid-advisory]').innerText(),
-      /Weldneck Flange/);
+    const suggestion=modeAPage.locator('[data-mode-a-rigid-candidate]');
+    assert.equal(await suggestion.count(),1);
+    assert.match(await suggestion.innerText(),/Weldneck Flange/);
+    assert.equal(await suggestion.getAttribute('data-mode-a-rigid-approved'),'false');
+    await suggestion.click();
+    assert.equal(await modeAPage.locator('.mc-rigid-review-input').inputValue(),'59',
+      'click stages 59 kg without auto-approval');
+    assert.equal(await modeAPage.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
     await modeAPage.locator('[data-mode-a-rigid-cancel]').click();
     const outcome=await modeAPage.evaluate(async()=>await window.__modeAReview);
     assert.equal(outcome.cancelled,true);
