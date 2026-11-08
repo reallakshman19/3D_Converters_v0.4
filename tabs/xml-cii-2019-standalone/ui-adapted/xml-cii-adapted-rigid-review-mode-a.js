@@ -520,8 +520,13 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         const best=row.candidates?.[0];
         const weight=Number(best?.suggestedWeight??best?.selectedWeight??best?.weight);
         const length=Number(row.lengthMm),masterLength=Number(best?.rowLength);
-        return best?.preferred===true && Number.isFinite(weight)&&weight>0 &&
-          (!Number.isFinite(masterLength)||Math.abs(masterLength-length)<=1e-6) &&
+        const score=Number(best?.totalScore??best?.score);
+        const qualified=Number.isFinite(score)&&(Math.abs(score-1)<1e-6||
+          Math.abs(score-100)<1e-6);
+        const maxDelta=Math.min(6,Math.max(0,Number(row.reviewLengthToleranceMm??6)));
+        return best?.preferred===true && qualified &&
+          best.lengthQualified!==false && Number.isFinite(weight)&&weight>0 &&
+          (!Number.isFinite(masterLength)||Math.abs(masterLength-length)<=maxDelta+1e-6) &&
           isApprovedPhysicalMassCandidate(best,weight) ? {weight,source:best} : null;
       };
       overlay.querySelector('[data-phase6-find-exact]')?.addEventListener('click',()=>{
