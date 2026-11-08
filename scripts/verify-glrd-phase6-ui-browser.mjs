@@ -160,6 +160,7 @@ try{
   // must be present as editable source weights, without auto-copying an old
   // approval receipt to a changed value.
   const originalCommittedConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  await writeFile(resolve(out,'phase6-ui-reviewed-config.json'),originalCommittedConfig);
   await page.locator('[data-phase6-open-review]').click();
   assert.equal(await page.locator('[data-phase6-row-details]').count(),114,
     'every source component must expose the full evidence without horizontal scrolling');
@@ -200,6 +201,8 @@ try{
       skipped:cfg.overrides.rigidWeightSkipped?.[key]||null};
   },key);
   assert.equal(changed.mass,changedMass,'edited mapped weight saved to original key');
+  await writeFile(resolve(out,'phase6-ui-edited-mass-config.json'),
+    await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson));
   assert.equal(changed.receipt,null,'old reviewed mass cannot authorize a different value');
   assert.equal(changed.skipped,null,'edited mapped weight cannot be a zero skip');
   const editedXml=await page.evaluate(async()=>{
