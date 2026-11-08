@@ -174,6 +174,86 @@ function summaryHtml(entries) {
     }).join('')}</tbody></table>`;
 }
 
+/** Read-only audit ledger. Masses may only be changed in the same
+ * consolidated popup, not through an extra editable Weight Match table.
+ */
+export function phase6MassLedger(entries = []) {
+  const result=[];
+  for(const entry of entries){
+    const overrides=entry.config?.overrides||{};
+    const skipped=overrides.rigidWeightSkipped||{};
+    for(const issue of entry.issues||[]){
+      const zero=isExplicitZeroSkip(entry,issue);
+      const proposed=issue.candidates?.[0]?.selectedWeight ??
+        issue.candidates?.[0]?.suggestedWeight ??
+        issue.unknownComponentSuggestion?.suggestedKg;
+      result.push({
+        sourceId:entry.sourceId,fileName:entry.fileName,
+        key:issue.key,branchName:issue.branchName||'',
+        ref:(issue.componentRefNo||'')+(issue.endpoint?'_'+issue.endpoint:''),
+        status:zero?'skipped':'pending',
+        kg:zero?0:null,
+        suggestedKg:Number(proposed)>0?Number(proposed):null,
+      });
+    }
+    for(const [key,value] of Object.entries(overrides.rigidWeight||{})){
+      const kg=Number(value);
+      if(!Number.isFinite(kg)||kg<=0)continue;
+      if(result.some(row=>row.sourceId===entry.sourceId&&row.key===key))continue;
+      const receipt=overrides.rigidWeightReviewReceipts?.[key];
+      const reviewed=receipt?.reviewed===true &&
+        Math.abs(Number(receipt.weightKg)-kg)<1e-9;
+      result.push({
+        sourceId:entry.sourceId,fileName:entry.fileName,key,
+        branchName:key.split('::')[0]||'',
+        ref:receipt?.sourceComponentRef || key.split('::')[1] || key,
+        status:reviewed?'reviewed':'saved',
+        kg,suggestedKg:null,
+      });
+    }
+  }
+  return result;
+}
+function phase6LedgerHtml(entries) {
+  const rows=phase6MassLedger(entries);
+  if(!rows.length)return '<p>No stored mass decisions or missing components.</p>';
+  const td=(v)=>`<td style="padding:6px 9px;border-bottom:1px solid #334155;overflow-wrap:anywhere;">${esc(v)}</td>`;
+  return `<details data-phase6-ledger style="margin:12px 0;">
+    <summary style="cursor:pointer;font-weight:650;color:#d7e6ff;">
+      Inspect all physical-mass decisions (${rows.length}) — read only
+    </summary>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">
+      <input type="search" data-phase6-ledger-search placeholder="Find XML, branch or source reference…"
+        style="min-width:220px;background:#101827;color:white;border:1px solid #475569;padding:7px;">
+      <select data-phase6-ledger-filter
+        style="background:#101827;color:white;border:1px solid #475569;padding:7px;">
+        <option value="">All statuses</option>
+        <option value="pending">Needs review</option>
+        <option value="reviewed">Independently reviewed</option>
+        <option value="saved">Saved source mass</option>
+        <option value="skipped">Intentional 0 kg skip</option>
+      </select>
+    </div>
+    <div style="overflow:auto;max-height:48vh;border:1px solid #334155;border-radius:6px;">
+      <table style="border-collapse:collapse;width:100%;min-width:790px;font-size:12px;">
+        <thead><tr style="position:sticky;top:0;background:#1e293b;color:#e4f2ff;">
+          ${['Source XML','Branch','Source component / key','Status','Saved kg','Suggested draft kg'].map(h=>
+            `<th style="padding:8px;text-align:left;">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows.map(row=>`<tr data-phase6-ledger-row
+          data-phase6-ledger-status="${row.status}"
+          data-phase6-ledger-search-text="${esc([row.fileName,row.branchName,row.ref,row.key].join(' ').toLowerCase())}">
+          ${td(row.fileName)}${td(row.branchName)}${td(row.ref||row.key)}
+          ${td(row.status)}${td(row.kg??'—')}${td(row.suggestedKg??'—')}
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <p style="font-size:11px;color:#9fb5d1;">
+      Suggestions are evidence, not approved masses. Reopen Review / Edit Rigid Weights to change a decision.
+    </p>
+  </details>`;
+}
+
 /** Phase 6 replaces the duplicate editable Weight Match table. Run still
  * invokes the consolidated check independently, even if Phase 6 was skipped.
  */
@@ -252,7 +332,22 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   };
   const load=async()=>{
     const entries=await phase6CollectReviewEntries(stateRef,modeA);
-    if(output)output.innerHTML=summaryHtml(entries);
+    if(output){
+      output.innerHTML=summaryHtml(entries)+phase6LedgerHtml(entries);
+      const searchInput=output.querySelector('[data-phase6-ledger-search]');
+      const statusFilter=output.querySelector('[data-phase6-ledger-filter]');
+      const applyFilter=()=>{
+        const query=String(searchInput?.value||'').trim().toLowerCase();
+        const filter=String(statusFilter?.value||'');
+        output.querySelectorAll('[data-phase6-ledger-row]').forEach(row=>{
+          const matches=(!filter||row.dataset.phase6LedgerStatus===filter) &&
+            (!query||(row.dataset.phase6LedgerSearchText||'').includes(query));
+          row.style.display=matches?'':'none';
+        });
+      };
+      searchInput?.addEventListener('input',applyFilter);
+      statusFilter?.addEventListener('change',applyFilter);
+    }
     const unresolved=entries.reduce((n,e)=>n+
       e.issues.filter(issue=>!isExplicitZeroSkip(e,issue)).length,0);
     const skipped=entries.reduce((n,e)=>n+
