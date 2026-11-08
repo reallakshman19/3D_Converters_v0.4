@@ -8,6 +8,7 @@ import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core
 import { flattenModeARigidReviewEntries } from './xml-cii-adapted-rigid-review-mode-a-state.js';
 import { comparisonWeightMasterReferences } from '../../../converters/xml-cii2019-core/weight-review-choices.js';
 import { formatValveHint } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
+import { extractXmlCiiRatingFromDtxr } from '../../../converters/xml-cii2019-core/dtxr-rating-resolver.js';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const attr = (value) => esc(value).replace(/'/g, '&#39;');
@@ -256,7 +257,7 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
        <button type="button" data-mode-a-rigid-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:7px 12px;">Apply All Suggestions</button>
        <button type="button" data-mode-a-rigid-show-unreviewed title="Locate source rows whose estimated masses still need approval" style="cursor:pointer;background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:7px 12px;">Show pending reviews (0)</button>
        <button type="button" data-mode-a-rigid-open-review title="Explicitly acknowledge independently verified estimated masses before final Apply" style="cursor:pointer;background:#1d3452;border:1px solid #5377ae;color:#e9f4ff;border-radius:6px;padding:7px 12px;">Review draft weights (0)</button>
-      ${phase6?'<button type="button" data-phase6-nearest title="Fill blank weights only, without replacing an existing approved or manual mass">Apply nearest suggestions</button><button type="button" data-phase6-find-exact title="List source-approved exact candidates; catalog-perfect scores are not physical-mass approval">Find Exact Weight Matches</button><button type="button" data-phase6-fill-similar title="Fill grouped source-approved exact candidates only, never overwrite mapped rows">Fill Similar Exact</button>':''}
+      ${phase6?'<button type="button" data-phase6-dtxr style="padding:7px 12px;background:#1d3452;color:#e9f4ff;border:1px solid #5377ae;border-radius:6px;cursor:pointer;" title="Explicitly rerank suggestions by DTXR Rating; click again to restore original Preview Rating">Use Rating as per DTXR</button><button type="button" data-phase6-nearest style="padding:7px 12px;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;cursor:pointer;" title="Fill blank weights only, without replacing an existing approved or manual mass">Apply nearest suggestions</button><button type="button" data-phase6-find-exact style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="List source-approved exact candidates; catalog-perfect scores are not physical-mass approval">Find Exact Weight Matches</button><button type="button" data-phase6-fill-similar style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="Fill grouped source-approved exact candidates only, never overwrite mapped rows">Fill Similar Exact</button>':''}
       <button type="button" data-mode-a-rigid-fill-exact style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:7px 12px;">Use All Exact Suggestions</button>
       <span data-mode-a-rigid-status role="status" aria-live="polite" style="font-size:12px;color:#94a3b8;flex-basis:100%;"></span>
     </div>
@@ -470,12 +471,39 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     };
     bindCandidateButtons(overlay, rows);
     if(phase6){
-      overlay.querySelectorAll('[data-phase6-row-edit]').forEach(button=>{
-        button.addEventListener('click',()=>{
-          const input=button.closest('tr')?.querySelector('.mc-rigid-review-input');
-          input?.focus();
-          input?.select?.();
-        });
+      overlay.addEventListener('click',event=>{
+        const button=event.target?.closest?.('[data-phase6-row-edit]');
+        if(!button)return;
+        const input=button.closest('tr')?.querySelector('.mc-rigid-review-input');
+        input?.focus();
+        input?.select?.();
+      });
+      let dtxrMode=false;
+      const originalOverrideRatings=new Map(workingEntries.map(entry=>
+        [entry.sourceId,{...(entry.config?.overrides?.rating||{})}]));
+      overlay.querySelector('[data-phase6-dtxr]')?.addEventListener('click',()=>{
+        dtxrMode=!dtxrMode;
+        let changed=0;
+        for(const tr of overlay.querySelectorAll('[data-mode-a-rigid-review-row]')){
+          const ratingInput=tr.querySelector('.mc-rigid-review-rating-input');
+          if(!ratingInput)continue;
+          const original=initialRatings.get(ratingInput.dataset.reviewId||'')||'';
+          const dtxr=extractXmlCiiRatingFromDtxr(tr.children[5]?.textContent||'');
+          const next=dtxrMode?dtxr:original;
+          if(dtxrMode&&!next)continue;
+          if(ratingInput.value!==next){ratingInput.value=next;changed++;}
+        }
+        if(!dtxrMode){
+          for(const entry of workingEntries){
+            entry.config={...entry.config,overrides:{...(entry.config?.overrides||{}),
+              rating:{...(originalOverrideRatings.get(entry.sourceId)||{})}}};
+          }
+        }
+        const button=overlay.querySelector('[data-phase6-dtxr]');
+        if(button)button.textContent=dtxrMode?'Use Rating shown in Preview':'Use Rating as per DTXR';
+        setStatus(changed+' Rating field(s) switched to '+(dtxrMode?'DTXR evidence':'original Preview')+
+          '; suggestions refreshing. Rating changes are not committed until Save.',false);
+        overlay.querySelector('[data-mode-a-rigid-refresh]')?.click();
       });
       overlay.querySelector('[data-phase6-nearest]')?.addEventListener('click',()=>{
         let updated=0;
@@ -625,7 +653,8 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         const value = Number(best?.suggestedWeight ?? best?.selectedWeight ?? best?.weight);
         if (!best?.preferred || !isApprovedPhysicalMassCandidate(best, value)) return;
         const input = overlay.querySelectorAll('.mc-rigid-review-input')[index];
-        if (input && stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
+        if (input && (!phase6 || input.value==='') &&
+            stageRigidReviewProposal(input,proposedRigidReviewWeight(row))) count += 1;
       });
       hideBulkReview();
       filter();
