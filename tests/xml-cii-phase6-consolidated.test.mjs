@@ -82,7 +82,7 @@ test('Phase 6 UI routes both single and Mode A to same consolidated review, with
   assert.match(registry,/id: 'weight-match', label: '6 Rigid Weight Review'/);
   assert.match(single,/if \(phaseId === 'weight-match'\) return renderUnifiedPhase6WeightReview/);
   assert.match(batch,/renderUnifiedPhase6WeightReview\(card, stateRef, render, \{modeA:true\}\)/);
-  assert.match(unified,/openModeAConsolidatedRigidWeightReviewPopup\(pending\)/);
+  assert.match(unified,/openModeAConsolidatedRigidWeightReviewPopup\(pending,\{phase6:true\}\)/);
   assert.match(unified,/data-phase6-advanced/);
   assert.match(unified,/appendEmpiricalWeightValidationReport/);
   assert.match(unified,/mountXmlCiiWeightRuleSettings/);
