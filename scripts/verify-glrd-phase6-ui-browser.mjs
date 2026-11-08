@@ -141,5 +141,81 @@ try{
       comparisons:reextracted.comparisons,mismatches:reextracted.mismatches,
       baselineByteParity:'EQUAL'},
   },null,2));
+  // Regression previously missed by XML parity: 109 already-mapped masses
+  // must be present as editable source weights, without auto-copying an old
+  // approval receipt to a changed value.
+  const originalCommittedConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  await page.locator('[data-phase6-open-review]').click();
+  const mappedInputs=page.locator('.mc-rigid-review-input[data-original-weight]:not([data-original-weight=""])');
+  assert.equal(await mappedInputs.count(),109,'all 109 mapped masses must be editable');
+  for(const title of ['Line Key','Component Type','Valve Hint','Current Weight','Status','Score','Candidate Type']){
+    assert.ok((await page.locator('.mc-rigid-review-dialog thead').innerText()).includes(title),
+      'full Phase 6 column missing: '+title);
+  }
+  assert.equal(await page.locator('[data-phase6-nearest]').count(),1);
+  assert.equal(await page.locator('[data-phase6-find-exact]').count(),1);
+  assert.equal(await page.locator('[data-phase6-fill-similar]').count(),1);
+  const target=mappedInputs.first();
+  const originalMass=Number(await target.inputValue());
+  const key=await target.getAttribute('data-issue-key');
+  const changedMass=originalMass+2;
+  await target.fill(String(changedMass));
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const changed=await page.evaluate(key=>{
+    const cfg=JSON.parse(window.__phase6Ref.current.supportConfigJson);
+    return {mass:cfg.overrides.rigidWeight[key],
+      receipt:cfg.overrides.rigidWeightReviewReceipts?.[key]||null,
+      skipped:cfg.overrides.rigidWeightSkipped?.[key]||null};
+  },key);
+  assert.equal(changed.mass,changedMass,'edited mapped weight saved to original key');
+  assert.equal(changed.receipt,null,'old reviewed mass cannot authorize a different value');
+  assert.equal(changed.skipped,null,'edited mapped weight cannot be a zero skip');
+  const editedXml=await page.evaluate(async()=>{
+    const state=window.__phase6Ref.current;
+    const {enrichStandaloneXmlForRun}=await import(
+      '/tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js');
+    const result=await enrichStandaloneXmlForRun({
+      sourceText:state.sourceText,stagedJsonText:state.stagedJsonText,
+      supportConfigJson:state.supportConfigJson,options:{},
+    });
+    if(!result.applied||!result.xmlText)throw Error('Edited Phase 6 XML failed to extract');
+    return result.xmlText;
+  });
+  assert.notEqual(editedXml,control,'changing mapped mass must change enriched XML');
+  const engineeringDiff=await page.evaluate(({before,after})=>{
+    function nodes(xml){
+      const doc=new DOMParser().parseFromString(xml,'application/xml');
+      const all=[];
+      for(const branch of doc.getElementsByTagName('Branch')){
+        const name=branch.getElementsByTagName('Branchname')[0]?.textContent||'';
+        const rows=[...branch.getElementsByTagName('Node')];
+        rows.forEach((node,i)=>{
+          const clone=node.cloneNode(true);
+          [...clone.getElementsByTagName('Weight')].forEach(x=>x.remove());
+          const weight=node.getElementsByTagName('Weight')[0]?.textContent||'';
+          all.push({id:name+'::'+i,body:new XMLSerializer().serializeToString(clone),weight});
+        });
+      }
+      return all;
+    }
+    const left=nodes(before),right=nodes(after);
+    if(left.length!==right.length)return {nodeCountEqual:false};
+    const structural=left.filter((node,i)=>node.body!==right[i].body).length;
+    const masses=left.filter((node,i)=>node.weight!==right[i].weight)
+      .map((node,i)=>node.id);
+    return {nodeCountEqual:true,structural,changedMassCount:masses.length};
+  },{before:control,after:editedXml});
+  assert.deepEqual(engineeringDiff,{nodeCountEqual:true,structural:0,changedMassCount:1},
+    'the changed mass must alter exactly one enriched Node Weight without any structural change');
+  await writeFile(resolve(out,'phase6-ui-edited-mass-enriched.xml'),editedXml);
+  await page.locator('[data-phase6-undo]').click();
+  const restored=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  assert.equal(restored,originalCommittedConfig,
+    'Undo must restore the full original source override, approval and skip custody');
+  await writeFile(resolve(out,'phase6-mapped-edit-undo-receipt.json'),JSON.stringify({
+    key,originalMass,changedMass,engineeringDiff,
+    sourceIsolation:'source-keyed',approvalReused:false,
+    undoRestoredExactConfig:true,
+  },null,2));
   console.log('GLRD_PHASE6_ACTUAL_UI_PASS',JSON.stringify(record));
 }finally{await browser.close();}
