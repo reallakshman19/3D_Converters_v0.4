@@ -5,7 +5,7 @@
 import {
   collectModeARigidWeightReviewIssues,
   openModeAConsolidatedRigidWeightReviewPopup,
-} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261108-phase6-full-parity-r2';
+} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261108-phase6-error40-r3';
 import { applyModeAConsolidatedRigidReviewUpdates } from './xml-cii-adapted-rigid-review-mode-a-state.js';
 import { xmlCiiEnrichedConfigFromState, saveMasterContextToLocalStorage } from './xml-cii-adapted-state.js';
 import { modeAExecutionRows, modeARawState } from './xml-cii-adapted-mode-a-propagation.js';
@@ -425,7 +425,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   }
   appendEmpiricalWeightValidationReport(card.querySelector('[data-phase6-advanced]'),reportRef);
   const settings=card.querySelector('[data-phase6-settings]');
-  void import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-full-parity-r2')
+  void import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-error40-r3')
     .then(module=>module.mountXmlCiiWeightRuleSettings(settings,{
       config,onSaveConfig:next=>phase6SaveAdvancedSettings(stateRef,modeA,next,render),
     })).catch(error=>{if(settings)settings.textContent='Advanced settings unavailable: '+error.message;});
@@ -501,7 +501,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         : stateRef.current;
       if(!row)throw new Error('Select a valid XML source');
       const [{computeXmlCiiWeightIssues},{loadParentWeightMatchModules}]=await Promise.all([
-        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-full-parity-r2'),
+        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-error40-r3'),
         import('../xml-cii-standalone-run-parity.js')
       ]);
       const file=row.sourceFile || new File([await sourceText(row,'sourceText','sourceFile')],
