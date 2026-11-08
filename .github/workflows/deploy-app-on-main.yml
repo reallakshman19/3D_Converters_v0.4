@@ -42,3 +42,17 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public Phase 6 assets equal the exact merged commit
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-xmlcii-pages-deploy.py
+
+      - name: Publish live deployment byte-parity receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-live-deploy-byte-parity-${{ github.sha }}
+          path: artifacts/phase6-pages-deployment-verification.json
+          if-no-files-found: warn

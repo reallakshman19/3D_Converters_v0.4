@@ -30,7 +30,7 @@ try{
       if(!rating)throw Error('Unknown piping class in GLRD '+name);
       ratingByBranch[name]=rating;
     }
-    const module=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-full-parity-r2');
+    const module=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-error40-r3');
     const card=document.createElement('section');
     card.id='phase6-glrd-actual';
     card.style.cssText='background:#0f172a;color:white;padding:18px;';
@@ -65,6 +65,28 @@ try{
   assert.match(await blind.locator('[data-mode-a-rigid-candidate]').first().innerText(),
     /≈ 46\.343 kg · Blind Flange/);
   const initial=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  assert.equal(await page.locator('[data-phase6-approve-all]').count(),1);
+  assert.equal(await page.locator('[data-phase6-deviation40]').count(),1);
+  assert.match(await page.locator('.mc-rigid-review-dialog thead').innerText(),/Reference \(kg\)/);
+  assert.match(await page.locator('.mc-rigid-review-dialog thead').innerText(),/Error %/);
+  // Exercise real DTXR -> Preview toggle, recompute candidates and ensure no
+  // Rating was saved without the explicit Save button.
+  const dtxrRow=page.locator('[data-mode-a-rigid-review-row]')
+    .filter({hasText:'900#'}).first();
+  const dtxrInput=dtxrRow.locator('.mc-rigid-review-rating-input');
+  const previewRating=await dtxrInput.inputValue();
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),'Use Rating shown in Preview');
+  assert.equal(await dtxrInput.inputValue(),'900');
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),'Use Rating as per DTXR');
+  assert.equal(await dtxrInput.inputValue(),previewRating);
+  assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
+    'DTXR/Preview toggle alone cannot write any Rating or physical mass');
   await page.locator('[data-mode-a-rigid-cancel]').click();
   assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),initial,
     'cancel must not persist even a draft');
@@ -160,6 +182,7 @@ try{
   // must be present as editable source weights, without auto-copying an old
   // approval receipt to a changed value.
   const originalCommittedConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  await writeFile(resolve(out,'phase6-ui-reviewed-config.json'),originalCommittedConfig);
   await page.locator('[data-phase6-open-review]').click();
   assert.equal(await page.locator('[data-phase6-row-details]').count(),114,
     'every source component must expose the full evidence without horizontal scrolling');
@@ -200,6 +223,8 @@ try{
       skipped:cfg.overrides.rigidWeightSkipped?.[key]||null};
   },key);
   assert.equal(changed.mass,changedMass,'edited mapped weight saved to original key');
+  await writeFile(resolve(out,'phase6-ui-edited-mass-config.json'),
+    await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson));
   assert.equal(changed.receipt,null,'old reviewed mass cannot authorize a different value');
   assert.equal(changed.skipped,null,'edited mapped weight cannot be a zero skip');
   const editedXml=await page.evaluate(async()=>{
@@ -249,5 +274,119 @@ try{
     sourceIsolation:'source-keyed',approvalReused:false,
     undoRestoredExactConfig:true,
   },null,2));
+  // Exercise a verified same-DN/Class catalog reference with a deliberately
+  // incorrect mapped mass. The ±40% tool MUST NOT auto-approve/commit it.
+  await page.locator('[data-phase6-open-review]').click();
+  const candidate=page.locator('[data-mode-a-rigid-review-row]')
+    .filter({has:page.locator('[data-phase6-reference-kg]:not([data-phase6-reference-kg=""])')})
+    .filter({has:page.locator('.mc-rigid-review-input[data-original-weight]:not([data-original-weight=""])')})
+    .first();
+  assert.equal(await candidate.count(),1,'GLRD must have a length-qualified matching reference');
+  const compKey=await candidate.locator('.mc-rigid-review-input').getAttribute('data-issue-key');
+  const refKg=Number(await candidate.locator('[data-phase6-reference-kg]').getAttribute('data-phase6-reference-kg'));
+  assert.ok(refKg>0);
+  await candidate.locator('.mc-rigid-review-input').fill(String(refKg*2));
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  await page.locator('[data-phase6-open-review]').click();
+  await page.locator('.mc-rigid-review-dialog').waitFor({state:'visible'});
+  const allInputs=page.locator('.mc-rigid-review-input');
+  const keys=await allInputs.evaluateAll(elements=>elements.map(input=>input.dataset.issueKey));
+  const matchedIndex=keys.indexOf(compKey);
+  assert.ok(matchedIndex>=0,
+    'Previously saved mapped source key absent on reopening: '+compKey+
+    '; visible input count='+keys.length+'; example keys='+JSON.stringify(keys.slice(0,5)));
+  const changedInput=allInputs.nth(matchedIndex);
+  assert.equal(Number(await changedInput.inputValue()),refKg*2);
+  assert.match(await changedInput.locator('xpath=..').locator('xpath=..')
+    .locator('[data-phase6-error-pct]').innerText(),/\+100\.0%/);
+  assert.match(await page.locator('[data-phase6-deviation40]').innerText(),/\([1-9]/);
+  await page.locator('[data-phase6-deviation40]').click();
+  assert.equal(Number(await changedInput.inputValue()),refKg);
+  assert.equal(await changedInput.getAttribute('data-rigid-suggestion-draft'),'estimate');
+  assert.equal(await changedInput.getAttribute('data-rigid-review-method'),null);
+  // Saving an unapproved drafted correction must be refused.
+  const pendingConfig=await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson);
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),
+    pendingConfig,'threshold button must not commit without explicit review');
+  await page.locator('[data-phase6-approve-all]').click();
+  assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true);
+  assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
+  await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+  await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const accepted=await page.evaluate(key=>{
+    const c=JSON.parse(window.__phase6Ref.current.supportConfigJson);
+    return {kg:Number(c.overrides.rigidWeight[key]),
+      reviewed:c.overrides.rigidWeightReviewReceipts?.[key]?.reviewed===true};
+  },compKey);
+  assert.deepEqual(accepted,{kg:refKg,reviewed:true});
+  await page.locator('[data-phase6-undo]').click();
+  const undoneComparison=await page.evaluate(key=>
+    Number(JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rigidWeight[key]),compKey);
+  assert.equal(undoneComparison,refKg*2,'Undo restores the prior mass, not the reference');
+  await writeFile(resolve(out,'phase6-deviation40-review-receipt.json'),JSON.stringify({
+    sourceKey:compKey,referenceKg:refKg,existingMassKg:refKg*2,
+    signedErrorPct:100,thresholdPercent:40,
+    stagedOnly:true,noAutoApproval:true,
+    reviewedViaExplicitAttestation:true,undoRestoresExistingMass:true,
+  },null,2));
+  // A distinct real-GLRD Rating test: a Preview/override Rating of 300
+  // conflicts with DTXR Class 900. Selecting DTXR must rerank the same row
+  // and SAVE ONLY that source-specific Rating, with exact Undo.
+  await page.evaluate(({config,key})=>{
+    const next=JSON.parse(config);
+    next.overrides.rating[key]='300';
+    const state=window.__phase6Ref.current;
+    window.__phase6Ref.current={
+      ...state,supportConfigJson:JSON.stringify(next),phase6Undo:null,
+      masterContext:{...state.masterContext,config:next},
+      result:null,outputRunReadinessReport:null,
+    };
+    window.__phase6Render();
+  },{config:originalCommittedConfig,key:compKey});
+  await page.locator('[data-phase6-open-review]').click();
+  await page.locator('.mc-rigid-review-dialog').waitFor({state:'visible'});
+  const ratingInputs=page.locator('.mc-rigid-review-rating-input');
+  const ratingKeys=await ratingInputs.evaluateAll(elements=>
+    elements.map(input=>input.dataset.issueKey));
+  const ratingIndex=ratingKeys.indexOf(compKey);
+  assert.ok(ratingIndex>=0,'DTXR Rating test key must retain original component identity');
+  const ratingInput=ratingInputs.nth(ratingIndex);
+  assert.equal(await ratingInput.inputValue(),'300',
+    'explicit Preview Rating override is the initial authority');
+  await page.locator('[data-phase6-dtxr]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
+    ?.textContent?.includes('Suggestions refreshed'));
+  assert.equal(await ratingInput.inputValue(),'900',
+    'operator explicitly switches from Preview 300 to DTXR 900');
+  assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),
+    'Use Rating shown in Preview');
+  const beforeRatingSave=await page.evaluate(()=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson));
+  assert.equal(beforeRatingSave.overrides.rating[compKey],'300',
+    'DTXR selection and reranking alone must not modify saved Rating');
+  await page.locator('[data-mode-a-rigid-apply]').click();
+  const savedRating=await page.evaluate(key=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rating[key],compKey);
+  assert.equal(savedRating,'900','explicit Save persists the selected DTXR Rating');
+  await page.locator('[data-phase6-undo]').click();
+  const undoneRating=await page.evaluate(key=>
+    JSON.parse(window.__phase6Ref.current.supportConfigJson).overrides.rating[key],compKey);
+  assert.equal(undoneRating,'300','Undo restores prior Preview Rating and config custody');
+  await writeFile(resolve(out,'phase6-dtxr-save-undo-receipt.json'),JSON.stringify({
+    sourceKey:compKey,originalPreviewRating:'300',selectedDtxrRating:'900',
+    noMutationUntilSave:true,savedOnlyOnExplicitApply:true,undoRestoredOriginal:true,
+  },null,2));
+  // Restore the approved GLRD simulated review fixture after the separate
+  // deliberate-error and Rating experiments. Not a production mass edit.
+  await page.evaluate(config=>{
+    window.__phase6Ref.current={
+      ...window.__phase6Ref.current, supportConfigJson:config,
+      phase6Undo:null,result:null,outputRunReadinessReport:null
+    };
+    window.__phase6Render();
+  },originalCommittedConfig);
+
   console.log('GLRD_PHASE6_ACTUAL_UI_PASS',JSON.stringify(record));
 }finally{await browser.close();}
