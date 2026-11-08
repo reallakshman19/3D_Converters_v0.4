@@ -137,7 +137,8 @@ try {
  // Acceptance simulation ONLY: a reviewer would have to verify the physical
  // masses independently before giving this exact, non-default attestation.
  // Changing a proposal closes the old panel and invalidates a prior review.
- assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),false);
+ assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),!alternativeRows,
+   'only selecting a new qualified alternative closes the previous batch review panel');
  await page.locator('[data-mode-a-rigid-open-review]').click();
  assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
  await page.locator('[data-mode-a-rigid-bulk-attest]').check();
