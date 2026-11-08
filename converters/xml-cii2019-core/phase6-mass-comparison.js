@@ -40,8 +40,11 @@ export function phase6ComparableReference(issue={}) {
     // never an interpolated or scaled suggested kg. At ±6 mm an extrapolated
     // candidate may still carry a valid *unscaled* reference master row.
     const method=String(candidate?.weightMethod??candidate?.method??'');
-    const masterKg=positive(candidate?.masterWeight??candidate?.weight);
     const derived=/interpolat|extrapolat|factor|fallback|infer|heuristic/i.test(method);
+    // Some source-approved/manual same-length candidates carry selectedWeight
+    // but no raw 'weight' field; only use this fallback for non-derived values.
+    const masterKg=positive(candidate?.masterWeight??candidate?.weight??
+      (!derived?(candidate?.selectedWeight??candidate?.suggestedWeight):null));
     if(derived && (/interpolat|factor|fallback|infer|heuristic/i.test(method) ||
        positive(candidate?.masterWeight)===null))continue;
     const kg=masterKg;
