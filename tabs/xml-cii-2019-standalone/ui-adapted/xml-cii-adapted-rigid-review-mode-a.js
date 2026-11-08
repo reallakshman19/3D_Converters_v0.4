@@ -469,6 +469,61 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       filter();
     };
     bindCandidateButtons(overlay, rows);
+    if(phase6){
+      overlay.querySelectorAll('[data-phase6-row-edit]').forEach(button=>{
+        button.addEventListener('click',()=>{
+          const input=button.closest('tr')?.querySelector('.mc-rigid-review-input');
+          input?.focus();
+          input?.select?.();
+        });
+      });
+      overlay.querySelector('[data-phase6-nearest]')?.addEventListener('click',()=>{
+        let updated=0;
+        rows.forEach((row,index)=>{
+          const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+          if(!input || input.value!=='')return;
+          const proposal=proposedRigidReviewWeight(row);
+          if(proposal && stageRigidReviewProposal(input,proposal))updated++;
+        });
+        hideBulkReview();filter();
+        setStatus(updated+' blank rows filled as review drafts; existing source masses preserved. No value saved.',false);
+      });
+      const exact=(row)=>{
+        const best=row.candidates?.[0];
+        const weight=Number(best?.suggestedWeight??best?.selectedWeight??best?.weight);
+        const length=Number(row.lengthMm),masterLength=Number(best?.rowLength);
+        return best?.preferred===true && Number.isFinite(weight)&&weight>0 &&
+          (!Number.isFinite(masterLength)||Math.abs(masterLength-length)<=1e-6) &&
+          isApprovedPhysicalMassCandidate(best,weight) ? {weight,source:best} : null;
+      };
+      overlay.querySelector('[data-phase6-find-exact]')?.addEventListener('click',()=>{
+        const matches=rows.filter(row=>!row.mapped&&exact(row)).length;
+        setStatus(matches+' source-approved exact match(es) available. Catalog-perfect estimates without independent mass authority remain drafts.',false);
+      });
+      overlay.querySelector('[data-phase6-fill-similar]')?.addEventListener('click',()=>{
+        const groups=new Map();
+        for(let i=0;i<rows.length;i++){
+          const row=rows[i],match=exact(row);
+          if(!match || row.mapped)continue;
+          const key=[row.componentType,row.boreMm,row.rating,
+            Number(row.lengthMm).toFixed(3),
+            String(match.source.typeDesc||''),match.weight].join('|');
+          const list=groups.get(key)||[];
+          list.push(i);groups.set(key,list);
+        }
+        let updated=0;
+        for(const indices of groups.values()){
+          if(indices.length<2)continue;
+          for(const index of indices){
+            const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+            if(!input || input.value!=='')continue;
+            if(stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index])))updated++;
+          }
+        }
+        hideBulkReview();filter();
+        setStatus(updated+' grouped exact source-approved weights staged. Mapped/manual masses were not overwritten.',false);
+      });
+    }
     filter(); // Show accurate missing-row count and source-ref trace immediately.
     reviewButton?.addEventListener('click',()=>{
       reviewOnly=!reviewOnly;
@@ -612,10 +667,17 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     overlay.querySelector('[data-mode-a-rigid-apply]')?.addEventListener('click', () => {
       const updates = {};
       const missing = [], unreviewed = [], skipped = [];
+      let editedMapped=0;
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
         const sourceId = input.dataset.sourceId || '';
         const key = input.dataset.issueKey || '';
         const numeric = input.value==='' ? NaN : Number(input.value);
+        const original=Number(input.dataset.originalWeight);
+        const wasMapped=input.dataset.originalWeight!=='';
+        if(phase6 && wasMapped && Number.isFinite(numeric) &&
+            Math.abs(numeric-original)<1e-9 &&
+            input.dataset.rigidSuggestionDraft!=='estimate')return;
+        if(phase6 && input.value==='')return; // Phase 6 accepts partial edits; Run never does.
         if(input.dataset.rigidSkippedZero==='true' && input.value==='0'){
           updates[sourceId] ||= {ratingsByKey:{},weightsByKey:{},skippedByKey:{}};
           updates[sourceId].skippedByKey ||= {};
@@ -639,6 +701,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         input.style.borderColor = '#31455f';
         updates[sourceId] ||= { ratingsByKey: {}, weightsByKey: {} };
         updates[sourceId].weightsByKey[key] = numeric;
+        if(phase6 && wasMapped && Math.abs(numeric-original)>1e-9)editedMapped++;
         if(input.dataset.rigidSuggestionDraft==='estimate'){
           if(input.dataset.rigidReviewMethod!=='EXPLICIT_BULK_OWNER_ATTESTATION')
             throw new Error('Unconfirmed estimated mass passed batch review gate: '+key);
@@ -679,7 +742,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         return;
       }
       overlay.remove();
-      resolve({ cancelled: false, updates });
+      resolve({ cancelled: false, updates,editedMapped,phase6 });
     });
   });
 }
