@@ -107,6 +107,8 @@ test('consolidated popup uses clickable buttons and no dropdown or Use draft',as
   const choices=modeARigidSelectableSuggestions(issue);
   assert.deepEqual(choices.map(c=>c.weight),[15,16],
     'only exact DN, class, family and 0..6mm length delta alternatives');
+  assert.deepEqual(modeARigidSelectableSuggestions({...issue,reviewLengthToleranceMm:10}).map(c=>c.weight),
+    [15,16],'hard +6mm cap still holds if configurable ranking tolerance is larger');
   const html=modeARigidCandidateMarkup(issue,0);
   assert.equal((html.match(/<button /g)||[]).length,2);
   assert.match(html,/data-mode-a-rigid-candidate="0"/);
