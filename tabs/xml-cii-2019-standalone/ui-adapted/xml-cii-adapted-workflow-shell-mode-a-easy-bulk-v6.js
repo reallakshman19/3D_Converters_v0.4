@@ -1,7 +1,7 @@
 import { clearElement, createElement } from './xml-cii-adapted-dom.js?v=20260813-mode-a-consolidated-1';
 import { renderHeader, renderPhaseRail } from './xml-cii-adapted-workflow-shell-mode-a-core.js?v=20260813-mode-a-consolidated-shell-1';
 import { createXmlCiiAdaptedWorkflowState } from './xml-cii-adapted-state.js?v=20260813-mode-a-consolidated-1';
-import { renderActivePhase } from './xml-cii-adapted-phase-panels-mode-a.js?v=20261108-rigid-choice-buttons-1';
+import { renderActivePhase } from './xml-cii-adapted-phase-panels-mode-a.js?v=20261108-phase6-unified-r1';
 import { bindAdaptedWorkflowEvents } from './xml-cii-adapted-events-mode-a-consolidated-review-v2.js?v=20261108-rigid-choice-buttons-1';
 import { createXmlCiiBranchScopedStateRef, ensureXmlCiiBranchSelectionInRef } from './xml-cii-adapted-branch-scope-state.js?v=20260813-mode-a-consolidated-1';
 import { createXmlCiiModeAStateRef } from './xml-cii-adapted-mode-a-state.js?v=20260813-mode-a-consolidated-1';
