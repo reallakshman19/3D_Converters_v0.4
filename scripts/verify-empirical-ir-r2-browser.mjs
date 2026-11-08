@@ -100,10 +100,15 @@ try {
         assert.equal(await input.getAttribute('data-rigid-review-method'),null);
         await input.fill('');
       }else{
-        const chip=page.locator('[data-rigid-review-advisory]');
-        assert.equal(await chip.count(),1);
-        assert.ok((await chip.innerText()).includes(family),'source family visible');
-        assert.equal(await page.locator('[data-rigid-review-candidate]').count(),0);
+        const button=page.locator('[data-rigid-review-candidate]');
+        assert.equal(await button.count(),1,'estimated reference is a clickable review draft');
+        assert.ok((await button.innerText()).includes(family),'source family visible');
+        assert.equal(await button.getAttribute('data-rigid-review-approved'),'false');
+        await button.click();
+        assert.equal(Number(await input.inputValue()),weight,'click copies the estimate in kg');
+        assert.equal(await input.getAttribute('data-rigid-suggestion-draft'),'estimate');
+        assert.equal(await page.locator('[data-rigid-suggestion-verified]').isChecked(),false);
+        await input.fill(''); // Reset; later Apply must still reject unreviewed masses.
       }
       if(route==='modeA'){
         await page.locator('[data-mode-a-rigid-fill-exact]').click();

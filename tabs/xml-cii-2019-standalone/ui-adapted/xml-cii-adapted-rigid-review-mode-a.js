@@ -168,6 +168,29 @@ function rowMarkup(issue, rowIndex) {
   </tr>`;
 }
 
+
+/** Present every pending source mass in an inspectable, scrollable review table.
+ * Escaping is required: source XML names and DTXR are untrusted strings.
+ */
+export function modeABulkReviewTableMarkup(drafts = []) {
+  const header = ['#','Source XML','Branch','Node','Component reference / endpoint','Draft mass (kg)','DTXR description'];
+  const th = value => `<th scope="col" style="position:sticky;top:0;z-index:1;padding:7px 9px;
+    text-align:left;background:#1e3654;color:#e9f4ff;border-bottom:1px solid #6e91bd;white-space:nowrap;">${value}</th>`;
+  const td = (value, numeric = false) => `<td style="padding:7px 9px;
+    border-bottom:1px solid rgba(148,163,184,.22);overflow-wrap:anywhere;
+    ${numeric?'white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;':''}">${esc(value)}</td>`;
+  return `<table data-mode-a-rigid-bulk-review-table style="width:100%;min-width:880px;
+    border-collapse:collapse;table-layout:auto;font-size:12px;color:#dceaff;">
+    <thead><tr>${header.map(th).join('')}</tr></thead>
+    <tbody>${drafts.map((draft,i)=>`<tr data-mode-a-rigid-bulk-review-row
+      style="background:${i%2?'#162d48':'#11243c'};">
+      ${td(i+1)}${td(draft.fileName)}${td(draft.branchName)}
+      ${td(draft.nodeNumber)}${td(draft.componentRef)}
+      ${td(draft.weightKg,true)}${td(draft.dtxr)}
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
 function popupMarkup(rows, entries) {
   const sourceOptions = entries.map((entry) => `<option value="${attr(entry.sourceId)}">${esc(entry.fileName)}</option>`).join('');
   return `<div class="mc-rigid-review-dialog" role="dialog" aria-modal="true" aria-label="Consolidated rigid zero weight review" style="color:#e2e8f0;max-height:90vh;overflow:auto;background:#0f172a;border:1px solid #253a55;border-radius:8px;padding:18px;max-width:1380px;width:96%;">
@@ -192,7 +215,7 @@ function popupMarkup(rows, entries) {
     <div data-mode-a-rigid-bulk-review-panel style="display:none;background:#11223a;border:2px solid #7298ca;color:#edf6ff;border-radius:8px;padding:14px;margin:0 0 12px;">
       <div style="font-weight:700;font-size:15px;">Independent mass review required before Run</div>
       <div data-mode-a-rigid-bulk-review-summary style="margin:8px 0;font-size:12px;"></div>
-      <div data-mode-a-rigid-bulk-review-examples style="max-height:110px;overflow:auto;font-size:11px;white-space:pre-wrap;color:#cfdef4;margin-bottom:10px;"></div>
+      <div data-mode-a-rigid-bulk-review-examples style="max-height:260px;overflow:auto;font-size:12px;color:#cfdef4;margin-bottom:10px;border:1px solid #486384;border-radius:5px;" aria-label="Pending physical-component mass review table" tabindex="0"></div>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;margin:8px 0;">
         <input type="checkbox" data-mode-a-rigid-bulk-attest style="margin-top:3px;">
         <span><strong>I confirm I independently verified the physical-component masses for every pending draft listed above.</strong>
@@ -310,17 +333,22 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
         pending.length+' unapproved physical-component masses still require engineering acceptance. '+
         'They are estimated draft values; the matching master does not independently establish actual mass. '+
         'Review source references and edit any uncertain estimates before using the bulk attestation.';
-      if(reviewPanelExamples)reviewPanelExamples.textContent=
-        pending.slice(0,12).map((tr,i)=>{
+      if(reviewPanelExamples) {
+        const byId=new Map(rows.map(issue=>[issue.reviewId,issue]));
+        const drafts=pending.map(tr=>{
           const input=tr.querySelector('.mc-rigid-review-input');
-          const row=rows.find(issue=>issue.reviewId===input?.dataset.reviewId);
-          return (i+1)+'. '+(row?.fileName||row?.sourceId||'XML')+
-            ' | node '+(row?.nodeNumberDisplay||row?.nodeNumber||'?')+
-            ' | '+(row?.componentRefNo||'NO REF')+'_'+(row?.endpoint||'?')+
-            ' | '+input.value+' kg | '+(row?.dtxr||'DTXR missing');
-        }).join('\n')+
-        (pending.length>12?'\n… and '+(pending.length-12)+
-          ' more. Use Show pending reviews to inspect every row before confirming.':'');
+          const issue=byId.get(input?.dataset.reviewId);
+          return {
+            fileName:issue?.fileName||issue?.sourceId||'XML',
+            branchName:issue?.branchName||'-',
+            nodeNumber:issue?.nodeNumberDisplay||issue?.nodeNumber||'? ',
+            componentRef:(issue?.componentRefNo||'NO REF')+'_'+(issue?.endpoint||'?'),
+            weightKg:input?.value||'',
+            dtxr:issue?.dtxr||'DTXR missing',
+          };
+        });
+        reviewPanelExamples.innerHTML=modeABulkReviewTableMarkup(drafts);
+      }
       if(reviewPanel)reviewPanel.style.display='block';
       if(reviewAttest)reviewAttest.checked=false;
       if(reviewConfirm)reviewConfirm.disabled=true;

@@ -1,4 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
+import { classifySourceWeightFamily, isWeightMasterPhysicalFamilyMatch } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261107-weights-pyodide-fix-1';
 import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api.js';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
@@ -35,27 +36,51 @@ function ratingInfo(issue) {
   return { shownRating, dtxrRating, conflict, missingWithDtxr, title, style };
 }
 
-function rigidCandidateButtons(issue, index) {
-  const ranked = issue.massSuggestionOnly ? [] : (issue.candidates || []);
-  const chips = ranked.map((candidate) => {
-    const value = candidate.suggestedWeight ?? candidate.weight;
-    const scoreValue = Math.round((candidate.totalScore || candidate.score || 0) * 100);
-    const sourceApproved = isApprovedPhysicalMassCandidate(candidate, value);
-    if (!sourceApproved) {
-      return `<span data-rigid-review-advisory="true"
-        title="Unapproved empirical estimate, cannot copy to source mass"
-        style="font-size:11px;padding:3px 6px;margin:2px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(value)} kg · ${esc(candidate.referenceFamily || candidate.typeDesc || 'Unknown reference')} · estimate only</span>`;
-    }
+export function rigidCandidateButtons(issue, index) {
+  const family=classifySourceWeightFamily(issue);
+  const sourceLength=Number(issue.lengthMm),sourceBore=Number(issue.boreMm);
+  const sourceRating=String(issue.rating??'').replace(/#/g,'').trim();
+  const ranked=issue.massSuggestionOnly?[]:(issue.candidates||[]);
+  const chips=ranked.filter((candidate,i)=>{
+    const value=Number(candidate.selectedWeight??candidate.suggestedWeight??candidate.weight);
+    if(!Number.isFinite(value)||value<=0||candidate.zeroFallback)return false;
+    if(i===0)return true; // The primary extrapolated estimate is a review draft.
+    const L=Number(candidate.rowLength),DN=Number(candidate.rowBore);
+    const rating=String(candidate.rowRating??'').replace(/#/g,'').trim();
+    return sourceLength>0 && L>0 && Math.abs(sourceLength-L)<=6+1e-6 &&
+      sourceBore>0 && DN>0 && Math.abs(sourceBore-DN)<1 &&
+      sourceRating!=='' && sourceRating===rating &&
+      isWeightMasterPhysicalFamilyMatch(candidate,family);
+  }).map(candidate=>{
+    const value=Number(candidate.selectedWeight??candidate.suggestedWeight??candidate.weight);
+    const sourceApproved=isApprovedPhysicalMassCandidate(candidate,value);
+    const label=String(candidate.referenceFamily||candidate.typeDesc||'Unknown reference');
+    const estimate=sourceApproved?'approved source':'estimate only';
+    const scoreValue=Math.round((candidate.totalScore||candidate.score||0)*100);
     return `<button type="button" class="mc-rigid-review-candidate"
-      data-rigid-review-candidate="${index}" data-rigid-review-approved="true" data-rigid-review-weight="${esc(value)}"
-      title="Approved source mass: ${scoreValue}%"
-      style="font-size:11px;padding:3px 6px;margin:2px;cursor:pointer;">${esc(value)} kg · approved</button>`;
+      data-rigid-review-candidate="${index}" data-rigid-review-approved="${sourceApproved}"
+      data-rigid-review-weight="${attr(value)}"
+      data-rigid-review-reference="${attr(label)}"
+      title="${attr(sourceApproved?'Approved source mass: '+scoreValue+'%':'Unapproved estimate: click to copy as a review draft; independent Reviewed confirmation required')}"
+      aria-pressed="false"
+      style="font-size:11px;line-height:1.3;padding:5px 9px;margin:2px;
+        border:1px solid #7c9bd2;border-radius:999px;background:#173a64;
+        color:#eaf3ff;cursor:pointer;text-align:left;white-space:normal;">
+        ${sourceApproved?'★ ':'≈ '}${esc(value)} kg · ${esc(label)} · ${estimate}</button>`;
   }).join('');
-  const unknown = issue.unknownComponentSuggestion;
-  const sidecar = unknown?.ok
-    ? `<span data-rigid-review-unknown-advisory="true" title="${attr('Length-rule physical component estimate; source mass is not approved. Reference: '+unknown.referenceFamily+' '+unknown.referenceLengthMm+'mm, '+unknown.referenceWeightKg+'kg.')}">Length-rule ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily)} · review only</span>`
-    : unknown ? `<span data-rigid-review-unknown-hold="true" title="${attr(unknown.reason || unknown.code)}">Length-rule HOLD · ${esc(unknown.code)}</span>` : '';
-  return [chips, sidecar].filter(Boolean).join(' ');
+  const unknown=issue.unknownComponentSuggestion;
+  const sidecar=unknown?.ok && Number(unknown.suggestedKg)>0
+    ? `<button type="button" class="mc-rigid-review-candidate"
+       data-rigid-review-unknown-advisory="true" data-rigid-review-candidate="${index}"
+       data-rigid-review-approved="false" data-rigid-review-weight="${attr(unknown.suggestedKg)}"
+       data-rigid-review-reference="${attr(unknown.referenceFamily||'Unknown length rule')}"
+       title="${attr('Length-rule estimate; select as review draft only. Reference: '+unknown.referenceFamily+' '+unknown.referenceLengthMm+'mm, '+unknown.referenceWeightKg+'kg.')}"
+       style="font-size:11px;line-height:1.3;padding:5px 9px;margin:2px;cursor:pointer;
+         border:1px solid #7c9bd2;border-radius:999px;background:#173a64;color:#eaf3ff;">
+         ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily||'Unknown length rule')} · estimate only</button>`
+    : unknown ? `<span data-rigid-review-unknown-hold="true"
+       title="${attr(unknown.reason||unknown.code)}">Length-rule HOLD · ${esc(unknown.code)}</span>` : '';
+  return [chips,sidecar].filter(Boolean).join(' ');
 }
 
 function rigidReviewRow(issue, index) {
@@ -132,9 +157,18 @@ function bindRigidReviewPopup(overlay, rows, resolve, stateRef, config) {
         // Every approved chip has its own candidate weight. Preserve the
         // specific clicked choice, not the first approved item in the row.
         const weight=Number(button.getAttribute('data-rigid-review-weight'));
-        if (button.getAttribute('data-rigid-review-approved')==='true' &&
-            Number.isFinite(weight) && weight>0)
-          stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
+        if(Number.isFinite(weight)&&weight>0){
+          const approved=button.getAttribute('data-rigid-review-approved')==='true';
+          stageRigidReviewProposal(input,{
+            weight,approved,
+            reference:button.getAttribute('data-rigid-review-reference')||'Weight suggestion',
+          });
+          button.closest('tr')?.querySelectorAll('[data-rigid-review-candidate]').forEach(item=>{
+            const selected=item===button;
+            item.setAttribute('aria-pressed',selected?'true':'false');
+            item.style.borderColor=selected?'#fbbf24':'#7c9bd2';
+          });
+        }
       }
     }));
     overlay.querySelectorAll('[data-rigid-review-propose]').forEach(button=>button.addEventListener('click',()=>{
