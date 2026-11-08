@@ -1,6 +1,6 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, comparisonWeightMasterReferences, weightReviewChoiceLabel } from '../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-weights-pyodide-fix-1';
-import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261107-weights-pyodide-fix-1';
+import { valveHintLengthToleranceMm, classifySourceWeightFamily, isWeightMasterPhysicalFamilyMatch } from '../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2';
+import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261108-rigid-choice-buttons-1';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
 import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
@@ -33,9 +33,11 @@ export async function collectModeARigidWeightReviewIssues(state = {}, config = {
       ratingAuthority: authority,
       ratingConflict: authority.conflict,
       branchRating: issue.rating,
-      candidates: ranking.candidates.slice(0, 5),
+      // Keep the original ranked candidates; the UI shows additional buttons
+      // only for qualified master lengths (±6 mm by default).
+      candidates: ranking.candidates,
       rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
-      comparisonReferences:comparisonWeightMasterReferences({...issue,rating},config),
+      reviewLengthToleranceMm: valveHintLengthToleranceMm(config),
     }, config);
   }).filter((issue) => !issue.mapped);
 }
@@ -50,54 +52,95 @@ function ratingInfo(issue) {
   return { ...info, title };
 }
 
-export function modeARigidCandidateMarkup(issue, rowIndex) {
-  // Ranked catalog candidates and the Unknown physical-length sidecar are
-  // evidence only. Never manufacture approved mass from a master match.
-  const ranked = issue.massSuggestionOnly ? [] : (issue.candidates || []);
-  const chips = ranked.map((candidate) => {
-    const weight = candidate.suggestedWeight ?? candidate.selectedWeight ?? candidate.weight;
-    const label = candidate.referenceFamily || candidate.typeDesc || candidate.valveType || 'Unknown reference';
-    const method = candidate.preferred ? 'exact-length master' : (candidate.weightMethod || 'ranked master');
-    const sourceApproved = isApprovedPhysicalMassCandidate(candidate, weight);
-    if (!sourceApproved) {
-      const evidence = [
-        'ESTIMATE ONLY: no approved physical-component mass',
-        'Family: ' + label,
-        'Method: ' + method,
-        'Rating: ' + (issue.rating || '-'),
-        'Length delta: ' + (candidate.lengthDelta ?? 'n/a') + ' mm',
-        candidate.weightWarning || '',
-      ].filter(Boolean).join(' | ');
-      return `<span data-mode-a-rigid-advisory="true"
-        title="${attr(evidence)}"
-        style="font-size:11px;padding:3px 6px;border:1px solid #6d5590;border-radius:4px;">≈ ${esc(weight)} kg · ${esc(label)} · ${esc(method)} · advisory only</span>`;
+
+/** The old UI offered buttons for ranked candidates, not cross-DN reference
+ * comparisons. Alternative buttons must pass physical family, exact DN/Class,
+ * and the source length gate. The primary calculated fallback may be outside
+ * ±6 mm but is clearly an estimate requiring separate acceptance.
+ */
+export function modeARigidSelectableSuggestions(issue = {}) {
+  if(issue.sourceBoreHold)return [];
+  const family=classifySourceWeightFamily(issue);
+  const rated=String(issue.rating ?? '').replace(/#/g,'').trim();
+  const bore=Number(issue.boreMm),length=Number(issue.lengthMm);
+  const tolerance=Number.isFinite(Number(issue.reviewLengthToleranceMm))
+    ? Math.min(6,Math.max(0,Number(issue.reviewLengthToleranceMm))) : 6;
+  const candidates=issue.massSuggestionOnly?[]:(issue.candidates||[]);
+  const seen=new Set(),results=[];
+  for(let i=0;i<candidates.length;i++){
+    const c=candidates[i],weight=Number(c?.suggestedWeight??c?.selectedWeight??c?.weight);
+    if(!Number.isFinite(weight)||weight<=0||c?.zeroFallback)continue;
+    if(i>0){
+      const referenceLength=Number(c.rowLength);
+      const referenceBore=Number(c.rowBore);
+      const referenceRating=String(c.rowRating??'').replace(/#/g,'').trim();
+      if(!Number.isFinite(length)||length<=0||
+        !Number.isFinite(referenceLength)||referenceLength<=0||
+        Math.abs(referenceLength-length)>tolerance+1e-6||
+        c.lengthQualified===false||
+        !Number.isFinite(bore)||!Number.isFinite(referenceBore)||
+        Math.abs(referenceBore-bore)>=1 || !rated||rated!==referenceRating||
+        !isWeightMasterPhysicalFamilyMatch(c,family))continue;
     }
-    return `<button type="button" class="mc-rigid-review-candidate"
-      data-mode-a-rigid-approved="true"
-      data-mode-a-rigid-candidate="${rowIndex}" data-mode-a-rigid-weight="${attr(weight)}"
-      title="Approved physical source mass" style="font-size:11px;padding:3px 6px;cursor:pointer;">${esc(weight)} kg · approved</button>`;
-  }).join('');
-  const unknown = issue.unknownComponentSuggestion;
-  const unknownEvidence = unknown?.ok
-    ? `<span data-mode-a-unknown-weight-suggestion="true" title="${attr([
-        'Unknown physical-component length rule — ADVISORY ONLY',
-        'Family: ' + unknown.referenceFamily,
-        'Physical length: ' + unknown.componentLengthMm + ' mm',
-        'Reference length: ' + unknown.referenceLengthMm + ' mm',
-        'Reference weight: ' + unknown.referenceWeightKg + ' kg',
-        'Threshold: ' + unknown.thresholdMm + ' mm',
-        'Mass is NOT approved or automatically applied',
-      ].join(' | '))}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Length-rule ≈ ${esc(unknown.suggestedKg)} kg · ${esc(unknown.referenceFamily)} · advisory only</span>`
-    : unknown ? `<span data-mode-a-unknown-weight-hold="true" title="${attr(unknown.reason || unknown.code)}" style="font-size:11px;padding:3px 6px;border:1px dashed #6d5590;border-radius:4px;">Unknown length-rule HOLD · ${esc(unknown.code)}</span>`
+    const label=String(c.referenceFamily||c.typeDesc||c.valveType||c.type||'Master reference').trim();
+    const method=c.preferred?'exact-length master':String(c.weightMethod||'ranked master').trim();
+    const displayMethod=/BLIND[\s-]*FLANGE/i.test(label)&&
+      (c.inferredWeight||c.fallbackSuggestion)?'estimate only':method;
+    const referenceLength=Number(c.rowLength);
+    const key=[weight,label.toUpperCase(),Number.isFinite(referenceLength)?referenceLength:'',method].join('|');
+    if(seen.has(key))continue;
+    seen.add(key);
+    results.push({weight,label,method,displayMethod,approved:isApprovedPhysicalMassCandidate(c,weight),
+      referenceLengthMm:Number.isFinite(referenceLength)&&referenceLength>0?referenceLength:null,
+      primary:i===0,source:'ranked'});
+  }
+  const unknown=issue.unknownComponentSuggestion;
+  if(!results.length && unknown?.ok){
+    const weight=Number(unknown.suggestedKg);
+    if(Number.isFinite(weight)&&weight>0)results.push({
+      weight,label:String(unknown.referenceFamily||'Unknown component'),method:'physical-length rule',
+      displayMethod:'estimate only',approved:false,referenceLengthMm:null,
+      primary:true,source:'unknown',
+    });
+  }
+  return results;
+}
+
+export function modeARigidCandidateMarkup(issue,rowIndex) {
+  const choices=modeARigidSelectableSuggestions(issue);
+  if(!choices.length){
+    const hold=issue.unknownComponentSuggestion;
+    return hold&&!hold.ok
+      ? `<span data-mode-a-unknown-weight-hold="true" title="${attr(hold.reason||hold.code)}"
+          style="font-size:11px;color:#b7a6d7;">Unknown length-rule HOLD · ${esc(hold.code)}</span>`
       : '';
-  const choices = availableWeightReviewChoices(issue);
-  const alternatives = choices.length > 1
-    ? `<label style="display:block;margin-top:5px;font-size:10px;color:#93c5fd;">Other reference lengths / weights
-      <select data-mode-a-rigid-choice="${rowIndex}" aria-label="Alternative master weight for node ${attr(issue.nodeNumberDisplay || issue.nodeNumber)}" style="display:block;max-width:310px;width:100%;font-size:11px;background:#101827;color:#e2e8f0;border:1px solid #406089;border-radius:4px;padding:4px;">
-        <option value="">Choose an alternative (manual review)</option>
-        ${choices.map((choice,index) => `<option value="${index}">${esc(weightReviewChoiceLabel(choice))}</option>`).join('')}
-      </select></label>` : '';
-  return [chips, unknownEvidence, alternatives].filter(Boolean).join(' ');
+  }
+  return `<div data-mode-a-rigid-suggestions style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+    ${choices.map((choice,i)=>{
+      const title=[
+        choice.approved?'Approved physical source mass':'Estimate only: independent batch confirmation required',
+        'Method: '+choice.method,
+        'Source DN '+(issue.boreMm??'?')+', Class '+(issue.rating??'?'),
+        choice.referenceLengthMm===null?'':'Master length '+choice.referenceLengthMm+' mm',
+        i?'Additional master within ±'+Math.min(6,Math.max(0,Number(issue.reviewLengthToleranceMm??6)))+' mm':'',
+      ].filter(Boolean).join(' | ');
+      const lengthSuffix=i&&choice.referenceLengthMm!==null
+        ? ' · L='+choice.referenceLengthMm+' mm' : '';
+      const label=(choice.approved?'★ ':'≈ ')+choice.weight+' kg · '+choice.label+
+        ' · '+choice.displayMethod+lengthSuffix;
+      return `<button type="button" class="mc-rigid-review-candidate"
+        data-mode-a-rigid-candidate="${rowIndex}"
+        data-mode-a-rigid-option="${i}"
+        data-mode-a-rigid-weight="${attr(choice.weight)}"
+        data-mode-a-rigid-approved="${choice.approved}"
+        data-mode-a-rigid-reference="${attr(choice.label+' · '+choice.method)}"
+        title="${attr(title)}"
+        aria-pressed="false"
+        style="font-size:11px;line-height:1.3;padding:5px 9px;cursor:pointer;
+          border:1px solid #7c9bd2;border-radius:999px;background:#173a64;
+          color:#eaf3ff;white-space:normal;text-align:left;max-width:355px;">${esc(label)}</button>`;
+    }).join('')}
+  </div>`;
 }
 
 function rowMarkup(issue, rowIndex) {
@@ -121,9 +164,7 @@ function rowMarkup(issue, rowIndex) {
        <input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="" placeholder="kg" style="width:92px;background:#101827;color:#fff;border:1px solid #31455f;border-radius:4px;padding:4px;">
 
     </td>
-    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${modeARigidCandidateMarkup(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}
-      ${proposedRigidReviewWeight(issue) && !proposedRigidReviewWeight(issue).approved ? `<button type="button" data-mode-a-rigid-propose="${rowIndex}" style="margin-left:4px;cursor:pointer;border:1px solid #8c6f2e;background:#342609;color:#ffe7a3;border-radius:4px;">Use draft</button>` : ''}
-      </td>
+    <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${modeARigidCandidateMarkup(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}</td>
   </tr>`;
 }
 
@@ -186,32 +227,26 @@ function collectCurrentValues(overlay) {
   return { weights, skips, ratings };
 }
 
-function bindCandidateButtons(overlay, rows) {
-  overlay.querySelectorAll('[data-mode-a-rigid-candidate]').forEach((button) => button.addEventListener('click', () => {
+
+function bindCandidateButtons(overlay,rows){
+  overlay.querySelectorAll('[data-mode-a-rigid-candidate]').forEach(button=>button.addEventListener('click',()=>{
     const index=Number(button.dataset.modeARigidCandidate);
     const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
-    const weight=Number(button.dataset.modeARigidWeight);
-    if(input && button.dataset.modeARigidApproved==='true' &&
-       Number.isFinite(weight) && weight>0)
-      stageRigidReviewProposal(input,{weight,approved:true,reference:'Approved source mass selected'});
-  }));
-  overlay.querySelectorAll('[data-mode-a-rigid-choice]').forEach(select=>select.addEventListener('change',()=>{
-    if(select.value==='')return; // placeholder must not choose a mass
-    const index=Number(select.dataset.modeARigidChoice);
-    const choice=availableWeightReviewChoices(rows[index])[Number(select.value)];
-    const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
-    if(!input || !choice || !Number.isFinite(choice.weight) || choice.weight<=0)return;
+    const choice=modeARigidSelectableSuggestions(rows[index])[Number(button.dataset.modeARigidOption)];
+    if(!input||!choice||!Number.isFinite(choice.weight)||choice.weight<=0)return;
     delete input.dataset.rigidSkippedZero;
     stageRigidReviewProposal(input,{
-      weight:choice.weight,approved:choice.approved&&!choice.rejected,
-      reference:weightReviewChoiceLabel(choice),
+      weight:choice.weight,approved:choice.approved,
+      reference:choice.label+' · '+choice.method+
+        (choice.referenceLengthMm===null?'':' · master L='+choice.referenceLengthMm+'mm'),
     });
-    input.dataset.rigidChoiceIndex=select.value;
-  }));
-  overlay.querySelectorAll('[data-mode-a-rigid-propose]').forEach(button=>button.addEventListener('click',()=>{
-    const index=Number(button.dataset.modeARigidPropose);
-    const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
-    if(input)stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index]));
+    input.dataset.rigidChoiceIndex=button.dataset.modeARigidOption;
+    button.closest('tr')?.querySelectorAll('[data-mode-a-rigid-candidate]').forEach(item=>{
+      const selected=item===button;
+      item.setAttribute('aria-pressed',selected?'true':'false');
+      item.style.borderColor=selected?'#fbbf24':'#7c9bd2';
+      item.style.background=selected?'#49370b':'#173a64';
+    });
   }));
 }
 
@@ -390,7 +425,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = []) {
       }
     });
     overlay.addEventListener('click',event=>{
-      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-propose], [data-mode-a-rigid-candidate]')){
+      if(event.target?.closest?.('[data-mode-a-rigid-apply-suggestions], [data-mode-a-rigid-candidate]')){
         hideBulkReview(); // a replacement candidate invalidates earlier bulk attestation
         filter();
       }

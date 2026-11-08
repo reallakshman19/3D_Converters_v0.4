@@ -89,10 +89,22 @@ try {
       const input=page.locator('.mc-rigid-review-input');
       assert.equal(await input.count(),1);
       assert.equal(await input.inputValue(),'','unknown mass must start blank');
-      const chip=page.locator(route==='modeA'?'[data-mode-a-rigid-advisory]':'[data-rigid-review-advisory]');
-      assert.equal(await chip.count(),1);
-      assert.ok((await chip.innerText()).includes(family),'selected reference family visible');
-      assert.equal(await page.locator('[data-mode-a-rigid-candidate],[data-rigid-review-candidate]').count(),0);
+      if(route==='modeA'){
+        const button=page.locator('[data-mode-a-rigid-candidate]');
+        assert.equal(await button.count(),1,'ranked estimate should be clickable');
+        assert.ok((await button.innerText()).includes(family),'source family visible');
+        assert.equal(await button.getAttribute('data-mode-a-rigid-approved'),'false');
+        await button.click();
+        assert.equal(Number(await input.inputValue()),weight,'click loads numeric weight');
+        assert.equal(await input.getAttribute('data-rigid-suggestion-draft'),'estimate');
+        assert.equal(await input.getAttribute('data-rigid-review-method'),null);
+        await input.fill('');
+      }else{
+        const chip=page.locator('[data-rigid-review-advisory]');
+        assert.equal(await chip.count(),1);
+        assert.ok((await chip.innerText()).includes(family),'source family visible');
+        assert.equal(await page.locator('[data-rigid-review-candidate]').count(),0);
+      }
       if(route==='modeA'){
         await page.locator('[data-mode-a-rigid-fill-exact]').click();
         assert.equal(await input.inputValue(),'');
@@ -239,8 +251,14 @@ try {
     assert.equal(await modeAPage.locator('[data-rigid-smart-toolbar]').count(),0,
       'incompatible eight-column dashboard must not show Mode A false blocked metrics');
     assert.equal(await modeAPage.locator('.mc-rigid-review-input').inputValue(),'');
-    assert.match(await modeAPage.locator('[data-mode-a-rigid-advisory]').innerText(),
-      /Weldneck Flange/);
+    const suggestion=modeAPage.locator('[data-mode-a-rigid-candidate]');
+    assert.equal(await suggestion.count(),1);
+    assert.match(await suggestion.innerText(),/Weldneck Flange/);
+    assert.equal(await suggestion.getAttribute('data-mode-a-rigid-approved'),'false');
+    await suggestion.click();
+    assert.equal(await modeAPage.locator('.mc-rigid-review-input').inputValue(),'59',
+      'click stages 59 kg without auto-approval');
+    assert.equal(await modeAPage.locator('.mc-rigid-review-input').getAttribute('data-rigid-suggestion-draft'),'estimate');
     await modeAPage.locator('[data-mode-a-rigid-cancel]').click();
     const outcome=await modeAPage.evaluate(async()=>await window.__modeAReview);
     assert.equal(outcome.cancelled,true);

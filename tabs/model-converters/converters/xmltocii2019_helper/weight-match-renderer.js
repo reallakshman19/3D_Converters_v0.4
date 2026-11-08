@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-weights-pyodide-fix-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261108-rigid-choice-buttons-1';
 import { collectXmlCiiWeightMatchRows, reconcileXmlCiiWeightMatchSourceBores } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';

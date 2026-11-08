@@ -91,15 +91,58 @@ test('Skip blank refuses to erase a positive saved source mass',()=>{
     BM2:{skippedByKey:{'KEY-APPROVED':{skipped:true,weightKg:0}}}
   }),/Cannot skip source mass with existing positive override/);
 });
-test('rendered modal has visible source-ref and multiple-choice and missing-row controls',async()=>{
+test('consolidated popup uses clickable buttons and no dropdown or Use draft',async()=>{
+  const {modeARigidCandidateMarkup,modeARigidSelectableSuggestions}=
+    await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+  const issue={componentType:'FLAN',dtxr:'WELDING NECK FLANGE SCH 40S 900#',
+    boreMm:80,rating:900,lengthMm:109,reviewLengthToleranceMm:6,
+    candidates:[
+      {selectedWeight:15,typeDesc:'Weldneck Flange',rowLength:109,rowBore:80,rowRating:'900',preferred:true},
+      {selectedWeight:16,typeDesc:'Weldneck Flange',rowLength:115,rowBore:80,rowRating:'900',lengthQualified:true},
+      {selectedWeight:19,typeDesc:'Weldneck Flange',rowLength:115.01,rowBore:80,rowRating:'900'},
+      {selectedWeight:22,typeDesc:'Weldneck Flange',rowLength:109,rowBore:100,rowRating:'900'},
+      {selectedWeight:23,typeDesc:'Weldneck Flange',rowLength:109,rowBore:80,rowRating:'1500'},
+      {selectedWeight:24,typeDesc:'Blind Flange',rowLength:109,rowBore:80,rowRating:'900'},
+    ]};
+  const choices=modeARigidSelectableSuggestions(issue);
+  assert.deepEqual(choices.map(c=>c.weight),[15,16],
+    'only exact DN, class, family and 0..6mm length delta alternatives');
+  assert.deepEqual(modeARigidSelectableSuggestions({...issue,reviewLengthToleranceMm:10}).map(c=>c.weight),
+    [15,16],'hard +6mm cap still holds if configurable ranking tolerance is larger');
+  const html=modeARigidCandidateMarkup(issue,0);
+  assert.equal((html.match(/<button /g)||[]).length,2);
+  assert.match(html,/data-mode-a-rigid-candidate="0"/);
+  assert.match(html,/16 kg/);
+  assert.match(html,/L=115 mm/);
+  assert.doesNotMatch(html,/Other reference lengths|Choose an alternative|Use draft|advisory only|<select/);
+});
+
+test('Blind Flange 46.343 kg extrapolated estimate is a clickable primary button',async()=>{
+  const {modeARigidCandidateMarkup,modeARigidSelectableSuggestions}=
+    await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
+  const blind={componentType:'FLAN',dtxr:'BLIND FLANGE 900#',
+    boreMm:80,rating:900,lengthMm:112.2,
+    candidates:[{selectedWeight:46.343,referenceFamily:'Blind Flange',
+      typeDesc:'Blind Flange',weightMethod:'length-extrapolated',inferredWeight:true,
+      rowBore:80,rowRating:'900',rowLength:80}]};
+  assert.deepEqual(modeARigidSelectableSuggestions(blind).map(x=>x.weight),[46.343]);
+  const html=modeARigidCandidateMarkup(blind,3);
+  assert.match(html,/data-mode-a-rigid-candidate="3"/);
+  assert.match(html,/data-mode-a-rigid-weight="46.343"/);
+  assert.match(html,/≈ 46.343 kg · Blind Flange · estimate only/);
+  assert.doesNotMatch(html,/advisory only|Other reference lengths|Choose an alternative|Use draft|<select/);
+});
+test('Weldneck Flange 9.689 kg extrapolation is a clickable primary button',async()=>{
   const {modeARigidCandidateMarkup}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js');
   const html=modeARigidCandidateMarkup({
-    ...sample,rating:900,nodeNumber:818,nodeNumberDisplay:818
-  },0);
-  assert.match(html,/Other reference lengths \/ weights/);
-  assert.match(html,/data-mode-a-rigid-choice="0"/);
-  assert.match(html,/368mm/);
-  assert.match(html,/381mm/);
+    componentType:'FLAN',dtxr:'WELDING NECK FLANGE 900#',
+    boreMm:40,rating:900,lengthMm:109,
+    candidates:[{selectedWeight:9.689,referenceFamily:'Weldneck Flange',
+      weightMethod:'length-extrapolated',inferredWeight:true,
+      rowBore:40,rowRating:'900',rowLength:82}]
+  },1);
+  assert.match(html,/≈ 9.689 kg · Weldneck Flange · length-extrapolated/);
+  assert.match(html,/data-mode-a-rigid-candidate="1"/);
 });
 
 test('explicit review receipts remain separate from weights and zero skips',()=>{
