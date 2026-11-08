@@ -39,7 +39,14 @@ export async function collectModeARigidWeightReviewIssues(state = {}, config = {
       rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
       reviewLengthToleranceMm: valveHintLengthToleranceMm(config),
     }, config);
-  }).filter((issue) => !issue.mapped);
+  }).filter((issue) => {
+    if(issue.mapped)return false;
+    // An explicit source-specific 0kg skip is an auditable decision for this
+    // run, not a positive mass. Do not nag for it a second time in Phase 6
+    // or the Run gate unless the skip record is missing/invalid.
+    const record=config?.overrides?.rigidWeightSkipped?.[issue.key];
+    return !(record?.skipped===true && Number(record.weightKg)===0);
+  });
 }
 
 function ratingInfo(issue) {
