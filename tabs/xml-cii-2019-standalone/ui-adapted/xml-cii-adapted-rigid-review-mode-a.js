@@ -11,7 +11,7 @@ const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, 
 const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
-export async function collectModeARigidWeightReviewIssues(state = {}, config = {}) {
+export async function collectModeARigidWeightReviewIssues(state = {}, config = {}, {includeSkipped = false} = {}) {
   return reconcileXmlCiiWeightMatchSourceBores(collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config), state.sourceText || '').filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const authority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = authority.rating;
@@ -45,7 +45,7 @@ export async function collectModeARigidWeightReviewIssues(state = {}, config = {
     // run, not a positive mass. Do not nag for it a second time in Phase 6
     // or the Run gate unless the skip record is missing/invalid.
     const record=config?.overrides?.rigidWeightSkipped?.[issue.key];
-    return !(record?.skipped===true && Number(record.weightKg)===0);
+    return includeSkipped || !(record?.skipped===true && Number(record.weightKg)===0);
   });
 }
 
