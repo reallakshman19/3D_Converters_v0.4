@@ -10,7 +10,7 @@ import {
   renderStandaloneDiagnosticsReportPanel,
   renderStandalonePreviewReportPanel,
 } from './xml-cii-adapted-preview-diagnostics-audit-v7.js?v=20260813-mode-a-full-propagation-2';
-import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-full-parity-r2';
+import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-error40-r3';
 import { renderStandalonePropagationAuditPanel } from './xml-cii-adapted-propagation-audit.js?v=20260813-mode-a-full-propagation-2';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js?v=20260813-mode-a-full-propagation-2';
 import {
