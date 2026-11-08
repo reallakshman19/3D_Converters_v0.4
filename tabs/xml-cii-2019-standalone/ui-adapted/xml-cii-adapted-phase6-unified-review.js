@@ -197,6 +197,7 @@ function summaryHtml(entries) {
     <thead><tr style="background:#1e293b;color:#e8f2ff;">
       <th style="text-align:left;padding:8px;">XML source</th>
       <th style="text-align:right;padding:8px;">Requires review</th>
+      <th style="text-align:right;padding:8px;">Mapped</th>
       <th style="text-align:right;padding:8px;">Suggested drafts</th>
       <th style="text-align:right;padding:8px;">Intentional 0kg skips</th>
       <th style="text-align:left;padding:8px;">Scope</th></tr></thead>
@@ -207,6 +208,7 @@ function summaryHtml(entries) {
         (issue.candidates?.length||issue.unknownComponentSuggestion?.ok)).length;
       return `<tr><td style="padding:7px;border-bottom:1px solid #334155;">${esc(entry.fileName)}</td>
         <td style="padding:7px;text-align:right;">${entry.issues.length-skipped-mapped}</td>
+        <td style="padding:7px;text-align:right;">${mapped}</td>
         <td style="padding:7px;text-align:right;">${suggestions}</td>
         <td style="padding:7px;text-align:right;">${skipped}</td>
         <td style="padding:7px;">${esc(entry.alias||'Source-local')}</td>
