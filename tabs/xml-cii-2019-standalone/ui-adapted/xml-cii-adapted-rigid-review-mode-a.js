@@ -9,6 +9,10 @@ import { flattenModeARigidReviewEntries } from './xml-cii-adapted-rigid-review-m
 import { comparisonWeightMasterReferences } from '../../../converters/xml-cii2019-core/weight-review-choices.js';
 import { formatValveHint } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { extractXmlCiiRatingFromDtxr } from '../../../converters/xml-cii2019-core/dtxr-rating-resolver.js';
+import {
+  phase6ComparableReference,phase6ReferenceErrorPercent,
+  phase6BatchDeviationDraft,PHASE6_DEVIATION_LIMIT_PCT,
+} from '../../../converters/xml-cii2019-core/phase6-mass-comparison.js';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const attr = (value) => esc(value).replace(/'/g, '&#39;');
@@ -202,6 +206,8 @@ function phase6EvidenceDetails(issue) {
     ['Weight Source',issue.weightSource],
     ['Status',issue.mapped?'MAPPED':issue.existingSkipped?'SKIPPED':'REVIEW'],
     ['Match Score',issue.candidates?.[0]?.totalScore],
+    ['Reference kg',phase6ComparableReference(issue)?.kg??'None (qualified match unavailable)'],
+    ['Reference authority',phase6ComparableReference(issue)?.authority??'NO_MATCH'],
     ['Candidate Type',issue.candidates?.[0]?.typeDesc],
   ];
   return `<details data-phase6-row-details style="margin-top:4px;font-size:10px;">
@@ -216,6 +222,9 @@ function phase6EvidenceDetails(issue) {
 
 function rowMarkup(issue, rowIndex) {
   const best = issue.candidates?.[0] || null;
+  const reference = issue.phase6?phase6ComparableReference(issue):null;
+  const referenceError=reference && issue.mapped
+    ?phase6ReferenceErrorPercent(issue.weight,reference.kg):null;
   const info = ratingInfo(issue);
   const badge = info.conflict
     ? '<span title="Rating conflict with DTXR" style="color:#fca5a5;font-weight:700;"> !</span>'
@@ -247,6 +256,16 @@ function rowMarkup(issue, rowIndex) {
     <td>${esc((issue.componentRefNo||'—')+(issue.endpoint?'_'+issue.endpoint:''))}</td>
     <td>${esc(formatValveHint(issue.nodeHint)||'—')}</td>
     <td>${esc(issue.mapped?issue.weight+' kg':(issue.existingSkipped?'0 kg skip':'—'))}</td>
+    ${issue.phase6?`<td data-phase6-reference-kg="${attr(reference?.kg??'')}"
+      title="${attr(reference?(reference.source+' · '+reference.lengthMm+'mm · '+
+      (reference.approved?'approved source mass':'master comparison only; NOT independently approved')):
+      'No verified same-family DN/Class reference within ±6mm')}">
+      ${reference?esc(reference.kg.toFixed(3)+' kg'):'—'}
+      ${reference && !reference.approved?'<small style="color:#fbbf24;"> · comparison</small>':''}
+    </td><td data-phase6-error-pct
+      title="Signed (selected kg − reference kg) / reference kg × 100; not an approval decision">
+      ${referenceError===null?'—':esc((referenceError>=0?'+':'')+referenceError.toFixed(1)+'%')}
+    </td>`:''}
     <td>${esc(issue.originalWeight!=null?issue.originalWeight+' kg':'—')}</td>
     <td>${esc(issue.weightSource||'unresolved')}</td>
     <td>${esc(issue.mapped?'MAPPED':(issue.existingSkipped?'SKIPPED':'REVIEW'))}</td>
@@ -299,13 +318,13 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
        <button type="button" data-mode-a-rigid-apply-suggestions style="cursor:pointer;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;padding:7px 12px;">Apply All Suggestions</button>
        <button type="button" data-mode-a-rigid-show-unreviewed title="Locate source rows whose estimated masses still need approval" style="cursor:pointer;background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:7px 12px;">Show pending reviews (0)</button>
        <button type="button" data-mode-a-rigid-open-review title="Explicitly acknowledge independently verified estimated masses before final Apply" style="cursor:pointer;background:#1d3452;border:1px solid #5377ae;color:#e9f4ff;border-radius:6px;padding:7px 12px;">Review draft weights (0)</button>
-      ${phase6?'<button type="button" data-phase6-dtxr style="padding:7px 12px;background:#1d3452;color:#e9f4ff;border:1px solid #5377ae;border-radius:6px;cursor:pointer;" title="Explicitly rerank suggestions by DTXR Rating; click again to restore original Preview Rating">Use Rating as per DTXR</button><button type="button" data-phase6-nearest style="padding:7px 12px;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;cursor:pointer;" title="Fill blank weights only, without replacing an existing approved or manual mass">Apply nearest suggestions</button><button type="button" data-phase6-find-exact style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="List source-approved exact candidates; catalog-perfect scores are not physical-mass approval">Find Exact Weight Matches</button><button type="button" data-phase6-fill-similar style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="Fill grouped source-approved exact candidates only, never overwrite mapped rows">Fill Similar Exact</button>':''}
+      ${phase6?'<button type="button" data-phase6-approve-all title="Open the independent mass review for all pending drafts; never approves without explicit engineering attestation" style="padding:7px 12px;cursor:pointer;background:#163b43;color:#a7f3d0;border:1px solid #4db69c;border-radius:6px;">🛡 Approve all drafts (0)</button><button type="button" data-phase6-deviation40 title="Stage same-family, same DN/Class and ±6 mm references only when an EXISTING mass differs by more than 40%. This creates UNAPPROVED drafts, never saved masses." style="padding:7px 12px;cursor:pointer;background:#4a2c18;color:#fbd38d;border:1px solid #b97739;border-radius:6px;">Stage |Error| &gt;40% (0)</button><button type="button" data-phase6-dtxr style="padding:7px 12px;background:#1d3452;color:#e9f4ff;border:1px solid #5377ae;border-radius:6px;cursor:pointer;" title="Explicitly rerank suggestions by DTXR Rating; click again to restore original Preview Rating">Use Rating as per DTXR</button><button type="button" data-phase6-nearest style="padding:7px 12px;background:#43330f;color:#ffe7a3;border:1px solid #ad8129;border-radius:6px;cursor:pointer;" title="Fill blank weights only, without replacing an existing approved or manual mass">Apply nearest suggestions</button><button type="button" data-phase6-find-exact style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="List source-approved exact candidates; catalog-perfect scores are not physical-mass approval">Find Exact Weight Matches</button><button type="button" data-phase6-fill-similar style="padding:7px 12px;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;cursor:pointer;" title="Fill grouped source-approved exact candidates only, never overwrite mapped rows">Fill Similar Exact</button>':''}
       <button type="button" data-mode-a-rigid-fill-exact style="cursor:pointer;background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:7px 12px;">Use All Exact Suggestions</button>
       <span data-mode-a-rigid-status role="status" aria-live="polite" style="font-size:12px;color:#94a3b8;flex-basis:100%;"></span>
     </div>
     <div data-mode-a-rigid-missing-list role="status" style="display:none;max-height:118px;overflow:auto;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;background:#281b11;border:1px solid #855328;color:#fbd38d;border-radius:6px;padding:8px;margin:0 0 8px;"></div>
     <div data-mode-a-rigid-bulk-review-panel style="display:none;background:#11223a;border:2px solid #7298ca;color:#edf6ff;border-radius:8px;padding:14px;margin:0 0 12px;">
-      <div style="font-weight:700;font-size:15px;">Independent mass review required before Run</div>
+      <div style="font-weight:700;font-size:15px;">Independent mass review required before ${phase6?'Save (No Run)':'Run'}</div>
       <div data-mode-a-rigid-bulk-review-summary style="margin:8px 0;font-size:12px;"></div>
       <div data-mode-a-rigid-bulk-review-examples style="max-height:260px;overflow:auto;font-size:12px;color:#cfdef4;margin-bottom:10px;border:1px solid #486384;border-radius:5px;" aria-label="Pending physical-component mass review table" tabindex="0"></div>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;margin:8px 0;">
@@ -324,6 +343,7 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
       <th style="padding:7px;">Line Key</th><th style="padding:7px;">Component Type</th>
       <th style="padding:7px;">Component Ref / Endpoint</th><th style="padding:7px;">Valve Hint</th>
       <th style="padding:7px;">Current Weight</th>
+      ${phase6?'<th style="padding:7px;">Reference (kg)</th><th style="padding:7px;">Error %</th>':''}
       <th style="padding:7px;">Original XML Weight</th><th style="padding:7px;">Weight Source</th>
       <th style="padding:7px;">Status</th><th style="padding:7px;">Score</th>
       <th style="padding:7px;">Candidate Type</th><th style="padding:7px;">Action</th>
@@ -421,6 +441,11 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     });
     const updateReviewCounts=()=>{
       const pending=pendingReviewRows().length;
+      const approveAll=overlay.querySelector('[data-phase6-approve-all]');
+      if(approveAll){
+        approveAll.textContent='🛡 Approve all drafts ('+pending+')';
+        approveAll.disabled=pending===0;
+      }
       if(reviewButton)reviewButton.textContent=(reviewOnly?'Show all':'Show pending reviews')+' ('+pending+')';
       if(openBulkButton){
         openBulkButton.textContent='Review draft weights ('+pending+')';
@@ -481,6 +506,29 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       return missing;
     };
     const filter = () => {
+      if(phase6){
+        let eligible=0;
+        for(const tr of overlay.querySelectorAll('[data-mode-a-rigid-review-row]')){
+          const issue=rows.find(row=>row.reviewId===tr.dataset.reviewId);
+          const input=tr.querySelector('.mc-rigid-review-input');
+          const ref=issue&&phase6ComparableReference(issue);
+          const pct=ref?phase6ReferenceErrorPercent(input?.value,ref.kg):null;
+          const errorCell=tr.querySelector('[data-phase6-error-pct]');
+          if(errorCell){
+            errorCell.textContent=pct===null?'—':(pct>=0?'+':'')+pct.toFixed(1)+'%';
+            errorCell.style.color=pct!==null && Math.abs(pct)>PHASE6_DEVIATION_LIMIT_PCT
+              ?'#fbbf24':'#cbd5e1';
+          }
+          if(input?.value===input?.dataset.originalWeight &&
+             !input?.dataset.rigidSuggestionDraft &&
+             phase6BatchDeviationDraft(issue, input?.value))eligible++;
+        }
+        const deviationButton=overlay.querySelector('[data-phase6-deviation40]');
+        if(deviationButton){
+          deviationButton.textContent='Stage |Error| >40% ('+eligible+')';
+          deviationButton.disabled=eligible===0;
+        }
+      }
       const q = text(search?.value).toLowerCase();
       const sourceId = source?.value || '';
       const missing=missingRows();
@@ -566,6 +614,24 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
           '; suggestions refreshing. Rating changes are not committed until Save.',false);
         overlay.querySelector('[data-mode-a-rigid-refresh]')?.click();
       });
+      overlay.querySelector('[data-phase6-approve-all]')?.addEventListener('click',()=>{
+        // Approval requires the same explicit attestation checkbox and separate
+        // confirmation as "Review draft weights". No implicit batch approval.
+        showBulkReview();
+      });
+      overlay.querySelector('[data-phase6-deviation40]')?.addEventListener('click',()=>{
+        let staged=0;
+        rows.forEach((issue,index)=>{
+          const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
+          if(!input || input.value!==input.dataset.originalWeight ||
+             input.dataset.rigidSuggestionDraft)return;
+          const draft=phase6BatchDeviationDraft(issue,input.value);
+          if(draft && stageRigidReviewProposal(input,draft))staged++;
+        });
+        hideBulkReview();filter();
+        setStatus(staged+' deviation(s) above ±40% staged as unapproved reference drafts. '+
+          'Verify physical masses and use Approve all drafts before Save (No Run). No output generated.',false);
+      });
       overlay.querySelector('[data-phase6-nearest]')?.addEventListener('click',()=>{
         let updated=0;
         rows.forEach((row,index)=>{
@@ -647,7 +713,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       reviewOnly=false;
       filter();
       setStatus('Explicit independent review acknowledged for '+pending.length+
-        ' estimated physical-component masses. Click Apply Weights and Run All Models to continue. '+
+        ' estimated physical-component masses. '+
+        (phase6?'Click Save Reviewed Weights (No Run) to commit source-specific masses. ':
+          'Click Apply Weights and Run All Models to continue. ')+
         'No output has been produced yet.',false);
     });
     overlay.addEventListener('change',event=>{
@@ -728,7 +796,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       });
       hideBulkReview();
       filter();
-      setStatus(`Filled ${count} independently approved source mass(es). Review remaining drafts before Run.`, false);
+      setStatus(`Filled ${count} independently approved source mass(es). `+
+        (phase6?'Review remaining drafts before Save (No Run).':
+          'Review remaining drafts before Run.'), false);
     });
 
     overlay.querySelector('[data-mode-a-rigid-refresh]')?.addEventListener('click', async () => {
