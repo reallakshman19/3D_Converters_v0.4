@@ -392,6 +392,11 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
     const before=modeA?modeARawState(stateRef):stateRef.current;
     if(!before?.phase6Undo)return;
     const next=undoPhase6Review(before);
+    if(next===before){
+      const message=card.querySelector('[data-phase6-status]');
+      if(message)message.textContent='Undo refused: source XML or staged geometry changed since this mass edit.';
+      return;
+    }
     if(modeA)replaceModeAState(stateRef,next);
     else{
       stateRef.current=next;
