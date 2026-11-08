@@ -263,6 +263,7 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
       <button type="button" data-mode-a-rigid-cancel style="cursor:pointer;background:transparent;border:1px solid #475569;border-radius:6px;color:#94a3b8;padding:6px 12px;">${phase6?'Cancel Review':'Cancel Batch Run'}</button>
     </div>
     <div style="background:#2a210b;border:1px solid #7c5a18;color:#ffe7a3;padding:9px;border-radius:6px;font-size:12px;margin-bottom:10px;">One review gate covers all enabled XML models. Source identity is preserved; Rating and Weight changes are written only to that XML. “Use All Exact Suggestions” fills only independently approved source masses. Empirical estimates are review drafts only. Apply All Suggestions prepopulates suggested kg but does not approve or save them. To proceed, independently verify each mass and tick Reviewed, or use Review pending drafts for an explicit bulk engineering acknowledgment. Unreviewed values will not be written. Enter mass in kg; the optional kg→N CII export conversion applies ×10 only at output. “Skip blank” explicitly marks empty rows as 0 kg with no verified mass (logged separately; zero is not approved source mass). Use “Show missing” to see source refs and locate outstanding rows.</div>
+    ${phase6?'<div data-phase6-popup-counters role="status" aria-live="polite" style="display:flex;flex-wrap:wrap;gap:12px;margin:8px 0;padding:8px 10px;border:1px solid #334155;border-radius:6px;color:#dbeafe;font-size:12px;"></div>':''}
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input type="search" data-mode-a-rigid-search placeholder="Search source / branch / node / component ref..." style="min-width:250px;padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;">
       <select data-mode-a-rigid-source style="padding:6px;background:#0b1220;color:#e2e8f0;border:1px solid #475569;border-radius:5px;"><option value="">All XML files</option>${sourceOptions}</select>
@@ -464,12 +465,24 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
           (!q || (tr.dataset.search || '').includes(q)) &&
           (!missingOnly || missingSet.has(tr)) &&
           (!reviewOnly || reviewSet.has(tr)) &&
-          (!exactOnly || Boolean(phase6QualifiedExactCandidate(
-            rows.find(issue=>issue.reviewId===tr.dataset.reviewId)||{})));
+          (!exactOnly || (()=>{const issue=rows.find(x=>x.reviewId===tr.dataset.reviewId);
+            return !issue?.mapped && Boolean(phase6QualifiedExactCandidate(issue||{}));})());
         tr.style.display = show ? '' : 'none';
       });
       refreshMissingList();
       updateReviewCounts();
+      if(phase6){
+        const counters=overlay.querySelector('[data-phase6-popup-counters]');
+        if(counters){
+          const all=[...overlay.querySelectorAll('[data-mode-a-rigid-review-row]')];
+          const mapped=all.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.originalWeight!=='').length;
+          const skipped=all.filter(tr=>tr.querySelector('.mc-rigid-review-input')?.dataset.rigidSkippedZero==='true').length;
+          counters.textContent='🗂 '+all.length+' components   ·   ✅ '+mapped+
+            ' existing masses   ·   ✏️ '+pendingReviewRows().length+
+            ' review drafts   ·   ⚠️ '+missingRows().length+
+            ' missing   ·   ⏭ '+skipped+' intentional skips';
+        }
+      }
     };
     const draw = (preserve = new Map(), skipped = new Set()) => {
       hideBulkReview();
@@ -576,6 +589,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     }
     filter(); // Show accurate missing-row count and source-ref trace immediately.
     reviewButton?.addEventListener('click',()=>{
+      exactOnly=false;
+      const exactButton=overlay.querySelector('[data-phase6-find-exact]');
+      if(exactButton)exactButton.textContent='Find Exact Weight Matches';
       reviewOnly=!reviewOnly;
       if(reviewOnly)missingOnly=false;
       filter();
@@ -629,6 +645,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       }
     });
     missingButton?.addEventListener('click',()=>{
+      exactOnly=false;
+      const exactButton=overlay.querySelector('[data-phase6-find-exact]');
+      if(exactButton)exactButton.textContent='Find Exact Weight Matches';
       missingOnly=!missingOnly;
       if(missingOnly)reviewOnly=false;
       filter();
