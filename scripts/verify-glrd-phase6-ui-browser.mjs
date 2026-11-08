@@ -98,6 +98,28 @@ try{
   await page.locator('[data-phase6-refresh-review]').click();
   assert.match(await page.locator('[data-phase6-status]').innerText(),/0 unresolved/i,
     'Run/Phase 6 must honor prior five intentional skipped zero-mass records');
+  // Re-extract from the NEW Phase 6 UI's actual committed config, not from
+  // the old Weight Match controls, and compare its enriched XML byte-for-byte.
+  const reextracted=await page.evaluate(async()=>{
+    const state=window.__phase6Ref.current;
+    const {enrichStandaloneXmlForRun}=await import(
+      '/tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js');
+    const result=await enrichStandaloneXmlForRun({
+      sourceText:state.sourceText,stagedJsonText:state.stagedJsonText,
+      supportConfigJson:state.supportConfigJson,options:{},
+    });
+    if(!result.applied || !result.xmlText)throw new Error(
+      'Phase 6 XML extraction failed: '+(result.error||'no emitted XML'));
+    return {xmlText:result.xmlText,mismatches:result.evidence?.mismatches?.length||0,
+      comparisons:result.evidence?.comparisons||0};
+  });
+  const control=await readFile(resolve(out,'baseline-simulated-reviewed-enriched.xml'),'utf8');
+  const actual=resolve(out,'phase6-ui-reextracted-enriched.xml');
+  await writeFile(actual,reextracted.xmlText);
+  assert.equal(reextracted.mismatches,0,'Phase 6 enriched run-parity mismatches');
+  assert.equal(reextracted.xmlText.length,control.length,'Phase 6 XML byte length differs');
+  assert.equal(reextracted.xmlText,control,
+    'Phase 6 actually committed UI config must re-extract byte-identical GLRD enriched XML');
   await page.screenshot({path:resolve(out,'phase6-consolidated-glrd-after-review.png'),fullPage:true});
   assert.deepEqual(errors,[]);
   await writeFile(resolve(out,'phase6-browser-ui-receipt.json'),JSON.stringify({
@@ -106,6 +128,9 @@ try{
     afterUnresolved:0,approvalMode:'SIMULATED_EXPLICIT_ATTESTATION',
     approvedByMasterOnly:false,record,
     browserErrors:errors,
+    reextraction:{bytes:reextracted.xmlText.length,
+      comparisons:reextracted.comparisons,mismatches:reextracted.mismatches,
+      baselineByteParity:'EQUAL'},
   },null,2));
   console.log('GLRD_PHASE6_ACTUAL_UI_PASS',JSON.stringify(record));
 }finally{await browser.close();}
