@@ -92,6 +92,7 @@ jobs:
           node --test tests/xml-cii-weight-validation-app-static.test.js
           node --test tests/xml-cii-standalone-output-run.test.js
           if test -f tests/xml-cii-phase6-consolidated.test.mjs; then node --test tests/xml-cii-phase6-consolidated.test.mjs; fi
+          node --test tests/xml-cii-phase6-full-parity.test.mjs
       - name: Browser verify the actual consolidated Phase 6 review and 109/5 state propagation
         shell: bash
         env:

@@ -5,7 +5,7 @@
 import {
   collectModeARigidWeightReviewIssues,
   openModeAConsolidatedRigidWeightReviewPopup,
-} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261108-rigid-choice-buttons-1';
+} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261108-phase6-full-parity-r2';
 import { applyModeAConsolidatedRigidReviewUpdates } from './xml-cii-adapted-rigid-review-mode-a-state.js';
 import { xmlCiiEnrichedConfigFromState, saveMasterContextToLocalStorage } from './xml-cii-adapted-state.js';
 import { modeAExecutionRows, modeARawState } from './xml-cii-adapted-mode-a-propagation.js';
@@ -35,8 +35,11 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
   };
   const result=applyModeAConsolidatedRigidReviewUpdates(virtual,updates);
   const supportConfigJson=result.sourceBatch.sources[0].supportConfigJson;
+  if(supportConfigJson===state.supportConfigJson)return state;
   return {
     ...state,supportConfigJson,
+    phase6Undo:{mode:'single',supportConfigJson:state.supportConfigJson||'{}',
+      sourceText:state.sourceText||'',stagedJsonText:state.stagedJsonText||''},
     masterContext:state.masterContext
       ? {...state.masterContext,config:parse(supportConfigJson)}
       : state.masterContext,
@@ -48,6 +51,15 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
 
 export function applyPhase6ModeAReview(state = {}, updates = {}) {
   if(!Object.keys(updates).length)return state;
+  const original=Object.fromEntries((state.sourceBatch?.sources||[])
+    .filter(source=>Object.prototype.hasOwnProperty.call(updates,source.sourceId))
+    .map(source=>[source.sourceId,source.supportConfigJson||'{}']));
+  const sourceIdentity=Object.fromEntries((state.sourceBatch?.sources||[])
+    .filter(source=>Object.prototype.hasOwnProperty.call(updates,source.sourceId))
+    .map(source=>[source.sourceId,{
+      sourceDigest:source.sourceDigest||'',sourceText:source.sourceText||'',
+      stagedJsonText:source.stagedJsonText||'',
+    }]));
   const applied=applyModeAConsolidatedRigidReviewUpdates(state,updates);
   const sources=(applied.sourceBatch?.sources||[]).map(source=>
     updates[source.sourceId] ? {
@@ -56,9 +68,53 @@ export function applyPhase6ModeAReview(state = {}, updates = {}) {
         outputRunReadinessReport:null,result:null},
     } : source);
   return syncActiveModeASource(normalizeModeABatchState({
-    ...applied,sourceBatch:{...applied.sourceBatch,sources},
+    ...applied,phase6Undo:{mode:'batch',sourceConfigs:original,sourceIdentity},
+    sourceBatch:{...applied.sourceBatch,sources},
     weightMatchResult:null,outputRunReadinessReport:null,
     batchRunResult:null,result:null,
+  }));
+}
+
+/** Undo the LAST saved Phase 6 transaction, including mass receipt and skip
+ * custody. Never undo an unrelated source or a later conversion run.
+ */
+export function undoPhase6Review(state = {}) {
+  const saved=state.phase6Undo;
+  if(!saved)return state;
+  if(saved.mode==='single'){
+    // Never replay a previous source's approval/weight ledger onto a newly
+    // loaded XML or a different staged-geometry authority.
+    if((state.sourceText||'')!==(saved.sourceText||'') ||
+       (state.stagedJsonText||'')!==(saved.stagedJsonText||''))return state;
+    const supportConfigJson=saved.supportConfigJson||'{}';
+    return {...state,phase6Undo:null,supportConfigJson,
+      weightMatchResult:null,result:null,outputRunReadinessReport:null,
+      masterContext:state.masterContext?{...state.masterContext,
+        config:parse(supportConfigJson)}:state.masterContext};
+  }
+  if(saved.mode!=='batch')return state;
+  const sourceConfigs=saved.sourceConfigs||{};
+  const identity=saved.sourceIdentity||{};
+  if((state.sourceBatch?.sources||[]).some(source=>{
+    const expected=identity[source.sourceId];
+    return expected && (
+      (source.sourceDigest||'')!==(expected.sourceDigest||'') ||
+      (source.sourceText||'')!==(expected.sourceText||'') ||
+      (source.stagedJsonText||'')!==(expected.stagedJsonText||'')
+    );
+  }))return state;
+  const sources=(state.sourceBatch?.sources||[]).map(source=>
+    Object.prototype.hasOwnProperty.call(sourceConfigs,source.sourceId)
+      ? {...source,supportConfigJson:sourceConfigs[source.sourceId],
+        workflow:{...(source.workflow||{}),result:null,
+          outputRunReadinessReport:null,weightMatchResult:null}}
+      : source);
+  const active=sources.find(source=>source.sourceId===state.sourceBatch?.activeSourceId);
+  return syncActiveModeASource(normalizeModeABatchState({
+    ...state,phase6Undo:null,result:null,batchRunResult:null,
+    outputRunReadinessReport:null,weightMatchResult:null,
+    supportConfigJson:active?.supportConfigJson||state.supportConfigJson,
+    sourceBatch:{...state.sourceBatch,sources},
   }));
 }
 
@@ -88,7 +144,9 @@ export async function phase6CollectReviewEntries(stateRef, modeA = false) {
     if(!state.sourceText.trim())throw new Error('Source XML missing for '+row.fileName);
     const config=xmlCiiEnrichedConfigFromState(state);
     const issues=await collectModeARigidWeightReviewIssues(state,config,{
-      includeSkipped:true, // A skipped mass stays re-editable in Phase 6.
+      includeSkipped:true,includeMapped:true,
+      // The full Phase 6 workbench keeps existing approved and XML masses
+      // editable. The conversion-time gate continues to collect only missing.
     });
     entries.push({...row,state,config,issues});
   }
@@ -159,15 +217,18 @@ function summaryHtml(entries) {
     <thead><tr style="background:#1e293b;color:#e8f2ff;">
       <th style="text-align:left;padding:8px;">XML source</th>
       <th style="text-align:right;padding:8px;">Requires review</th>
+      <th style="text-align:right;padding:8px;">Mapped</th>
       <th style="text-align:right;padding:8px;">Suggested drafts</th>
       <th style="text-align:right;padding:8px;">Intentional 0kg skips</th>
       <th style="text-align:left;padding:8px;">Scope</th></tr></thead>
     <tbody>${entries.map(entry=>{
       const skipped=entry.issues.filter(issue=>isExplicitZeroSkip(entry,issue)).length;
-      const suggestions=entry.issues.filter(issue=>!isExplicitZeroSkip(entry,issue) &&
+      const mapped=entry.issues.filter(issue=>issue.mapped).length;
+      const suggestions=entry.issues.filter(issue=>!issue.mapped && !isExplicitZeroSkip(entry,issue) &&
         (issue.candidates?.length||issue.unknownComponentSuggestion?.ok)).length;
       return `<tr><td style="padding:7px;border-bottom:1px solid #334155;">${esc(entry.fileName)}</td>
-        <td style="padding:7px;text-align:right;">${entry.issues.length-skipped}</td>
+        <td style="padding:7px;text-align:right;">${entry.issues.length-skipped-mapped}</td>
+        <td style="padding:7px;text-align:right;">${mapped}</td>
         <td style="padding:7px;text-align:right;">${suggestions}</td>
         <td style="padding:7px;text-align:right;">${skipped}</td>
         <td style="padding:7px;">${esc(entry.alias||'Source-local')}</td>
@@ -192,8 +253,12 @@ export function phase6MassLedger(entries = []) {
         sourceId:entry.sourceId,fileName:entry.fileName,
         key:issue.key,branchName:issue.branchName||'',
         ref:(issue.componentRefNo||'')+(issue.endpoint?'_'+issue.endpoint:''),
-        status:zero?'skipped':'pending',
-        kg:zero?0:null,
+        status:zero?'skipped':issue.mapped ? (
+          (()=>{const receipt=overrides.rigidWeightReviewReceipts?.[issue.key];
+            return receipt?.reviewed===true &&
+              Math.abs(Number(receipt.weightKg)-Number(issue.weight))<1e-9
+              ?'reviewed':'saved';})()) : 'pending',
+        kg:zero?0:(issue.mapped?Number(issue.weight):null),
         suggestedKg:Number(proposed)>0?Number(proposed):null,
       });
     }
@@ -274,12 +339,15 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
       .catch(error=>{card.textContent='InputXML weight review unavailable: '+error.message;});
     return;
   }
-  const sourceCount=modeA?modeAExecutionRows(stateRef).length:1;
+  const executionSources=modeA?modeAExecutionRows(stateRef):[];
+  const sourceCount=modeA?executionSources.length:1;
   const config=modeA
     ? xmlCiiEnrichedConfigFromState(modeAExecutionRows(stateRef)[0]?.state||snapshot)
     : xmlCiiEnrichedConfigFromState(snapshot);
-  const overrideCount=count(config.overrides?.rigidWeight);
-  const receiptCount=count(config.overrides?.rigidWeightReviewReceipts);
+  const sourceConfigs=modeA?executionSources.map(row=>
+    xmlCiiEnrichedConfigFromState(row.state)):[config];
+  const overrideCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeight),0);
+  const receiptCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeightReviewReceipts),0);
   card.innerHTML=`
     <div class="model-converters-workflow-detail-title">
       Rigid Weights Need Review — Consolidated
@@ -294,6 +362,10 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         data-phase6-open-review>Review / Edit Rigid Weights</button>
       <button type="button" class="model-converters-download-btn"
         data-phase6-refresh-review>Recheck missing weights</button>
+      <button type="button" class="model-converters-download-btn"
+        data-phase6-undo ${snapshot.phase6Undo?'':'disabled'}
+        title="Restore the last saved source-mass transaction with its receipts and skips">
+        ↶ Undo Last Change</button>
       <span style="color:#9cc5ff;font-size:12px;">${sourceCount} XML source(s) ·
         ${overrideCount} saved positive masses · ${receiptCount} review receipts
       </span>
@@ -316,6 +388,22 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   const output=card.querySelector('[data-phase6-sources]');
   const review=card.querySelector('[data-phase6-open-review]');
   const refresh=card.querySelector('[data-phase6-refresh-review]');
+  card.querySelector('[data-phase6-undo]')?.addEventListener('click',()=>{
+    const before=modeA?modeARawState(stateRef):stateRef.current;
+    if(!before?.phase6Undo)return;
+    const next=undoPhase6Review(before);
+    if(next===before){
+      const message=card.querySelector('[data-phase6-status]');
+      if(message)message.textContent='Undo refused: source XML or staged geometry changed since this mass edit.';
+      return;
+    }
+    if(modeA)replaceModeAState(stateRef,next);
+    else{
+      stateRef.current=next;
+      if(next.masterContext)saveMasterContextToLocalStorage(next.masterContext);
+    }
+    render?.();
+  });
   const reportTarget=card.querySelector('[data-phase6-validation]');
   const sourceRows=modeA?modeAExecutionRows(stateRef):[];
   let selectedSourceId=sourceRows[0]?.source?.sourceId||'';
@@ -337,7 +425,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
   }
   appendEmpiricalWeightValidationReport(card.querySelector('[data-phase6-advanced]'),reportRef);
   const settings=card.querySelector('[data-phase6-settings]');
-  void import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-unified-r1')
+  void import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-full-parity-r2')
     .then(module=>module.mountXmlCiiWeightRuleSettings(settings,{
       config,onSaveConfig:next=>phase6SaveAdvancedSettings(stateRef,modeA,next,render),
     })).catch(error=>{if(settings)settings.textContent='Advanced settings unavailable: '+error.message;});
@@ -363,7 +451,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
       statusFilter?.addEventListener('change',applyFilter);
     }
     const unresolved=entries.reduce((n,e)=>n+
-      e.issues.filter(issue=>!isExplicitZeroSkip(e,issue)).length,0);
+      e.issues.filter(issue=>!issue.mapped&&!isExplicitZeroSkip(e,issue)).length,0);
     const skipped=entries.reduce((n,e)=>n+
       e.issues.filter(issue=>isExplicitZeroSkip(e,issue)).length,0);
     setStatus(unresolved+' unresolved source physical masses across '+
@@ -385,9 +473,13 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         setStatus('No missing physical-component masses. Nothing changed.');
         return;
       }
-      const result=await openModeAConsolidatedRigidWeightReviewPopup(pending);
+      const result=await openModeAConsolidatedRigidWeightReviewPopup(pending,{phase6:true});
       if(result.cancelled){
         setStatus('Rigid-mass review cancelled. No source mass was changed.');
+        return;
+      }
+      if(!Object.keys(result.updates||{}).length){
+        setStatus('No source weight or Rating changed.');
         return;
       }
       if(modeA){
@@ -409,7 +501,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         : stateRef.current;
       if(!row)throw new Error('Select a valid XML source');
       const [{computeXmlCiiWeightIssues},{loadParentWeightMatchModules}]=await Promise.all([
-        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-unified-r1'),
+        import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js?v=20261108-phase6-full-parity-r2'),
         import('../xml-cii-standalone-run-parity.js')
       ]);
       const file=row.sourceFile || new File([await sourceText(row,'sourceText','sourceFile')],
