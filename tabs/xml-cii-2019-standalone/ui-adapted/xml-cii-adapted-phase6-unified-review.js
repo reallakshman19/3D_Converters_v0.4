@@ -97,14 +97,28 @@ function clearPhase6StateAfterMatchingChange(state = {}) {
     result:null,batchRunResult:null};
 }
 
+const PHASE6_SHARED_RULE_KEYS=Object.freeze([
+  'convertSmallLengthsInToMm','valveHintLengthToleranceMm',
+  'semanticKeywordRules','specialValveFactorRules','valveHintMapping',
+]);
+export function phase6RuleSettingsOnly(weight = {}) {
+  const result={};
+  for(const key of PHASE6_SHARED_RULE_KEYS)
+    if(Object.prototype.hasOwnProperty.call(weight,key))result[key]=weight[key];
+  return result;
+}
+
 function phase6SaveAdvancedSettings(stateRef, modeA, nextConfig, render) {
+  // Never broadcast the active XML's imported master rows or finalized
+  // physical masses into another source merely because a rule was edited.
+  const rules=phase6RuleSettingsOnly(nextConfig.weight||{});
   if(modeA){
     const before=modeARawState(stateRef);
     const shared=parse(before.sourceBatch?.sharedSupportConfigJson || before.supportConfigJson);
-    shared.weight={...(shared.weight||{}),...(nextConfig.weight||{})};
+    shared.weight={...(shared.weight||{}),...rules};
     const sources=(before.sourceBatch?.sources||[]).map(source=>{
       const config=parse(source.supportConfigJson);
-      config.weight={...(config.weight||{}),...(nextConfig.weight||{})};
+      config.weight={...(config.weight||{}),...rules};
       return {...source,supportConfigJson:JSON.stringify(config,null,2),
         workflow:clearPhase6StateAfterMatchingChange(source.workflow||{})};
     });
@@ -118,7 +132,7 @@ function phase6SaveAdvancedSettings(stateRef, modeA, nextConfig, render) {
   }else{
     const current=stateRef.current||{};
     const config=parse(current.supportConfigJson);
-    config.weight={...(config.weight||{}),...(nextConfig.weight||{})};
+    config.weight={...(config.weight||{}),...rules};
     const supportConfigJson=JSON.stringify(config,null,2);
     stateRef.current={...clearPhase6StateAfterMatchingChange(current),
       supportConfigJson,
