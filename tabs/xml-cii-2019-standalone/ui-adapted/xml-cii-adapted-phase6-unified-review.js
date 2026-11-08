@@ -217,7 +217,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
     });
     reportTarget.before(select);
   }
-  appendEmpiricalWeightValidationReport(reportTarget,reportRef);
+  appendEmpiricalWeightValidationReport(card.querySelector('[data-phase6-advanced]'),reportRef);
   const settings=card.querySelector('[data-phase6-settings]');
   void import('../../model-converters/converters/xmltocii2019_helper/weight-match-renderer.js')
     .then(module=>module.mountXmlCiiWeightRuleSettings(settings,{
