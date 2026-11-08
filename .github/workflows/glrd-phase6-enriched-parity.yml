@@ -105,6 +105,11 @@ jobs:
           set -euo pipefail
           node --check scripts/verify-glrd-phase6-ui-browser.mjs
           node scripts/verify-glrd-phase6-ui-browser.mjs
+      - name: Verify changed physical component mass in final native CII RIGID pointer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-glrd-phase6-edited-cii.py
       - name: Upload original and re-extracted enriched XML, hashes and receipts
         if: always()
         uses: actions/upload-artifact@v4
