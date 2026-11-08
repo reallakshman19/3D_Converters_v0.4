@@ -56,7 +56,7 @@ try {
  assert.equal(await blindRow.count(),1,'real GLRD missing Blind Flange row');
  const blindButton=blindRow.locator('[data-mode-a-rigid-candidate]').first();
  assert.equal(await blindButton.count(),1,'estimate-only mass must be a clickable button');
- assert.match(await blindButton.innerText(),/≈ 46\\.343 kg · Blind Flange · estimate only/i);
+ assert.match(await blindButton.innerText(),/≈ 46\.343 kg · Blind Flange · estimate only/i);
  assert.equal(await blindRow.locator('select[data-mode-a-rigid-choice]').count(),0);
  assert.equal(await blindRow.locator('[data-mode-a-rigid-propose]').count(),0);
  await blindButton.click();
