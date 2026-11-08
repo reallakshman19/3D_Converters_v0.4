@@ -32,6 +32,25 @@ test('matched catalog reference is visible but never independent mass approval',
   assert.equal(phase6ReferenceErrorPercent(59,0),null);
   assert.equal(PHASE6_DEVIATION_LIMIT_PCT,40);
 });
+test('the ±6mm comparison uses the unscaled master kg, never extrapolated selected kg',()=>{
+  const reference=phase6ComparableReference(sample({
+    lengthMm:150,
+    candidates:[{
+      selectedWeight:61,masterWeight:59,weight:59,typeDesc:'Weldneck Flange',
+      rowLength:147,rowBore:150,rowRating:900,preferred:false,
+      weightMethod:'length-extrapolated',
+    }],
+  }));
+  assert.equal(reference.kg,59);
+  assert.equal(reference.authority,'CATALOG_COMPARISON_ONLY');
+  assert.equal(phase6BatchDeviationDraft(sample({
+    lengthMm:150,mapped:true,
+    candidates:[{
+      selectedWeight:61,masterWeight:59,weight:59,typeDesc:'Weldneck Flange',
+      rowLength:147,rowBore:150,rowRating:900,weightMethod:'length-extrapolated',
+    }],
+  }),118).weight,59);
+});
 test('strict >±40% gate stages a review draft rather than granting approval',()=>{
   assert.equal(phase6BatchDeviationDraft(sample(),59),null);
   assert.equal(phase6BatchDeviationDraft(sample(),82.6),null);
