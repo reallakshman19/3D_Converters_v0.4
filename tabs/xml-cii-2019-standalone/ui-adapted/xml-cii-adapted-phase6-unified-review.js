@@ -38,7 +38,8 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
   if(supportConfigJson===state.supportConfigJson)return state;
   return {
     ...state,supportConfigJson,
-    phase6Undo:{mode:'single',supportConfigJson:state.supportConfigJson||'{}'},
+    phase6Undo:{mode:'single',supportConfigJson:state.supportConfigJson||'{}',
+      sourceText:state.sourceText||'',stagedJsonText:state.stagedJsonText||''},
     masterContext:state.masterContext
       ? {...state.masterContext,config:parse(supportConfigJson)}
       : state.masterContext,
@@ -53,6 +54,12 @@ export function applyPhase6ModeAReview(state = {}, updates = {}) {
   const original=Object.fromEntries((state.sourceBatch?.sources||[])
     .filter(source=>Object.prototype.hasOwnProperty.call(updates,source.sourceId))
     .map(source=>[source.sourceId,source.supportConfigJson||'{}']));
+  const sourceIdentity=Object.fromEntries((state.sourceBatch?.sources||[])
+    .filter(source=>Object.prototype.hasOwnProperty.call(updates,source.sourceId))
+    .map(source=>[source.sourceId,{
+      sourceDigest:source.sourceDigest||'',sourceText:source.sourceText||'',
+      stagedJsonText:source.stagedJsonText||'',
+    }]));
   const applied=applyModeAConsolidatedRigidReviewUpdates(state,updates);
   const sources=(applied.sourceBatch?.sources||[]).map(source=>
     updates[source.sourceId] ? {
@@ -61,7 +68,7 @@ export function applyPhase6ModeAReview(state = {}, updates = {}) {
         outputRunReadinessReport:null,result:null},
     } : source);
   return syncActiveModeASource(normalizeModeABatchState({
-    ...applied,phase6Undo:{mode:'batch',sourceConfigs:original},
+    ...applied,phase6Undo:{mode:'batch',sourceConfigs:original,sourceIdentity},
     sourceBatch:{...applied.sourceBatch,sources},
     weightMatchResult:null,outputRunReadinessReport:null,
     batchRunResult:null,result:null,
@@ -75,6 +82,10 @@ export function undoPhase6Review(state = {}) {
   const saved=state.phase6Undo;
   if(!saved)return state;
   if(saved.mode==='single'){
+    // Never replay a previous source's approval/weight ledger onto a newly
+    // loaded XML or a different staged-geometry authority.
+    if((state.sourceText||'')!==(saved.sourceText||'') ||
+       (state.stagedJsonText||'')!==(saved.stagedJsonText||''))return state;
     const supportConfigJson=saved.supportConfigJson||'{}';
     return {...state,phase6Undo:null,supportConfigJson,
       weightMatchResult:null,result:null,outputRunReadinessReport:null,
@@ -83,6 +94,15 @@ export function undoPhase6Review(state = {}) {
   }
   if(saved.mode!=='batch')return state;
   const sourceConfigs=saved.sourceConfigs||{};
+  const identity=saved.sourceIdentity||{};
+  if((state.sourceBatch?.sources||[]).some(source=>{
+    const expected=identity[source.sourceId];
+    return expected && (
+      (source.sourceDigest||'')!==(expected.sourceDigest||'') ||
+      (source.sourceText||'')!==(expected.sourceText||'') ||
+      (source.stagedJsonText||'')!==(expected.stagedJsonText||'')
+    );
+  }))return state;
   const sources=(state.sourceBatch?.sources||[]).map(source=>
     Object.prototype.hasOwnProperty.call(sourceConfigs,source.sourceId)
       ? {...source,supportConfigJson:sourceConfigs[source.sourceId],
