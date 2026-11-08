@@ -101,21 +101,21 @@ def weight_changes():
     changed=[]
     def nodes(root):
         result=[]
-        for branch in root.iter("Branch"):
-            name=branch.findtext("Branchname") or ""
-            for i,node in enumerate(branch.iter("Node")):
+        for branch in root.iter("{*}Branch"):
+            name=branch.findtext("{*}Branchname") or ""
+            for i,node in enumerate(branch.iter("{*}Node")):
                 result.append((name,i,node))
         return result
     l,r=nodes(left),nodes(right)
-    assert len(l)==len(r),(len(l),len(r))
+    assert len(l)==len(r)==994,(len(l),len(r))
     for (lb,li,ln),(rb,ri,rn) in zip(l,r):
         assert (lb,li)==(rb,ri)
-        before_weight=float(ln.findtext("Weight") or "0")
-        after_weight=float(rn.findtext("Weight") or "0")
+        before_weight=float(ln.findtext("{*}Weight") or "0")
+        after_weight=float(rn.findtext("{*}Weight") or "0")
         if not math.isclose(before_weight,after_weight,rel_tol=0,abs_tol=1e-8):
             changed.append({
                 "branch":lb,"nodeIndex":li,
-                "nodeNumber":ln.findtext("NodeNumber") or ln.findtext("Number") or "",
+                "nodeNumber":ln.findtext("{*}NodeNumber") or ln.findtext("{*}Number") or "",
                 "beforeKg":before_weight,"afterKg":after_weight,
             })
     assert len(changed)==1,changed
