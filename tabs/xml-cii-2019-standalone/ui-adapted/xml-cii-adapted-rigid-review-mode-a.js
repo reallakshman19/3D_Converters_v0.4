@@ -64,7 +64,7 @@ export function modeARigidSelectableSuggestions(issue = {}) {
   const rated=String(issue.rating ?? '').replace(/#/g,'').trim();
   const bore=Number(issue.boreMm),length=Number(issue.lengthMm);
   const tolerance=Number.isFinite(Number(issue.reviewLengthToleranceMm))
-    ? Math.max(0,Number(issue.reviewLengthToleranceMm)) : 6;
+    ? Math.min(6,Math.max(0,Number(issue.reviewLengthToleranceMm))) : 6;
   const candidates=issue.massSuggestionOnly?[]:(issue.candidates||[]);
   const seen=new Set(),results=[];
   for(let i=0;i<candidates.length;i++){
@@ -122,7 +122,7 @@ export function modeARigidCandidateMarkup(issue,rowIndex) {
         'Method: '+choice.method,
         'Source DN '+(issue.boreMm??'?')+', Class '+(issue.rating??'?'),
         choice.referenceLengthMm===null?'':'Master length '+choice.referenceLengthMm+' mm',
-        i?'Additional master within ±'+(issue.reviewLengthToleranceMm??6)+' mm':'',
+        i?'Additional master within ±'+Math.min(6,Math.max(0,Number(issue.reviewLengthToleranceMm??6)))+' mm':'',
       ].filter(Boolean).join(' | ');
       const lengthSuffix=i&&choice.referenceLengthMm!==null
         ? ' · L='+choice.referenceLengthMm+' mm' : '';
