@@ -10,7 +10,7 @@ import { renderStandaloneResolverJsonTracePanel } from './xml-cii-adapted-resolv
 import { renderStandaloneInputXmlElementSideloadPanel, renderStandaloneManualElementSideloadPanel } from './xml-cii-adapted-manual-element-sideload.js';
 import { renderStandaloneDiagnosticsReportPanel, renderStandalonePreviewReportPanel } from './xml-cii-adapted-preview-diagnostics-audit-v7.js?v=20260727-cache-v7';
 import { renderStandalonePropagationAuditPanel } from './xml-cii-adapted-propagation-audit.js?v=20260708-v8';
-import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-full-parity-r2';
+import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-error40-r3';
 import { renderStandaloneSupportTypeMapperPanel } from './xml-cii-adapted-support-type-mapper.js';
 import { renderStandaloneOutputRunPanel } from './xml-cii-adapted-output-run.js';
 import { renderAdaptedConfigPanel } from './xml-cii-adapted-config-tabs.js?v=20260713-config-tabs-p7';
