@@ -12,6 +12,7 @@ import { modeAExecutionRows, modeARawState } from './xml-cii-adapted-mode-a-prop
 import { replaceModeAState } from './xml-cii-adapted-mode-a-state.js';
 import { normalizeModeABatchState, syncActiveModeASource } from '../xml-cii-mode-a-batch.js';
 import { appendEmpiricalWeightValidationReport } from './xml-cii-adapted-weight-validation-report.js';
+import { detectXmlCiiWorkflowSourceKind } from '../xml-cii-workflow-source-detect.js';
 
 const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -260,6 +261,19 @@ function phase6LedgerHtml(entries) {
 export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=false}={}) {
   if(!card)return;
   const snapshot=modeA?modeARawState(stateRef):stateRef.current||{};
+  // Source mode compatibility: the consolidated endpoint-2 physical-mass
+  // collector is PSI116-specific. Preserve InputXML's pre-existing Weight
+  // Match route rather than interpreting its rows as PSI116 or losing edits.
+  const sourceMode=String(snapshot.sourceKind||'auto').toLowerCase();
+  if(!modeA && (sourceMode==='inputxml' ||
+       (sourceMode==='auto' && detectXmlCiiWorkflowSourceKind(
+         String(snapshot.sourceText||''))==='inputxml'))){
+    card.textContent='Loading InputXML-compatible Weight Match review…';
+    void import('./xml-cii-adapted-weight-match-v2.js?v=20261108-rigid-choice-buttons-1')
+      .then(module=>module.renderAdaptedWeightMatchPanelV2(card,stateRef))
+      .catch(error=>{card.textContent='InputXML weight review unavailable: '+error.message;});
+    return;
+  }
   const sourceCount=modeA?modeAExecutionRows(stateRef).length:1;
   const config=modeA
     ? xmlCiiEnrichedConfigFromState(modeAExecutionRows(stateRef)[0]?.state||snapshot)
