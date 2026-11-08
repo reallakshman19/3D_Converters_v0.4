@@ -45,11 +45,36 @@ function previewBranchRows(state, fresh) {
   return [];
 }
 
-function weightMatchRows(state) {
-  const result = state.weightMatchResult;
-  if (Array.isArray(result?.issueRows) && result.issueRows.length) return result.issueRows;
-  const cached = readCache('xml-cii-wm-cache-v1');
-  return Array.isArray(cached?.data) ? cached.data : [];
+function weightMatchRows(state, fresh) {
+  // Phase 6 no longer publishes a second Weight Match table. Audit the exact
+  // persisted source-mass overrides instead of interpreting a ranked catalog
+  // candidate or a stale Weight Match cache as an approved mass.
+  let config={};
+  try { config=JSON.parse(state.supportConfigJson||'{}'); } catch {}
+  const authoritative=config?.overrides?.rigidWeight || {};
+  const rows=Object.entries(authoritative).flatMap(([key,value])=>{
+    const weight=Number(value);
+    if(!(Number.isFinite(weight)&&weight>0))return [];
+    const matching=(fresh?.nodeRows||[]).find(row=>
+      [row.key,row.originalKey,row.legacyKey,row.componentRefEndpoint]
+        .some(id=>String(id||'')===key));
+    const split=key.indexOf('::');
+    const branchName=matching?.branchName || (split>=0?key.slice(0,split):'');
+    const tail=split>=0?key.slice(split+2):key;
+    const nodeNumber=matching?.nodeNumber || matching?.nodeNumberDisplay ||
+      (/^\\d+$/.test(tail)?tail:null);
+    // Endpoint-ref keyed PCOM overrides are rendered as inline/unknown-node
+    // evidence if a fresh source node identity is unavailable; never silently
+    // fabricate a neighbouring physical node number.
+    return [{key,branchName,nodeNumber,weight,
+      componentType:matching?.componentType||'RIGID',
+      massSource:'explicit-phase6-source-override'}];
+  });
+  if(rows.length)return rows;
+  const result=state.weightMatchResult;
+  if(Array.isArray(result?.issueRows)&&result.issueRows.length)return result.issueRows;
+  const cached=readCache('xml-cii-wm-cache-v1');
+  return Array.isArray(cached?.data)?cached.data:[];
 }
 
 function localName(node) { return t(node?.localName || node?.nodeName).replace(/^.*:/, ''); }
@@ -144,7 +169,7 @@ function statusFor(tabValue, enrichedValue, inCii, enrichedAvailable, ciiAvailab
 export async function buildXmlCiiPropagationAudit(state) {
   const fresh = await freshDryRun(state);
   const branchRows = previewBranchRows(state, fresh);
-  const wmRows = weightMatchRows(state);
+  const wmRows = weightMatchRows(state, fresh);
   const enriched = parseEnrichedXml(state.result?.enrichedText || '');
   const ciiText = state.result?.ciiText || '';
   const ciiAvailable = !!t(ciiText);
