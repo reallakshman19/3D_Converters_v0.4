@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const version='20261108-rigid-choice-buttons-1';
-const phase6Version='20261108-phase6-unified-r1';
+const phase6Version='20261108-phase6-full-parity-r2';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js'],
  ['main-rhbg-fitguard.js','core/app.js'],
  ['core/app.js','app-standalone-runtime.js'],
  ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js'],
- ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js'],
+ ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',phase6Version],
  // Phase 6 has been replaced; the legacy Weight Match renderer remains
  // available to independent non-UI consumers, not the active Phase 6 route.
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js'],
@@ -18,9 +18,9 @@ const chain=[
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-consolidated-review-v2.js','xml-cii-adapted-rigid-review-mode-a.js']
 ];
 test('entire live XML-CII Weight Match and consolidated popup import chain is versioned',()=>{
-  for(const [path,dependency] of chain){
+  for(const [path,dependency,revision=version] of chain){
     const src=read(path);
-    assert.ok(src.includes(dependency+'?v='+version),
+    assert.ok(src.includes(dependency+'?v='+revision),
       path+' must load versioned '+dependency);
   }
 });
@@ -33,7 +33,7 @@ test('new Phase 6 review and advanced matcher are versioned on the live import c
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js',
      'xml-cii-adapted-phase6-unified-review.js',phase6Version],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js',
-     'xml-cii-adapted-rigid-review-mode-a.js',version],
+     'xml-cii-adapted-rigid-review-mode-a.js',phase6Version],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js',
      'weight-match-renderer.js',phase6Version],
   ];
