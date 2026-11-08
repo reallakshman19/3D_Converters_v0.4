@@ -196,7 +196,7 @@ test('standalone and ATTA estimate buttons copy numeric drafts without independe
     assert.match(html,/≈ 46.343 kg · Blind Flange · estimate only/);
     assert.doesNotMatch(html,/data-rigid-review-advisory/);
     assert.equal((html.match(/<button/g)||[]).length,1);
-    const alternatives=rigidCandidateButtons({...issue,lengthMm:147,
+    const alternatives=rigidCandidateButtons({...issue,lengthMm:147,dtxr:'WELDING NECK FLANGE 900#',
       candidates:[
         {selectedWeight:59,typeDesc:'Weldneck Flange',rowLength:147,rowBore:80,rowRating:900},
         {selectedWeight:43,typeDesc:'Weldneck Flange',rowLength:124,rowBore:80,rowRating:900},
