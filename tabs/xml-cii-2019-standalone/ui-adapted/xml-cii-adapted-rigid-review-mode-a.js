@@ -2,7 +2,7 @@ import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019
 import { valveHintLengthToleranceMm, classifySourceWeightFamily, isWeightMasterPhysicalFamilyMatch } from '../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261108-rigid-choice-buttons-1';
 import { resolveStandaloneWeightReviewRating, standaloneWeightReviewRatingInfo } from './xml-cii-adapted-weight-rating-authority.js';
-import { collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
+import { collectXmlCiiWeightMatchRows, collectXmlCiiZeroRigidWeightIssues, reconcileXmlCiiWeightMatchSourceBores } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js';
 import { rankXmlCiiWeightCandidates } from '../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20261107-glrd-bore-family-r2';
 import { flattenModeARigidReviewEntries } from './xml-cii-adapted-rigid-review-mode-a-state.js';
@@ -11,8 +11,9 @@ const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, 
 const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
-export async function collectModeARigidWeightReviewIssues(state = {}, config = {}, {includeSkipped = false} = {}) {
-  return reconcileXmlCiiWeightMatchSourceBores(collectXmlCiiZeroRigidWeightIssues(state.sourceText || '', state.stagedJsonText || '', config), state.sourceText || '').filter(isRigidWeightReviewEligibleIssue).map((issue) => {
+export async function collectModeARigidWeightReviewIssues(state = {}, config = {}, {includeSkipped = false, includeMapped = false} = {}) {
+  const sourceRows=includeMapped ? collectXmlCiiWeightMatchRows : collectXmlCiiZeroRigidWeightIssues;
+  return reconcileXmlCiiWeightMatchSourceBores(sourceRows(state.sourceText || '', state.stagedJsonText || '', config), state.sourceText || '').filter(isRigidWeightReviewEligibleIssue).map((issue) => {
     const authority = resolveStandaloneWeightReviewRating(issue, config);
     const rating = authority.rating;
     const ranking = rating && !issue.sourceBoreHold
@@ -40,7 +41,7 @@ export async function collectModeARigidWeightReviewIssues(state = {}, config = {
       reviewLengthToleranceMm: valveHintLengthToleranceMm(config),
     }, config);
   }).filter((issue) => {
-    if(issue.mapped)return false;
+    if(issue.mapped)return includeMapped;
     // An explicit source-specific 0kg skip is an auditable decision for this
     // run, not a positive mass. Do not nag for it a second time in Phase 6
     // or the Run gate unless the skip record is missing/invalid.
