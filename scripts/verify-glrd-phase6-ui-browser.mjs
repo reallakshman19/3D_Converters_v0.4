@@ -288,9 +288,14 @@ try{
   await candidate.locator('.mc-rigid-review-input').fill(String(refKg*2));
   await page.locator('[data-mode-a-rigid-apply]').click();
   await page.locator('[data-phase6-open-review]').click();
-  const changedRow=page.locator('[data-mode-a-rigid-review-row]')
-    .filter({has:page.locator('[data-issue-key="'+compKey.replace(/"/g,'')+'"]')}).first();
-  const changedInput=page.locator('.mc-rigid-review-input[data-issue-key="'+compKey.replace(/"/g,'')+'"]');
+  await page.locator('.mc-rigid-review-dialog').waitFor({state:'visible'});
+  const allInputs=page.locator('.mc-rigid-review-input');
+  const keys=await allInputs.evaluateAll(elements=>elements.map(input=>input.dataset.issueKey));
+  const matchedIndex=keys.indexOf(compKey);
+  assert.ok(matchedIndex>=0,
+    'Previously saved mapped source key absent on reopening: '+compKey+
+    '; visible input count='+keys.length+'; example keys='+JSON.stringify(keys.slice(0,5)));
+  const changedInput=allInputs.nth(matchedIndex);
   assert.equal(Number(await changedInput.inputValue()),refKg*2);
   assert.match(await changedInput.locator('xpath=..').locator('xpath=..')
     .locator('[data-phase6-error-pct]').innerText(),/\+100\.0%/);
