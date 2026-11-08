@@ -177,6 +177,21 @@ export function modeARigidCandidateMarkup(issue,rowIndex) {
   </div>`;
 }
 
+/** A 100% catalog score alone is not source-mass approval. */
+export function phase6QualifiedExactCandidate(row){
+  const best=row.candidates?.[0];
+  const weight=Number(best?.suggestedWeight??best?.selectedWeight??best?.weight);
+  const length=Number(row.lengthMm),masterLength=Number(best?.rowLength);
+  const score=Number(best?.totalScore??best?.score);
+  const qualified=Number.isFinite(score)&&(Math.abs(score-1)<1e-6||
+    Math.abs(score-100)<1e-6);
+  const maxDelta=Math.min(6,Math.max(0,Number(row.reviewLengthToleranceMm??6)));
+  return best?.preferred===true && qualified &&
+    best.lengthQualified!==false && Number.isFinite(weight)&&weight>0 &&
+    (!Number.isFinite(masterLength)||Math.abs(masterLength-length)<=maxDelta+1e-6) &&
+    isApprovedPhysicalMassCandidate(best,weight) ? {weight,source:best} : null;
+}
+
 function rowMarkup(issue, rowIndex) {
   const best = issue.candidates?.[0] || null;
   const info = ratingInfo(issue);
@@ -347,6 +362,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     const missingList=overlay.querySelector('[data-mode-a-rigid-missing-list]');
     let missingOnly=false;
     let reviewOnly=false;
+    let exactOnly=false;
     const reviewButton=overlay.querySelector('[data-mode-a-rigid-show-unreviewed]');
     const openBulkButton=overlay.querySelector('[data-mode-a-rigid-open-review]');
     const reviewPanel=overlay.querySelector('[data-mode-a-rigid-bulk-review-panel]');
@@ -447,7 +463,9 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         const show = (!sourceId || tr.dataset.sourceId === sourceId) &&
           (!q || (tr.dataset.search || '').includes(q)) &&
           (!missingOnly || missingSet.has(tr)) &&
-          (!reviewOnly || reviewSet.has(tr));
+          (!reviewOnly || reviewSet.has(tr)) &&
+          (!exactOnly || Boolean(phase6QualifiedExactCandidate(
+            rows.find(issue=>issue.reviewId===tr.dataset.reviewId)||{})));
         tr.style.display = show ? '' : 'none';
       });
       refreshMissingList();
@@ -457,6 +475,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
       hideBulkReview();
       reviewOnly=false;
       missingOnly=false;
+      exactOnly=false;
       rows = flattenModeARigidReviewEntries(workingEntries);
       if (body) body.innerHTML = rows.map(rowMarkup).join('');
       overlay.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
@@ -516,22 +535,15 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         hideBulkReview();filter();
         setStatus(updated+' blank rows filled as review drafts; existing source masses preserved. No value saved.',false);
       });
-      const exact=(row)=>{
-        const best=row.candidates?.[0];
-        const weight=Number(best?.suggestedWeight??best?.selectedWeight??best?.weight);
-        const length=Number(row.lengthMm),masterLength=Number(best?.rowLength);
-        const score=Number(best?.totalScore??best?.score);
-        const qualified=Number.isFinite(score)&&(Math.abs(score-1)<1e-6||
-          Math.abs(score-100)<1e-6);
-        const maxDelta=Math.min(6,Math.max(0,Number(row.reviewLengthToleranceMm??6)));
-        return best?.preferred===true && qualified &&
-          best.lengthQualified!==false && Number.isFinite(weight)&&weight>0 &&
-          (!Number.isFinite(masterLength)||Math.abs(masterLength-length)<=maxDelta+1e-6) &&
-          isApprovedPhysicalMassCandidate(best,weight) ? {weight,source:best} : null;
-      };
+      const exact=phase6QualifiedExactCandidate;
       overlay.querySelector('[data-phase6-find-exact]')?.addEventListener('click',()=>{
+        exactOnly=!exactOnly;
+        if(exactOnly){missingOnly=false;reviewOnly=false;}
+        const button=overlay.querySelector('[data-phase6-find-exact]');
+        if(button)button.textContent=exactOnly?'Show All Weights':'Find Exact Weight Matches';
+        filter();
         const matches=rows.filter(row=>!row.mapped&&exact(row)).length;
-        setStatus(matches+' source-approved exact match(es) available. Catalog-perfect estimates without independent mass authority remain drafts.',false);
+        setStatus(matches+' source-approved exact match(es) identified. Catalog-perfect estimates without physical mass approval remain Review.',false);
       });
       overlay.querySelector('[data-phase6-fill-similar]')?.addEventListener('click',()=>{
         const groups=new Map();
@@ -550,7 +562,12 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
           for(const index of indices){
             const input=overlay.querySelectorAll('.mc-rigid-review-input')[index];
             if(!input || input.value!=='')continue;
-            if(stageRigidReviewProposal(input,proposedRigidReviewWeight(rows[index])))updated++;
+            const verified=exact(rows[index]);
+            if(verified && stageRigidReviewProposal(input,{
+              weight:verified.weight,approved:true,reference:
+                String(verified.source.typeDesc||'Source-approved exact weight'),
+              method:'source-approved-exact',
+            }))updated++;
           }
         }
         hideBulkReview();filter();
