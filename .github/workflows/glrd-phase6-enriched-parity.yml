@@ -96,6 +96,7 @@ jobs:
           if test -f tests/xml-cii-phase6-consolidated.test.mjs; then node --test tests/xml-cii-phase6-consolidated.test.mjs; fi
           node --test tests/xml-cii-phase6-full-parity.test.mjs
           node --test tests/xml-cii-phase6-reference-deviation.test.mjs
+          python3 -m py_compile scripts/verify-glrd-phase6-edited-cii.py scripts/verify-xmlcii-pages-deploy.py
       - name: Browser verify the actual consolidated Phase 6 review and 109/5 state propagation
         shell: bash
         env:
