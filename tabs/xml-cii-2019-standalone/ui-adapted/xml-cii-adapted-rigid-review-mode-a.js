@@ -192,6 +192,28 @@ export function phase6QualifiedExactCandidate(row){
     isApprovedPhysicalMassCandidate(best,weight) ? {weight,source:best} : null;
 }
 
+function phase6EvidenceDetails(issue) {
+  const fields=[
+    ['Line Key',issue.lineKey],['Component Type',issue.componentType],
+    ['Component Ref / Endpoint',(issue.componentRefNo||'')+(issue.endpoint?'_'+issue.endpoint:'')],
+    ['Valve Hint',formatValveHint(issue.nodeHint)],
+    ['Current Mass (kg)',issue.mapped?issue.weight:issue.existingSkipped?'0 (skip)':'unresolved'],
+    ['Original XML Mass (kg)',issue.originalWeight],
+    ['Weight Source',issue.weightSource],
+    ['Status',issue.mapped?'MAPPED':issue.existingSkipped?'SKIPPED':'REVIEW'],
+    ['Match Score',issue.candidates?.[0]?.totalScore],
+    ['Candidate Type',issue.candidates?.[0]?.typeDesc],
+  ];
+  return `<details data-phase6-row-details style="margin-top:4px;font-size:10px;">
+    <summary style="cursor:pointer;color:#93c5fd;">Details</summary>
+    <div style="min-width:260px;padding:5px;background:#14243d;border:1px solid #475569;
+      border-radius:4px;line-height:1.6;white-space:normal;">
+      ${fields.map(([label,value])=>`<div><strong>${esc(label)}:</strong>
+        ${esc(value===null||value===undefined||value===''?'—':value)}</div>`).join('')}
+    </div>
+  </details>`;
+}
+
 function rowMarkup(issue, rowIndex) {
   const best = issue.candidates?.[0] || null;
   const info = ratingInfo(issue);
@@ -206,7 +228,8 @@ function rowMarkup(issue, rowIndex) {
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);"><input type="text" class="mc-rigid-review-rating-input" data-review-id="${attr(issue.reviewId)}" data-source-id="${attr(issue.sourceId)}" data-issue-key="${attr(issue.key)}" value="${attr(info.shownRating)}" title="${attr(info.title)}" style="width:64px;background:#101827;color:#fff;border:1px solid ${info.conflict || info.missingWithDtxr ? '#ef4444' : '#31455f'};border-radius:4px;padding:4px;font-size:11px;">${badge}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:140px;" title="Original source component: ${attr(issue.componentRefNo || 'n/a')} / endpoint ${attr(issue.endpoint || 'n/a')}">
       <strong>${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</strong>
-      <div data-rigid-review-source-ref style="font-size:10px;color:#9fb5d1;overflow-wrap:anywhere;">${esc(issue.componentRefNo || 'No ref')}${issue.endpoint ? '_' + esc(issue.endpoint) : ''}</div></td>
+      <div data-rigid-review-source-ref style="font-size:10px;color:#9fb5d1;overflow-wrap:anywhere;">${esc(issue.componentRefNo || 'No ref')}${issue.endpoint ? '_' + esc(issue.endpoint) : ''}</div>
+      ${issue.phase6?phase6EvidenceDetails(issue):''}</td>
     <td title="${attr(issue.dtxrSourcePath || '')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">
@@ -296,6 +319,7 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
         <button type="button" data-mode-a-rigid-close-bulk-review style="padding:8px 13px;background:transparent;border:1px solid #475569;color:#cbd5e1;border-radius:6px;cursor:pointer;">Return to weight table</button>
       </div>
     </div>
+    ${phase6?'<div style="font-size:11px;color:#9fb5d1;margin:5px 0;">Extra engineering columns continue to the right; scroll horizontally, or expand <strong>Details</strong> under any Node to inspect full source and matching evidence.</div>':''}
     <div style="overflow:auto;max-height:55vh;border:1px solid rgba(148,163,184,.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;z-index:2;"><th style="padding:7px;background:#1e293b;">Source XML</th><th style="padding:7px;">Branch</th><th style="padding:7px;">Bore</th><th style="padding:7px;">Rating</th><th style="padding:7px;">Node</th><th style="padding:7px;">DTXR</th><th style="padding:7px;">Length</th><th style="padding:7px;">Manual Weight (kg)</th><th style="padding:7px;">Nearest Suggestions</th>
       <th style="padding:7px;">Line Key</th><th style="padding:7px;">Component Type</th>
       <th style="padding:7px;">Component Ref / Endpoint</th><th style="padding:7px;">Valve Hint</th>
