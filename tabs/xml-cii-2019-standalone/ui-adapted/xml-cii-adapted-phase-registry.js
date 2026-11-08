@@ -9,7 +9,7 @@ export const XML_CII_WORKFLOW_PHASES = Object.freeze([
   { id: 'json-trace', label: '3 Resolver / JSON Trace', summary: 'Inspect staged JSON and resolve PS/POS traces.' },
   { id: 'preview', label: '4 Preview', summary: 'Preview selected source, side-load, options, and config state.' },
   { id: 'diagnostics', label: '5 Diagnostics', summary: 'Review normalized workflow diagnostics and warnings.' },
-  { id: 'weight-match', label: '6 Weight Match', summary: 'Review zero/missing weights, candidate scores, overrides, and finalized weight matches.' },
+  { id: 'weight-match', label: '6 Rigid Weight Review', summary: 'Review missing physical masses in one consolidated source-aware approval workflow.' },
   { id: 'support-mapper', label: '7 Support Type Mapper', summary: 'Review DTXR-derived support and restraint mapping rules.' },
   { id: 'config', label: '8 Config', summary: 'Edit support/config JSON passed to the standalone API.' },
   { id: 'matched-audit', label: '9 Propagation Audit', summary: 'Trace values node-wise across tabs → enriched XML → CII and flag lost propagation.' },

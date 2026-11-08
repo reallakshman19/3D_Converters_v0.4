@@ -1,0 +1,114 @@
+name: GLRD Phase 6 baseline enriched XML parity
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/glrd-phase6-enriched-parity.yml'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-registry.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-mode-a.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-smart.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match-v2.js'
+      - 'tabs/xml-cii-2019-standalone/xml-cii-output-run-readiness.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js'
+      - 'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js'
+      - 'scripts/verify-glrd-phase6-ui-browser.mjs'
+      - 'tests/xml-cii-phase6-*.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  baseline-then-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin baseline and verify actual input SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '37b5e6f84a6de7688357faa2ee4e380419ae5a07' > /tmp/phase6-baseline-sha
+          mkdir -p /tmp/glrd-inputs artifacts/glrd-phase6-parity
+          root='https://raw.githubusercontent.com/reallakshman19/3D_Converters/3377b7f4baeeee5851e72dcc414d6c4a93f5a933/Benchmarks/XML-CII-2019/revamped'
+          master='https://raw.githubusercontent.com/reallakshman19/3D_Converters/25db94769994751bb0fb6e6d83a578efd9ac8162/docs/docs/Masters'
+          curl -fsSL --retry 3 "$root/GLRD-1000-PI-01%20-%20BM2.xml" -o '/tmp/glrd-inputs/GLRD-1000-PI-01 - BM2.xml'
+          curl -fsSL --retry 3 "$root/STF_2026Nov03-0839_managed_stage.json" -o '/tmp/glrd-inputs/STF_2026Nov03-0839_managed_stage.json'
+          curl -fsSL --retry 3 "$root/LL_BM2.xlsx" -o '/tmp/glrd-inputs/LL_BM2.xlsx'
+          curl -fsSL --retry 3 "$master/wtValveweights.json" -o '/tmp/glrd-inputs/wtValveweights.json'
+          cd /tmp/glrd-inputs
+          echo '6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151  GLRD-1000-PI-01 - BM2.xml' | sha256sum -c -
+          echo '1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746  STF_2026Nov03-0839_managed_stage.json' | sha256sum -c -
+          echo '73496a1277cd1f39de823d57180ee0d8c4b1d72241923f1e558af2c7c805d007  LL_BM2.xlsx' | sha256sum -c -
+      - name: Prepare original source worktree and Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/glrd-phase6-baseline "$(cat /tmp/phase6-baseline-sha)"
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/glrd-phase6-baseline/node_modules
+      - name: Save BASELINE enriched XML from original repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd /tmp/glrd-phase6-baseline && python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/glrd-phase6-original-server.log 2>&1 &)
+          node -e "let n=0;const f=async()=>{try{if((await fetch('http://127.0.0.1:4173')).ok)return}catch{}if(++n>60)process.exit(1);setTimeout(f,500)};f()"
+          (
+            cd /tmp/glrd-phase6-baseline
+            GLRD_INPUT_DIR=/tmp/glrd-inputs EMPIRICAL_BROWSER_BASE_URL=http://127.0.0.1:4173 node scripts/verify-glrd-review-choices-browser.mjs
+          )
+          cp '/tmp/glrd-phase6-baseline/artifacts/glrd-review-choices/glrd-109-reviewed-five-skipped-baseline-engine-input.xml' 'artifacts/glrd-phase6-parity/baseline-unreviewed-enriched.xml'
+          cp '/tmp/glrd-phase6-baseline/artifacts/glrd-review-choices/glrd-109-reviewed-five-skipped-engine-input.xml' 'artifacts/glrd-phase6-parity/baseline-simulated-reviewed-enriched.xml'
+          sha256sum artifacts/glrd-phase6-parity/baseline-*.xml | tee artifacts/glrd-phase6-parity/baseline.sha256
+          wc -c artifacts/glrd-phase6-parity/baseline-*.xml
+      - name: Re-extract CANDIDATE enriched XML and enforce byte parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4174 --bind 127.0.0.1 >/tmp/glrd-phase6-candidate-server.log 2>&1 &
+          node -e "let n=0;const f=async()=>{try{if((await fetch('http://127.0.0.1:4174')).ok)return}catch{}if(++n>60)process.exit(1);setTimeout(f,500)};f()"
+          GLRD_INPUT_DIR=/tmp/glrd-inputs EMPIRICAL_BROWSER_BASE_URL=http://127.0.0.1:4174 node scripts/verify-glrd-review-choices-browser.mjs
+          cp 'artifacts/glrd-review-choices/glrd-109-reviewed-five-skipped-baseline-engine-input.xml' 'artifacts/glrd-phase6-parity/candidate-unreviewed-enriched.xml'
+          cp 'artifacts/glrd-review-choices/glrd-109-reviewed-five-skipped-engine-input.xml' 'artifacts/glrd-phase6-parity/candidate-simulated-reviewed-enriched.xml'
+          cmp -s artifacts/glrd-phase6-parity/baseline-unreviewed-enriched.xml artifacts/glrd-phase6-parity/candidate-unreviewed-enriched.xml
+          cmp -s artifacts/glrd-phase6-parity/baseline-simulated-reviewed-enriched.xml artifacts/glrd-phase6-parity/candidate-simulated-reviewed-enriched.xml
+          sha256sum artifacts/glrd-phase6-parity/candidate-*.xml | tee artifacts/glrd-phase6-parity/candidate.sha256
+          printf 'baseline_sha=%s\ncandidate_sha=%s\nunreviewed_byte_parity=EQUAL\nsimulated_reviewed_byte_parity=EQUAL\n' "$(cat /tmp/phase6-baseline-sha)" "$GITHUB_SHA" | tee artifacts/glrd-phase6-parity/parity-result.txt
+      - name: Test Phase 6 and weight review downstream contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js
+          node --check tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js
+          node --test tests/xml-cii-weight-review-choices-skip.test.mjs
+          # The unrelated legacy fast-multi UI static test already fails
+          # two assertions at the pinned baseline; run it in its owning suite.
+          node --test tests/xml-cii-weight-validation-app-static.test.js
+          node --test tests/xml-cii-standalone-output-run.test.js
+          if test -f tests/xml-cii-phase6-consolidated.test.mjs; then node --test tests/xml-cii-phase6-consolidated.test.mjs; fi
+      - name: Browser verify the actual consolidated Phase 6 review and 109/5 state propagation
+        shell: bash
+        env:
+          GLRD_INPUT_DIR: /tmp/glrd-inputs
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4174
+        run: |
+          set -euo pipefail
+          node --check scripts/verify-glrd-phase6-ui-browser.mjs
+          node scripts/verify-glrd-phase6-ui-browser.mjs
+      - name: Upload original and re-extracted enriched XML, hashes and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glrd-phase6-baseline-candidate-${{ github.sha }}
+          path: |
+            artifacts/glrd-phase6-parity/**
+            artifacts/glrd-review-choices/glrd-choice-skip-trace-receipt.json
+            /tmp/glrd-phase6-original-server.log
+            /tmp/glrd-phase6-candidate-server.log
+          if-no-files-found: warn

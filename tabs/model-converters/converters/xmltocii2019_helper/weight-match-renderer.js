@@ -297,6 +297,47 @@ function parseTargetLines(value) { return lines(value).map((line) => { const par
 function parseRuleRows(panelEl, selector, withTargets) { return [...(panelEl?.querySelectorAll(selector) || [])].map((row, index) => ({ on: row.querySelector('[data-wm-rule-on]')?.checked !== false, priority: Number(row.querySelector('[data-wm-rule-priority]')?.value || ((index + 1) * 10)), code: clean(row.querySelector('[data-wm-rule-code]')?.value).toUpperCase(), label: clean(row.querySelector('[data-wm-rule-label]')?.value), patterns: lines(row.querySelector('[data-wm-rule-patterns]')?.value), ...(withTargets ? { targets: parseTargetLines(row.querySelector('[data-wm-rule-targets]')?.value) } : {}) })).filter((rule) => rule.code || rule.patterns.length); }
 function applyWeightRulePanelConfig(panelEl, config) { const cfg = plainObject(config) ? config : {}; cfg.weight = plainObject(cfg.weight) ? cfg.weight : {}; const tolerance = Number(panelEl?.querySelector('[data-wm-weight-tolerance]')?.value); if (Number.isFinite(tolerance) && tolerance >= 0) cfg.weight.valveHintLengthToleranceMm = tolerance; cfg.weight.semanticKeywordRules = parseRuleRows(panelEl, '[data-wm-semantic-row]', false); cfg.weight.specialValveFactorRules = parseRuleRows(panelEl, '[data-wm-factor-row]', true); ensureValveHintConfig(cfg); return cfg; }
 
+// Reuse the existing matching-rule editor in Phase 6 without instantiating
+// a second source-mass review table or a competing approval/persistence path.
+export function mountXmlCiiWeightRuleSettings(host, {config = {}, onSaveConfig} = {}) {
+  if (!host) return;
+  const current = () => ({
+    ...config,
+    weight: {...(config.weight || {})},
+  });
+  let effective=current();
+  host.innerHTML = `
+    <p class="model-converters-workflow-detail-text">
+      Matching settings are reference evidence only. They never approve physical mass.
+      Editing them requires rebuilding suggestions before a new review.
+    </p>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12px;">
+      <input type="checkbox" data-phase6-small-length-convert
+        ${convOn(effective)?'checked':''}>
+      Convert small master lengths from inches to mm
+    </label>
+    <div data-phase6-weight-rule-editor>${enhancedHintPanel(effective)}</div>
+    <div data-phase6-rule-status role="status" style="font-size:12px;margin-top:8px;"></div>
+  `;
+  const editor=host.querySelector('[data-phase6-weight-rule-editor]');
+  const status=host.querySelector('[data-phase6-rule-status]');
+  const publish=()=> {
+    effective.weight.valveHintMapping=valveHintMappingRows(effective);
+    onSaveConfig?.(effective);
+    if(status) status.textContent='Matching settings saved. Reopen the consolidated review to refresh suggestions.';
+  };
+  editor?.addEventListener('change',()=>{
+    // Keep all fields (including the rule rows) in the same legacy parser.
+    effective=applyWeightRulePanelConfig(editor,effective);
+    publish();
+  });
+  host.querySelector('[data-phase6-small-length-convert]')?.addEventListener('change',event=>{
+    effective.weight={...(effective.weight||{}),
+      convertSmallLengthsInToMm:event.target.checked===true};
+    publish();
+  });
+}
+
 export function xmlCiiRenderWeightMatchPhase() {
   const info = 'Default Rating authority is the exact Rating shown in Preview. Weight Match does not derive Rating again.';
   return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Prefill all suggestions (review)</button><button type="button" class="model-converters-download-btn" id="mc-wm-accept-drafts" style="background:#1e3a5f;border:1px solid #7298ca;color:#e9f4ff;">Accept verified suggestions</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-batch-review" role="region" aria-label="Weight Match bulk confirmation" style="display:none;margin:8px 0;padding:12px;border:1px solid #7298ca;border-radius:8px;background:#11223a;color:#edf6ff;">

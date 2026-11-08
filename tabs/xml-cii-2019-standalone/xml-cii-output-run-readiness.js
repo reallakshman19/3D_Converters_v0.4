@@ -77,9 +77,24 @@ function previewDone(input) {
   return ['xml-cii-pv-cache-v6', 'xml-cii-pv-cache-v5'].some((key) => cachedRows(key, (data) => array(data?.branchRows).length > 0 || array(data?.nodeRows).length > 0));
 }
 
+function physicalMassDecisions(input) {
+  const config=parseConfig(input.supportConfigJson);
+  const overrides=object(config.ok ? config.value?.overrides : {});
+  const valid=values=>Object.values(object(values)).filter(v=>
+    Number.isFinite(Number(v)) && Number(v)>0).length;
+  return {
+    positive:valid(overrides.rigidWeight),
+    reviewed:Object.values(object(overrides.rigidWeightReviewReceipts))
+      .filter(record=>record?.reviewed===true && Number(record?.weightKg)>0).length,
+    skipped:Object.values(object(overrides.rigidWeightSkipped))
+      .filter(record=>record?.skipped===true && Number(record?.weightKg)===0).length,
+  };
+}
+
 function weightMatchDone(input) {
-  if (input.weightMatchResult) return true;
-  return cachedRows('xml-cii-wm-cache-v1', (data) => array(data).length > 0);
+  const decisions=physicalMassDecisions(input);
+  return decisions.positive>0 || decisions.skipped>0 || !!input.weightMatchResult ||
+    cachedRows('xml-cii-wm-cache-v1', (data) => array(data).length > 0);
 }
 
 function supportMapperDone(input) {
@@ -95,11 +110,16 @@ function supportMapperDone(input) {
 function commonRows(input) {
   const preview = previewDone(input);
   const weight = weightMatchDone(input);
+  const decisions=physicalMassDecisions(input);
   const mapper = supportMapperDone(input);
   return [
     row('import-masters', 'Import Masters status', !!input.masterContext, 'Master context is available.'),
     row('preview-audit', 'Preview / Diagnostics / Matched Audit status', preview, preview ? 'Preview / dry-run data is available.' : 'Preview has not been built yet.'),
-    row('weight-match', 'Weight Match status', weight, weight ? (input.weightMatchStatus || 'Weight Match data is available.') : 'Weight Match result is not available.'),
+    row('weight-match', 'Rigid physical-mass review decisions', weight,
+      weight ? decisions.positive+' positive source mass(es), '+
+        decisions.reviewed+' recorded review receipt(s), '+decisions.skipped+
+        ' explicit zero skip(s). Run rechecks outstanding source masses.'
+      : 'No saved physical-mass review decision yet; Run checks missing weights independently.'),
     row('support-mapper', 'Support Type Mapper status', mapper, mapper ? (input.supportTypeMapperStatus || 'Support mapper rules are available.') : 'Support mapper result is not available.'),
     row('run-result', 'Run result available after run', hasResult(input), hasResult(input) ? 'Run result is available.' : 'No run result yet.', { status: 'pending' }),
   ];
@@ -141,7 +161,14 @@ export function buildRunManifest(input = {}) {
     resolver: { matched: summaryCount(input.resolverJsonTraceResult, 'matchedFacts'), rejected: summaryCount(input.resolverJsonTraceResult, 'rejectedFacts') },
     manualOrSideLoad: { matched: summaryCount(input.manualElementSideloadResult, 'matchedRows'), rejected: summaryCount(input.manualElementSideloadResult, 'rejectedRows') },
     previewAudit: { matched: summaryCount(input.previewDiagnosticsAuditReport, 'matchedFacts'), rejected: summaryCount(input.previewDiagnosticsAuditReport, 'rejectedFacts') },
-    weightMatch: { issues: countRows(input.weightMatchResult?.issueRows), finalized: countRows(input.weightMatchResult?.finalizedRows) },
+    weightMatch: {
+      issues:countRows(input.weightMatchResult?.issueRows),
+      finalized:countRows(input.weightMatchResult?.finalizedRows),
+      positiveSourceMasses:physicalMassDecisions(input).positive,
+      independentlyReviewed:physicalMassDecisions(input).reviewed,
+      explicitlySkippedZeroMasses:physicalMassDecisions(input).skipped,
+      reviewAuthority:'SOURCE_SPECIFIC_RIGID_WEIGHT_OVERRIDES',
+    },
     supportMapper: { previewRows: countRows(input.supportTypeMapperResult?.previewRows), diagnostics: countRows(input.supportTypeMapperResult?.diagnostics) },
     topology: {
       analyze: input.options?.analyzeTopology === true,

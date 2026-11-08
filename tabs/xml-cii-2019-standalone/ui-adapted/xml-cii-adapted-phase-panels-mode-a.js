@@ -10,7 +10,7 @@ import {
   renderStandaloneDiagnosticsReportPanel,
   renderStandalonePreviewReportPanel,
 } from './xml-cii-adapted-preview-diagnostics-audit-v7.js?v=20260813-mode-a-full-propagation-2';
-import { renderAdaptedWeightMatchPanelV2 } from './xml-cii-adapted-weight-match-v2.js?v=20261108-rigid-choice-buttons-1';
+import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-unified-r1';
 import { renderStandalonePropagationAuditPanel } from './xml-cii-adapted-propagation-audit.js?v=20260813-mode-a-full-propagation-2';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js?v=20260813-mode-a-full-propagation-2';
 import {
@@ -206,16 +206,8 @@ function renderWeightBatch(root, stateRef, render) {
   const state = modeARawState(stateRef);
   const executions = modeAExecutionRows(stateRef);
   const multi = executions.length > 1;
-  prependBatchScope(card, state, 'Weight Match is source-local; finalized matches remain attached only to the XML file where they were reviewed.');
-  if (multi) renderModeAConsolidatedWeightPanel(card, stateRef, render);
-  individualHeading(card, 'Individual Weight Match', executions.length);
-  for (const { source } of executions) {
-    const { details, body, sourceRef } = sourceDetails(source, stateRef, 'Weight Match', !multi);
-    card.appendChild(details);
-    const load = () => renderAdaptedWeightMatchPanelV2(body, sourceRef);
-    if (multi) lazyRender(details, body, load, 'Weight Match');
-    else load();
-  }
+  prependBatchScope(card, state, 'One consolidated physical-mass review covers enabled XML sources; source keys, decisions and receipts remain file-local.');
+  renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA:true});
 }
 
 function readinessRows(stateRef) {
