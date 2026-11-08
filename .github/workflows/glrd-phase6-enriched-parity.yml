@@ -10,6 +10,10 @@ on:
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-weight-match-v2.js'
       - 'tabs/xml-cii-2019-standalone/xml-cii-output-run-readiness.js'
       - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a-state.js'
+      - 'tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js'
+      - 'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js'
+      - 'scripts/verify-glrd-phase6-ui-browser.mjs'
       - 'tests/xml-cii-phase6-*.test.mjs'
   workflow_dispatch:
 permissions:
@@ -88,6 +92,15 @@ jobs:
           node --test tests/xml-cii-weight-validation-app-static.test.js
           node --test tests/xml-cii-standalone-output-run.test.js
           if test -f tests/xml-cii-phase6-consolidated.test.mjs; then node --test tests/xml-cii-phase6-consolidated.test.mjs; fi
+      - name: Browser verify the actual consolidated Phase 6 review and 109/5 state propagation
+        shell: bash
+        env:
+          GLRD_INPUT_DIR: /tmp/glrd-inputs
+          EMPIRICAL_BROWSER_BASE_URL: http://127.0.0.1:4174
+        run: |
+          set -euo pipefail
+          node --check scripts/verify-glrd-phase6-ui-browser.mjs
+          node scripts/verify-glrd-phase6-ui-browser.mjs
       - name: Upload original and re-extracted enriched XML, hashes and receipts
         if: always()
         uses: actions/upload-artifact@v4
