@@ -26,8 +26,8 @@ test('matched catalog reference is visible but never independent mass approval',
   assert.equal(r.approved,false);
   assert.equal(phase6ReferenceErrorPercent(59,59),0);
   assert.equal(phase6ReferenceErrorPercent(61,59),200/59);
-  assert.equal(phase6ReferenceErrorPercent(35.4,59),-40);
-  assert.equal(phase6ReferenceErrorPercent(82.6,59),40);
+  assert.ok(Math.abs(phase6ReferenceErrorPercent(35.4,59)+40)<1e-9);
+  assert.ok(Math.abs(phase6ReferenceErrorPercent(82.6,59)-40)<1e-9);
   assert.equal(phase6ReferenceErrorPercent('',59),null);
   assert.equal(phase6ReferenceErrorPercent(59,0),null);
   assert.equal(PHASE6_DEVIATION_LIMIT_PCT,40);
