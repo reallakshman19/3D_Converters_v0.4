@@ -10,7 +10,7 @@ import {
   renderStandaloneDiagnosticsReportPanel,
   renderStandalonePreviewReportPanel,
 } from './xml-cii-adapted-preview-diagnostics-audit-v7.js?v=20260813-mode-a-full-propagation-2';
-import { renderAdaptedWeightMatchPanelV2 } from './xml-cii-adapted-weight-match-v2.js?v=20261107-bulk-review-gate-1';
+import { renderAdaptedWeightMatchPanelV2 } from './xml-cii-adapted-weight-match-v2.js?v=20261107-weights-pyodide-fix-1';
 import { renderStandalonePropagationAuditPanel } from './xml-cii-adapted-propagation-audit.js?v=20260813-mode-a-full-propagation-2';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js?v=20260813-mode-a-full-propagation-2';
 import {

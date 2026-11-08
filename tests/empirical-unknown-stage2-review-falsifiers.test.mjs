@@ -85,7 +85,9 @@ test('F04: both Weight Match bulk controls cannot directly save an inferred cata
     assert.match(src,/isApprovedPhysicalMassCandidate/);
     if(path.includes('weight-match-renderer.js')){
       assert.ok(src.includes('stageDraft(input,preferredWeightReviewDraft(localIssues[index]))'));
-      assert.ok(src.includes('if(estimateDraft && !verified) return false'));
+      assert.ok(src.includes('if(input.dataset.wmProposalDraft) return false'));
+      assert.ok(src.includes('if(!batchAttest?.checked)return'));
+      assert.ok(src.includes('rigidWeightReviewReceipts'));
       assert.ok(src.includes('const fillBest = () =>'));
       assert.equal(src.includes('input.value = String(selectedWeight(best)); saveInput(input)'),false);
     }else{

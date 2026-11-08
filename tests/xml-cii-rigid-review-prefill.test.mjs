@@ -79,7 +79,11 @@ test('both standalone variants and Mode A expose bulk drafts and fail-closed rev
     'xml-cii-adapted-rigid-review-mode-a.js']) {
     const src=readFileSync(new URL('../tabs/xml-cii-2019-standalone/ui-adapted/'+file,import.meta.url),'utf8');
     assert.match(src,/Apply All Suggestions/,file);
-    assert.match(src,/data-rigid-suggestion-verified/,file);
+    if(file.includes('mode-a')){
+      assert.doesNotMatch(src,/data-rigid-suggestion-verified/,file);
+      assert.match(src,/data-mode-a-rigid-bulk-attest/,file);
+      assert.match(src,/EXPLICIT_BULK_OWNER_ATTESTATION/,file);
+    } else assert.match(src,/data-rigid-suggestion-verified/,file);
     assert.match(src,/rigidReviewProposalNeedsVerification\(input\)/,file);
     assert.match(src,/stageRigidReviewProposal\(input/,file);
     assert.doesNotMatch(src,/massAuthority:\s*'APPROVED_SOURCE_MASS'/,file);
@@ -93,4 +97,18 @@ test('physical rigid review excludes OLET/TEE/GASK despite valve-like DTXR text'
   for(const componentType of ['FLAN','RIGID','PCOM','VALV','INST']){
     assert.equal(isRigidWeightReviewEligibleIssue({componentType}),true,componentType);
   }
+});
+
+test('consolidated no-checkbox mode remains blocked until explicit batch review method',()=>{
+  const input={value:'15',dataset:{},style:{},title:'',
+    closest:()=>({querySelector:()=>null})};
+  assert.equal(stageRigidReviewProposal(input,{weight:15,approved:false,reference:'catalog'}),true);
+  assert.equal(rigidReviewProposalNeedsVerification(input),true);
+  input.dataset.rigidReviewMethod='EXPLICIT_BULK_OWNER_ATTESTATION';
+  assert.equal(rigidReviewProposalNeedsVerification(input),false);
+  clearRigidReviewProposal(input);
+  assert.equal(rigidReviewProposalNeedsVerification(input),false);
+  stageRigidReviewProposal(input,{weight:15,approved:false,reference:'changed candidate'});
+  assert.equal(rigidReviewProposalNeedsVerification(input),true,
+    'new candidate must invalidate old whole-batch confirmation');
 });

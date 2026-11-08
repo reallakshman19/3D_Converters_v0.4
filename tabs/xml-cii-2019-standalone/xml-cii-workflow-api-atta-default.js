@@ -1,6 +1,6 @@
 import { detectXmlCiiWorkflowSourceKind, workflowOutputKindForSource } from './xml-cii-workflow-source-detect.js?v=20260804-mds-position-restraints-1';
 import { normalizeWorkflowJob, normalizeWorkflowResult } from './xml-cii-workflow-types.js?v=20260804-mds-position-restraints-1';
-import { runXmlCii2019WorkflowService } from './xml-cii-workflow-service.js?v=20260804-mds-position-restraints-1';
+import { runXmlCii2019WorkflowService } from './xml-cii-workflow-service.js?v=20261107-weights-pyodide-fix-1';
 import { enrichStandaloneXmlForRun } from './xml-cii-standalone-run-parity-mds-restraints.js?v=20260804-mds-position-restraints-1';
 
 export async function runXmlCii2019Workflow(job, runtime = {}) {

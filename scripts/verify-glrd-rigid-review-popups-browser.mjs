@@ -156,7 +156,16 @@ try{
    await apply.click();
    assert.match(await page.locator(mode?'[data-mode-a-rigid-status]':'[data-rigid-review-status]').innerText(),/review/i);
    assert.equal(await page.locator('.mc-rigid-review-input').count(),1,'unreviewed Apply must not close');
-   await page.locator('[data-rigid-suggestion-verified]').check();
+   if(mode){
+     assert.equal(await page.locator('[data-rigid-suggestion-verified]').count(),0,
+       'consolidated UI must not show repeated Reviewed checkboxes');
+     assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true,
+       'no implicit source mass approval');
+     await page.locator('[data-mode-a-rigid-bulk-attest]').check();
+     await page.locator('[data-mode-a-rigid-confirm-bulk-review]').click();
+   }else{
+     await page.locator('[data-rigid-suggestion-verified]').check();
+   }
    await apply.click();
    const outcome=await page.evaluate(async()=>await window.__glrdPromise);
    const saved=mode?outcome.updates?.['BM2-SOURCE']?.weightsByKey?.[facts.sourceKey]

@@ -1,5 +1,5 @@
 import { isApprovedPhysicalMassCandidate } from '../../../../converters/xml-cii2019-core/physical-mass-approval.js';
-import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-bulk-review-gate-1';
+import { availableWeightReviewChoices, comparisonWeightMasterReferences, preferredWeightReviewDraft, weightReviewChoiceLabel } from '../../../../converters/xml-cii2019-core/weight-review-choices.js?v=20261107-weights-pyodide-fix-1';
 import { collectXmlCiiWeightMatchRows, reconcileXmlCiiWeightMatchSourceBores } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20261107-glrd-bore-family-r2';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20261107-nearest-known-family-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
@@ -299,7 +299,12 @@ function applyWeightRulePanelConfig(panelEl, config) { const cfg = plainObject(c
 
 export function xmlCiiRenderWeightMatchPhase() {
   const info = 'Default Rating authority is the exact Rating shown in Preview. Weight Match does not derive Rating again.';
-  return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Prefill all suggestions (review)</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
+  return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Weight candidates use the Rating already shown in Preview. Use the DTXR button only when you explicitly want node DTXR Rating instead.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-run-btn" id="mc-wm-refresh">Build Weight Data</button><button type="button" class="model-converters-download-btn" id="mc-wm-use-dtxr-rating">Use Rating as per DTXR</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Prefill all suggestions (review)</button><button type="button" class="model-converters-download-btn" id="mc-wm-accept-drafts" style="background:#1e3a5f;border:1px solid #7298ca;color:#e9f4ff;">Accept verified suggestions</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-batch-review" role="region" aria-label="Weight Match bulk confirmation" style="display:none;margin:8px 0;padding:12px;border:1px solid #7298ca;border-radius:8px;background:#11223a;color:#edf6ff;">
+  <strong>Independent physical-component mass confirmation</strong><div id="mc-wm-batch-summary" style="margin:8px 0;"></div>
+  <div id="mc-wm-batch-references" style="max-height:110px;overflow:auto;white-space:pre-wrap;font-size:11px;margin:8px 0;"></div>
+  <label style="display:flex;gap:8px;align-items:flex-start;"><input id="mc-wm-batch-attest" type="checkbox">I have independently verified every proposed physical-component mass to be accepted. Master suggestions alone do not establish actual mass.</label>
+  <div style="display:flex;gap:8px;margin-top:10px;"><button id="mc-wm-batch-confirm" type="button" disabled>Commit verified weights</button><button id="mc-wm-batch-cancel" type="button">Return to Weight Match</button></div>
+</div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Click <strong>Build Weight Data</strong> to compute matches using Preview Rating.</div></div>`;
 }
 
 const WM_CACHE_KEY = 'xml-cii-wm-cache-v5-review-choice-preload-20261107';
@@ -333,20 +338,21 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     ratingModeButton.style.color = dtxr ? '#bbf7d0' : '';
   };
   const drawPanel = () => { if (panelEl) panelEl.innerHTML = enhancedHintPanel(activeConfig()); };
+  const batchPanel=detailEl.querySelector('#mc-wm-batch-review');
+  const batchAttest=detailEl.querySelector('#mc-wm-batch-attest');
+  const batchConfirm=detailEl.querySelector('#mc-wm-batch-confirm');
+  const closeBatch=()=>{
+    if(batchPanel)batchPanel.style.display='none';
+    if(batchAttest)batchAttest.checked=false;
+    if(batchConfirm)batchConfirm.disabled=true;
+  };
   const saveInput = (input) => {
     const key=input.getAttribute('data-wm-key')||'';
     const value=input.value===''?NaN:Number(input.value);
     if(!key || !Number.isFinite(value) || value<=0) return false;
-    const approvedDraft=input.dataset.wmProposalDraft==='approved';
-    const estimateDraft=input.dataset.wmProposalDraft==='estimate';
-    const verified=input.closest('tr')?.querySelector('[data-wm-verified]')?.checked===true;
-    // Rendering, prefilling or clicking a catalog candidate is never authority.
-    if(estimateDraft && !verified) return false;
-    if(estimateDraft || approvedDraft){
-      delete input.dataset.wmProposalDraft;
-      delete input.dataset.wmProposalReference;
-      input.title='Reviewer accepted this physical component mass explicitly.';
-    }
+    // Source manually entered weights may save on change. Ranked estimates
+    // need the SEPARATE batch confirmation; no per-row Reviewed/Save controls.
+    if(input.dataset.wmProposalDraft) return false;
     const cfg=activeConfig();
     const overrides=ensureOverrides(cfg);
     overrides.rigidWeight={...(overrides.rigidWeight||{}),[key]:value};
@@ -354,6 +360,9 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     input.style.borderColor='#10b981';
     return true;
   };
+  const pendingDrafts=()=>[...contentEl.querySelectorAll('.mc-rigid-review-input[data-wm-proposal-draft]')]
+    .filter(input=>['estimate','approved'].includes(input.dataset.wmProposalDraft) &&
+      input.value!=='' && Number(input.value)>0);
   const stageDraft=(input,choice)=>{
     if(!input || !choice || !(Number(choice.weight)>0))return false;
     input.value=String(choice.weight);
@@ -362,8 +371,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     input.title=(choice.rejected?'LENGTH MISMATCH: ':'')+
       'UNAPPROVED REVIEW DRAFT — '+weightReviewChoiceLabel(choice);
     input.style.borderColor=choice.approved?'#10b981':'#d9a441';
-    const reviewed=input.closest('tr')?.querySelector('[data-wm-verified]');
-    if(reviewed)reviewed.checked=false;
+    closeBatch();
     return true;
   };
   const drawRows = (issues) => {
@@ -395,8 +403,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const nodeDisplay = issue.nodeNumberDisplay || issue.nodeNumber;
       const ratingInfo = ratingDisplayInfo(issue);
       return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc((issue.reviewCategory === 'UNKNOWN' || issue.componentType === 'PCOM') ? 'Unknown (PCOM)' : issue.componentType || '')}</td><td title="${attr([issue.sourceBoreAuthority || 'source bore not reconciled', issue.sourceOutsideDiameterMm ? `Source OD ${issue.sourceOutsideDiameterMm} mm` : '', issue.boreAuthorityMismatch ? `Preview/enriched DN ${issue.projectedBoreMm} differs; using source DN` : '', issue.sourceBoreHold ? 'HOLD: source physical identity ambiguous' : ''].filter(Boolean).join(' | '))}">${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}${issue.boreAuthorityMismatch ? ' *' : ''}</td><td title="${attr(ratingInfo.title)}" style="${ratingInfo.style}">${esc(ratingInfo.shownRating || '')}</td><td title="${attr(issue.nodeNumber)}">${esc(nodeDisplay)}</td><td title="${attr(refEndpoint)}">${esc(refEndpoint)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSourcePath, issue.dtxrSuppressionReason, ratingInfo.dtxrRating ? `DTXR Rating ${ratingInfo.dtxrRating}#` : ''].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" data-wm-proposal-draft="${isDraft?(proposal.approved?'approved':'estimate'):''}" data-wm-proposal-reference="${attr(proposal?weightReviewChoiceLabel(proposal):'')}" value="${attr(initial)}" placeholder="kg" title="${attr(isDraft?'Review draft only; no mass written to source configuration':'Manual physical-component weight')}" style="${inputStyle};${isDraft?'border:1px solid #d9a441;':''}">
-        <label style="font-size:10px;display:block;white-space:nowrap;color:#e9c875;"><input type="checkbox" data-wm-verified> Reviewed</label>
-        <button type="button" data-wm-save-reviewed="${rowIndex}" style="margin-top:3px;font-size:10px;border:1px solid #406089;border-radius:4px;cursor:pointer;background:#102136;color:#e2e8f0;">Save reviewed</button></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
+        </td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
     }).join('');
     const cfg = activeConfig();
     const authorityText = ratingMode === 'dtxr' ? 'Explicit DTXR Rating mode' : 'Exact Rating shown in Preview';
@@ -405,18 +412,9 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const rowIndex=Number(button.dataset.wmChoice);
       const choice=availableWeightReviewChoices(localIssues[rowIndex])[Number(button.dataset.wmChoiceIndex)];
       const input=contentEl.querySelectorAll('.mc-rigid-review-input')[rowIndex];
-      if(stageDraft(input,choice))status('Staged '+weightReviewChoiceLabel(choice)+'. Review then Save reviewed.', 'ok');
+      if(stageDraft(input,choice))status('Staged '+weightReviewChoiceLabel(choice)+'. Accept verified suggestions to commit.', 'ok');
     }));
-    contentEl.querySelectorAll('[data-wm-save-reviewed]').forEach(button=>button.addEventListener('click',()=>{
-      const input=contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmSaveReviewed)];
-      if(!input)return;
-      if(input.dataset.wmProposalDraft==='estimate' &&
-        !input.closest('tr')?.querySelector('[data-wm-verified]')?.checked){
-        status('Tick Reviewed for this estimated mass before saving a physical source weight.','bad');
-        return;
-      }
-      status(saveInput(input)?'Saved one explicitly reviewed physical weight.':'Enter a positive weight to save.','ok');
-    }));
+
   };
   const fillBest = () => {
     let count=0;
@@ -488,12 +486,58 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   toggleEl?.addEventListener('click', () => { invalidateXmlCiiWeightCache(); const cfg = activeConfig(); cfg.weight = plainObject(cfg.weight) ? cfg.weight : {}; cfg.weight.convertSmallLengthsInToMm = cfg.weight.convertSmallLengthsInToMm !== true; onSaveConfig(cfg); contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">Length conversion changed. Click <strong>Build Weight Data</strong> to recompute.</div>'; localIssues = []; syncToggle(); });
   detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => {
     const count=fillBest();
-    status('Prefilled '+count+' review draft(s). None saved to source until individually Reviewed and saved.',count?'ok':'bad');
+    status('Prefilled '+count+' review draft(s). Nothing saved. Use Accept verified suggestions after independent verification.',count?'ok':'bad');
+  });
+  detailEl.querySelector('#mc-wm-accept-drafts')?.addEventListener('click',()=>{
+    const pending=pendingDrafts();
+    if(!pending.length){status('No uncommitted estimated weights to confirm.', 'bad');closeBatch();return;}
+    detailEl.querySelector('#mc-wm-batch-summary').textContent=
+      pending.length+' positive estimate(s) staged. Verify each physical source before confirming; none is approved by its catalog match.';
+    detailEl.querySelector('#mc-wm-batch-references').textContent=pending.slice(0,15).map((input,i)=>
+      (i+1)+'. '+(input.dataset.wmKey||'source ref missing')+' | '+
+      input.value+' kg | '+(input.dataset.wmProposalReference||'empirical source')
+    ).join('\n')+(pending.length>15?'\n… '+(pending.length-15)+' further rows; inspect Weight Match before confirming.':'');
+    if(batchPanel)batchPanel.style.display='block';
+    if(batchAttest)batchAttest.checked=false;
+    if(batchConfirm)batchConfirm.disabled=true;
+  });
+  batchAttest?.addEventListener('change',()=>{
+    if(batchConfirm)batchConfirm.disabled=!batchAttest.checked||pendingDrafts().length===0;
+  });
+  detailEl.querySelector('#mc-wm-batch-cancel')?.addEventListener('click',closeBatch);
+  batchConfirm?.addEventListener('click',()=>{
+    if(!batchAttest?.checked)return;
+    const pending=pendingDrafts();
+    if(!pending.length){closeBatch();return;}
+    const cfg=activeConfig();
+    const overrides=ensureOverrides(cfg);
+    const weights={...(overrides.rigidWeight||{})};
+    const receipts={...(overrides.rigidWeightReviewReceipts||{})};
+    for(const input of pending){
+      const key=input.dataset.wmKey||'';
+      const weight=Number(input.value);
+      if(!key||!Number.isFinite(weight)||weight<=0)continue;
+      weights[key]=weight;
+      receipts[key]={reviewed:true,reviewMethod:'EXPLICIT_BULK_OWNER_ATTESTATION',
+        weightKg:weight,sourceComponentRef:key,
+        statement:'Reviewer confirms independent physical-component mass verification'};
+    }
+    overrides.rigidWeight=weights;
+    overrides.rigidWeightReviewReceipts=receipts;
+    onSaveConfig(cfg);
+    for(const input of pending){
+      delete input.dataset.wmProposalDraft;
+      delete input.dataset.wmProposalReference;
+      input.style.borderColor='#10b981';
+      input.title='Explicitly accepted source physical-component mass.';
+    }
+    closeBatch();
+    status('Accepted '+pending.length+' independently verified physical masses. No per-row qualification controls.', 'ok');
   });
   panelEl?.addEventListener('change', () => { try { const cfg = applyWeightRulePanelConfig(panelEl, activeConfig()); cfg.weight.valveHintMapping = valveHintMappingRows(cfg); onSaveConfig(cfg); invalidateXmlCiiWeightCache(); contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">Weight keyword/factor rules changed. Click <strong>Build Weight Data</strong> to recompute.</div>'; localIssues = []; status('Weight rules saved'); } catch (error) { status(error?.message || String(error), 'bad'); } });
   contentEl.addEventListener('input',event=>{
     const input=event.target.closest?.('.mc-rigid-review-input');
-    if(input){delete input.dataset.wmProposalDraft;delete input.dataset.wmProposalReference;}
+    if(input){delete input.dataset.wmProposalDraft;delete input.dataset.wmProposalReference;closeBatch();}
   });
   contentEl.addEventListener('change',event=>{
     const input=event.target.closest?.('.mc-rigid-review-input');

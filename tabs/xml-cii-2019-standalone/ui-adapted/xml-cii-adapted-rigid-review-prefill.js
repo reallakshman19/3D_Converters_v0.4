@@ -102,6 +102,11 @@ export function clearRigidReviewProposal(input) {
   if (verified) { verified.checked = false; verified.disabled = false; }
 }
 export function rigidReviewProposalNeedsVerification(input) {
-  return input?.dataset?.rigidSuggestionDraft === 'estimate'
-    && !input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]')?.checked;
+  if(input?.dataset?.rigidSuggestionDraft !== 'estimate')return false;
+  // Legacy single/ATTA review still has an individual Reviewed checkbox.
+  // Consolidated review deliberately has NO per-row qualification checkbox:
+  // the only accepted route is a separate explicit batch attestation.
+  const rowCheckbox=input.closest('tr')?.querySelector('[data-rigid-suggestion-verified]');
+  if(rowCheckbox)return rowCheckbox.checked !== true;
+  return input.dataset.rigidReviewMethod !== 'EXPLICIT_BULK_OWNER_ATTESTATION';
 }
