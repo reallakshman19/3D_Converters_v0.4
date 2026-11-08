@@ -89,6 +89,13 @@ test('Phase 6 UI routes both single and Mode A to same consolidated review, with
   assert.doesNotMatch(unified,/Prefill all suggestions \(review\)|Commit verified weights/);
 });
 
+test('InputXML retains the pre-existing type-specific review route',()=>{
+  const unified=read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js');
+  assert.match(unified,/detectXmlCiiWorkflowSourceKind/);
+  assert.match(unified,/sourceMode==='inputxml'/);
+  assert.match(unified,/renderAdaptedWeightMatchPanelV2\(card,stateRef\)/);
+  assert.match(unified,/xml-cii-adapted-weight-match-v2.js\?v=/);
+});
 test('Run readiness and propagation remain connected without the deprecated Weight Match UI',()=>{
   const readiness=read('tabs/xml-cii-2019-standalone/xml-cii-output-run-readiness.js');
   const propagation=read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-propagation-audit.js');
