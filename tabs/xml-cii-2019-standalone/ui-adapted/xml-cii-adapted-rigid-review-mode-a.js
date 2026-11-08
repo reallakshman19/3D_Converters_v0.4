@@ -221,8 +221,11 @@ function rowMarkup(issue, rowIndex) {
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:300px;">${modeARigidCandidateMarkup(issue, rowIndex) || '<span style="color:#64748b;">No suggestion</span>'}</td>
     <td>${esc(issue.lineKey||'—')}</td>
     <td>${esc(issue.componentType||'—')}</td>
+    <td>${esc((issue.componentRefNo||'—')+(issue.endpoint?'_'+issue.endpoint:''))}</td>
     <td>${esc(formatValveHint(issue.nodeHint)||'—')}</td>
     <td>${esc(issue.mapped?issue.weight+' kg':(issue.existingSkipped?'0 kg skip':'—'))}</td>
+    <td>${esc(issue.originalWeight!=null?issue.originalWeight+' kg':'—')}</td>
+    <td>${esc(issue.weightSource||'unresolved')}</td>
     <td>${esc(issue.mapped?'MAPPED':(issue.existingSkipped?'SKIPPED':'REVIEW'))}</td>
     <td>${esc(issue.candidates?.[0]?.totalScore==null?'—':
       (Number(issue.candidates[0].totalScore)<=1?
@@ -295,7 +298,9 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
     </div>
     <div style="overflow:auto;max-height:55vh;border:1px solid rgba(148,163,184,.15);border-radius:6px;"><table style="border-collapse:collapse;font-size:12px;width:100%;text-align:left;"><thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;z-index:2;"><th style="padding:7px;background:#1e293b;">Source XML</th><th style="padding:7px;">Branch</th><th style="padding:7px;">Bore</th><th style="padding:7px;">Rating</th><th style="padding:7px;">Node</th><th style="padding:7px;">DTXR</th><th style="padding:7px;">Length</th><th style="padding:7px;">Manual Weight (kg)</th><th style="padding:7px;">Nearest Suggestions</th>
       <th style="padding:7px;">Line Key</th><th style="padding:7px;">Component Type</th>
-      <th style="padding:7px;">Valve Hint</th><th style="padding:7px;">Current Weight</th>
+      <th style="padding:7px;">Component Ref / Endpoint</th><th style="padding:7px;">Valve Hint</th>
+      <th style="padding:7px;">Current Weight</th>
+      <th style="padding:7px;">Original XML Weight</th><th style="padding:7px;">Weight Source</th>
       <th style="padding:7px;">Status</th><th style="padding:7px;">Score</th>
       <th style="padding:7px;">Candidate Type</th><th style="padding:7px;">Action</th>
       </tr></thead><tbody data-mode-a-rigid-body>${rows.map(rowMarkup).join('')}</tbody></table></div>
