@@ -10,6 +10,19 @@ const positive=(value)=>Number.isFinite(Number(value))&&Number(value)>0;
 const unique=(items)=>[...new Set(items)];
 export const FINAL_RIGID_SHORT_SPAN_REVIEW_MM=25;
 
+/** Rank unresolved cases for the *display* only. Never reorder CII or
+ * the 1-based RIGID pointer → row mapping used by property transactions.
+ * A real audit failure outranks geometry-only and unresolved metadata alerts.
+ */
+export function orderFinalRigidReviewIndices(assessments={}) {
+  const rows=Array.isArray(assessments.rows)?assessments.rows:[];
+  const weight=(row)=>row.auditFlagged?0:
+    row.nonpositive||row.shared||row.unreferenced?1:
+    row.shortSpan?2:row.sourceUnresolved?3:4;
+  return rows.map((_,i)=>i).sort((a,b)=>
+    weight(rows[a])-weight(rows[b])||rows[a].pointer-rows[b].pointer);
+}
+
 export function buildFinalRigidRepairAssessments(inventory={},plans=[],audit=null,options={}) {
   const limit=Number(options.shortSpanReviewMm??FINAL_RIGID_SHORT_SPAN_REVIEW_MM);
   if(!Number.isFinite(limit)||limit<=0||limit>1000)
