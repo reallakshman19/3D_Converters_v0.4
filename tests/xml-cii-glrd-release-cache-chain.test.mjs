@@ -16,7 +16,7 @@ const chain=[
  // available to independent non-UI consumers, not the active Phase 6 route.
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js',finalReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-events-mode-a-consolidated-review-v2.js','xml-cii-adapted-run-workflow-mode-a-fast.js',finalReviewVersion],
- ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js','xml-cii-adapted-rigid-review-mode-a.js'],
+ ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js','xml-cii-adapted-rigid-review-mode-a.js',phase6ReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-consolidated-review-v2.js','xml-cii-adapted-rigid-review-mode-a.js']
 ];
 test('entire live XML-CII Weight Match and consolidated popup import chain is versioned',()=>{
