@@ -130,6 +130,18 @@ export function applyXmlCiiSplitRigidWeightPropagation(xmlText, options = {}) {
   for (const group of groups.values()) {
     if (!isSplitRigidWeightGroup(group)) continue;
     candidateGroups += 1;
+    if (group.length !== 2) {
+      skipped += 1;
+      diagnostics.push({
+        type: 'split-rigid-weight-propagation-skipped',
+        branchName: group[0]?.branchName || '',
+        componentRefNo: group[0]?.componentRefNo || '',
+        reason: 'unsupported-split-group-size',
+        groupSize: group.length,
+        message: `Split component with ComponentRefNo ${group[0]?.componentRefNo || ''} has ${group.length} nodes (expected 2 for physical port split); propagation was skipped to prevent multi-element weight inflation.`,
+      });
+      continue;
+    }
     const weights = uniquePositiveWeights(group);
     if (weights.length !== 1) {
       if (weights.length > 1) {
@@ -147,6 +159,7 @@ export function applyXmlCiiSplitRigidWeightPropagation(xmlText, options = {}) {
     }
 
     const propagatedWeight = weights[0];
+    const bothExplicit = group.every((item) => Number(item.nodeNumber) > 0);
     for (const item of group) {
       if (!shouldReceivePropagatedWeight(item)) continue;
       if (!setChildText(document, item.node, 'Weight', String(propagatedWeight))) continue;
@@ -161,7 +174,11 @@ export function applyXmlCiiSplitRigidWeightPropagation(xmlText, options = {}) {
         position: item.position,
         weight: propagatedWeight,
         method: 'same-component-ref-split-sibling',
-        message: `Propagated reviewed split component weight ${propagatedWeight} to zero-weight ${item.componentType || 'node'} ${item.nodeNumber || ''} with ComponentRefNo ${item.componentRefNo || ''}.`,
+        ownershipStatus: 'UNPROVEN',
+        potentialDuplicationWarning: bothExplicit,
+        ciiDuplicationRisk: bothExplicit ? 'HIGH_EXPLICIT_NODES' : 'LOW_INTERNAL_ENDPOINT',
+        initialWeightState: item.weight === null ? 'MISSING' : 'ZERO',
+        message: `Propagated reviewed split component weight ${propagatedWeight} to zero-weight ${item.componentType || 'node'} ${item.nodeNumber || ''} with ComponentRefNo ${item.componentRefNo || ''}.${bothExplicit ? ' Warning: both nodes are explicit stress nodes; physical mass may be duplicated if both edges emit RIGID records.' : ''}`,
       };
       appliedRows.push(row);
       diagnostics.push(row);
@@ -179,7 +196,9 @@ export function applyXmlCiiSplitRigidWeightPropagation(xmlText, options = {}) {
       type: 'split-rigid-weight-propagation-summary',
       count: appliedRows.length,
       groups: candidateGroups,
-      message: 'Reviewed rigid/flange split weights were copied to zero-weight sibling nodes sharing the same ComponentRefNo before final CII conversion.',
+      ownershipStatus: 'UNPROVEN',
+      hasExplicitDuplicationRisk: appliedRows.some((r) => r.potentialDuplicationWarning),
+      message: 'Reviewed rigid/flange split weights were copied to zero-weight sibling nodes sharing the same ComponentRefNo before final CII conversion. Physical mass allocation across split nodes remains UNPROVEN.',
     });
   }
 
