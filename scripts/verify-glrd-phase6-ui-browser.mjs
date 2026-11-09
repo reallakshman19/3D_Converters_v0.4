@@ -16,7 +16,38 @@ const [xml,stage,masterRows]=await Promise.all([
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const errors=[];
 try{
-  const page=await browser.newPage({viewport:{width:1440,height:920}});
+  const page=await browser.newPage({viewport:{width:1749,height:900}});
+  const showExtra=async()=>{
+    const panel=page.locator('[data-phase6-more-actions]');
+    if(await panel.count() && await panel.getAttribute('open')===null)
+      await panel.locator('summary').click();
+  };
+  const inspectTable=async(minHeight)=>{
+    const measurements=await page.locator('.mc-rigid-review-dialog').evaluate(dialog=>{
+      const scroll=dialog.querySelector('.mc-phase6-table-viewport');
+      const rows=[...dialog.querySelectorAll('[data-mode-a-rigid-review-row]')];
+      const bounds=scroll.getBoundingClientRect();
+      const first=rows[0]?.getBoundingClientRect();
+      const save=dialog.querySelector('[data-mode-a-rigid-apply]')?.getBoundingClientRect();
+      return {height:Math.round(bounds.height),width:Math.round(bounds.width),
+        rows:rows.length,firstRowVisible:!!first && first.bottom>bounds.top+45 &&
+          first.top<bounds.bottom-20,
+        saveVisible:!!save && save.top>=0 && save.bottom<=window.innerHeight,
+        hasGuidance:!!dialog.querySelector('[data-phase6-guidance]'),
+        guidanceCollapsed:!dialog.querySelector('[data-phase6-guidance]')?.open,
+        moreCollapsed:!dialog.querySelector('[data-phase6-more-actions]')?.open,
+        columnsToggle:!!dialog.querySelector('[data-phase6-toggle-columns]')};
+    });
+    assert.ok(measurements.height>=minHeight,
+      'Editable table too short: '+JSON.stringify(measurements));
+    assert.equal(measurements.rows,114);
+    assert.equal(measurements.firstRowVisible,true,'first editable row must be visible above fold');
+    assert.equal(measurements.saveVisible,true,'fixed Save must be visible with table');
+    assert.equal(measurements.guidanceCollapsed,true);
+    assert.equal(measurements.moreCollapsed,true);
+    assert.equal(measurements.columnsToggle,true);
+    return measurements;
+  };
   page.on('pageerror',error=>errors.push(String(error)));
   await page.goto((process.env.EMPIRICAL_BROWSER_BASE_URL||'http://127.0.0.1:4173')+
     '/tests/fixtures/empirical-weight-nearest-browser.html',{waitUntil:'domcontentloaded'});
@@ -59,6 +90,17 @@ try{
     'Phase 6 keeps a source-keyed read-only mass audit ledger');
   await page.locator('[data-phase6-open-review]').click();
   assert.equal(await page.locator('[data-mode-a-rigid-review-row]').count(),114);
+  const desktopLayout=await inspectTable(250);
+  await page.screenshot({path:resolve(out,'phase6-table-visible-1749x900.png')});
+  await page.setViewportSize({width:1280,height:720});
+  const laptopLayout=await inspectTable(150);
+  await page.screenshot({path:resolve(out,'phase6-table-visible-1280x720.png')});
+  await page.setViewportSize({width:1749,height:900});
+  await writeFile(resolve(out,'phase6-visible-table-layout-receipt.json'),JSON.stringify({
+    schema:'GLRD-PHASE6-TABLE-VISIBILITY-R1',
+    desktop1749x900:desktopLayout,laptop1280x720:laptopLayout,
+    sourceComponentRows:114,originalColumnsPreserved:true,approvalLogicUnchanged:true,
+  },null,2));
   assert.equal(await page.locator('[data-rigid-suggestion-verified]').count(),0,
     'new Phase 6 retains explicit batch attestation, no per-row Reviewed controls');
   const blind=page.locator('[data-mode-a-rigid-review-row]').filter({hasText:'BLIND FLANGE 900#'}).first();
@@ -75,11 +117,13 @@ try{
     .filter({hasText:'900#'}).first();
   const dtxrInput=dtxrRow.locator('.mc-rigid-review-rating-input');
   const previewRating=await dtxrInput.inputValue();
+  await showExtra();
   await page.locator('[data-phase6-dtxr]').click();
   await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
     ?.textContent?.includes('Suggestions refreshed'));
   assert.equal(await page.locator('[data-phase6-dtxr]').innerText(),'Use Rating shown in Preview');
   assert.equal(await dtxrInput.inputValue(),'900');
+  await showExtra();
   await page.locator('[data-phase6-dtxr]').click();
   await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
     ?.textContent?.includes('Suggestions refreshed'));
@@ -191,23 +235,30 @@ try{
   await page.screenshot({path:resolve(out,'phase6-full-weight-workbench-editable.png'),fullPage:true});
   const mappedInputs=page.locator('.mc-rigid-review-input[data-original-weight]:not([data-original-weight=""])');
   assert.equal(await mappedInputs.count(),109,'all 109 mapped masses must be editable');
+  await page.locator('[data-phase6-toggle-columns]').click();
   for(const title of ['Line Key','Component Type','Valve Hint','Current Weight','Status','Score','Candidate Type']){
     assert.ok((await page.locator('.mc-rigid-review-dialog thead').innerText()).includes(title),
       'full Phase 6 column missing: '+title);
   }
+  await page.locator('[data-phase6-toggle-columns]').click();
+  assert.equal(await page.locator('[data-phase6-toggle-columns]').innerText(),'All columns');
   assert.equal(await page.locator('[data-phase6-nearest]').count(),1);
   assert.equal(await page.locator('[data-phase6-find-exact]').count(),1);
   assert.equal(await page.locator('[data-phase6-fill-similar]').count(),1);
   const target=mappedInputs.first();
   const originalMass=Number(await target.inputValue());
+  await showExtra();
   await page.locator('[data-phase6-nearest]').click();
   assert.equal(Number(await target.inputValue()),originalMass,
     'nearest fill must never overwrite an approved or manually saved mass');
+  await showExtra();
   await page.locator('[data-phase6-fill-similar]').click();
   assert.equal(Number(await target.inputValue()),originalMass,
     'group exact fill must never overwrite a saved mass');
+  await showExtra();
   await page.locator('[data-phase6-find-exact]').click();
   assert.equal(await page.locator('[data-phase6-find-exact]').innerText(),'Show All Weights');
+  await showExtra();
   await page.locator('[data-phase6-find-exact]').click();
   assert.equal(await page.locator('[data-mode-a-rigid-review-row]:visible').count(),114);
   assert.equal(await page.locator('[data-phase6-popup-counters]').count(),1);
@@ -300,6 +351,7 @@ try{
   assert.match(await changedInput.locator('xpath=..').locator('xpath=..')
     .locator('[data-phase6-error-pct]').innerText(),/\+100\.0%/);
   assert.match(await page.locator('[data-phase6-deviation40]').innerText(),/\([1-9]/);
+  await showExtra();
   await page.locator('[data-phase6-deviation40]').click();
   assert.equal(Number(await changedInput.inputValue()),refKg);
   assert.equal(await changedInput.getAttribute('data-rigid-suggestion-draft'),'estimate');
@@ -355,6 +407,7 @@ try{
   const ratingInput=ratingInputs.nth(ratingIndex);
   assert.equal(await ratingInput.inputValue(),'300',
     'explicit Preview Rating override is the initial authority');
+  await showExtra();
   await page.locator('[data-phase6-dtxr]').click();
   await page.waitForFunction(()=>document.querySelector('[data-mode-a-rigid-status]')
     ?.textContent?.includes('Suggestions refreshed'));
