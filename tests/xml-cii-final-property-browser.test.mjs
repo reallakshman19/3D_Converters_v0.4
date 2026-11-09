@@ -589,6 +589,8 @@ try {
       'hard-held row is hidden by default but not eligible for bulk approval');
     await modal.locator('[data-final-rigid-batch-show-held]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-row="3"] [data-final-rigid-batch-approve]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="3"]').innerText(),'109',
+      'hard-held neighbouring emitted flange remains 109 mm and cannot be auto-selected');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 selected/);
 
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
