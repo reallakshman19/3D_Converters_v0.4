@@ -1,4 +1,4 @@
-import { renderActivePhase as renderBaseActivePhase } from './xml-cii-adapted-phase-panels.js?v=20261109-final-cii-review-v035-r1';
+import { renderActivePhase as renderBaseActivePhase } from './xml-cii-adapted-phase-panels.js?v=20261109-final-rigid-remediate-r2';
 import { enhanceRegexSmartWorkbench } from './xml-cii-adapted-regex-smart-ui.js';
 
 const STRICT_NOTICE_ATTR = 'data-strict-line-authority-notice';
