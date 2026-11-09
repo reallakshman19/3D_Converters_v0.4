@@ -421,6 +421,17 @@ function nominalDnFromOd(odNum) {
   return best && best.err <= Math.max(1.5, Math.abs(best.od) * 0.006) ? best.dn : odNum;
 }
 
+/**
+ * Strict, read-only OD→DN authority for final CII review.
+ * Unlike weight matching, an unknown OD must not be shown as an established DN.
+ */
+export function qualifiedXmlCiiNominalBoreFromOd(od) {
+  const numeric = xmlCiiNumberText(od);
+  if (numeric === null) return null;
+  const mapped = nominalDnFromOd(numeric);
+  return mapped !== null && mapped !== numeric ? mapped : null;
+}
+
 function normalizeLineKey(value) {
   return toText(value).trim().toUpperCase().replace(/\s+/g, '');
 }
@@ -516,6 +527,18 @@ function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
   const resolved = resolveBranchProcessData({ branchName, lineKey, lineRow: resolverLineRow, boreMm, componentType: 'PIPE', rating: manualRating || lineRating, materialMap: config.material?.mapRows || [], pipingClassIndex, overrides: config.overrides || {}, xmlNode: null, xmlBranch: branch, config });
   const rating = manualRating || resolved.rating || lineRating;
   return { branchName, lineKey, lineRow: resolverLineRow, boreMm, requestedPipingClass: resolverLineRow.pipingClass, resolvedPipingClass: resolved.pipingClass, rating, pipingClassMatchMethod: resolved.pipingClassMatchMethod, pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [] };
+}
+
+/**
+ * Read-only branch context for final emitted CII evidence.
+ * The caller must independently verify exact branch identity and cannot
+ * treat branch metadata as physical component ownership or mass approval.
+ */
+export function resolveXmlCiiRigidReviewBranchContext(branch, config = {}, pipingClassIndex = null) {
+  return resolveRigidWeightBranchContext(
+    branch, config,
+    pipingClassIndex || buildPipingClassIndex(config?.pipingClass?.masterRows || []),
+  );
 }
 
 function ratingForRigidWeightIssue(node, branchContext, config) {
