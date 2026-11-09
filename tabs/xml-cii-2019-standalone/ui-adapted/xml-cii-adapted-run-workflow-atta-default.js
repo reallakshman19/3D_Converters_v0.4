@@ -310,25 +310,33 @@ async function unresolvedRigidIssues(state, config) {
   }).filter((issue) => !issue.mapped);
 }
 
-async function reviewRigidWeights(stateRef, config) {
+async function reviewRigidWeights(stateRef, config, render) {
+  // InputXML keeps its own established route; XML source-mass decisions live
+  // exclusively in unified 6 Rigid Weight Review (Phase 6), in both single
+  // and Mode A. Run is never allowed to silently use a second popup.
   try {
-    const result = await openStandaloneRigidWeightReviewPopup(await unresolvedRigidIssues(stateRef.current, config), stateRef, config);
-    if (result.cancelled) return false;
-    if ((result.weightsByKey && Object.keys(result.weightsByKey).length > 0) ||
-        (result.ratingsByKey && Object.keys(result.ratingsByKey).length > 0)) {
-      config.overrides = { ...(config.overrides || {}),
-        rigidWeight: { ...(config.overrides?.rigidWeight || {}), ...(result.weightsByKey || {}) },
-        rating: { ...(config.overrides?.rating || {}), ...(result.ratingsByKey || {}) } };
-      stateRef.current.supportConfigJson = JSON.stringify(config, null, 2);
-      if (stateRef.current.masterContext) {
-        stateRef.current.masterContext.config = config;
-        saveMasterContextToLocalStorage(stateRef.current.masterContext);
-      }
-    }
-    return true;
-  } catch (error) {
-    console.warn('Standalone rigid weight review failed to execute:', error);
-    return true;
+    const issues=await unresolvedRigidIssues(stateRef.current, config);
+    if(!issues.length)return true;
+    const message='RUN NOT STARTED: '+issues.length+
+      ' unresolved rigid mass(es). Open 6 Rigid Weight Review (Weight Match), '+
+      'save verified source masses or explicit 0 kg skips, then run again.';
+    stateRef.current={
+      ...stateRef.current,activePhaseId:'weight-match',
+      pendingPhase6MassReview:{
+        issueCount:issues.length,xmlCount:1,reason:'OUTPUT_RUN_UNRESOLVED_RIGIDS',
+      },
+      outputRunReadinessStatus:message,
+    };
+    render?.();
+    return false;
+  }catch(error){
+    const message='RUN REFUSED: source mass review could not be independently rechecked: '+
+      (error?.message||error)+'. Open 6 Rigid Weight Review to investigate.';
+    stateRef.current={...stateRef.current,activePhaseId:'weight-match',
+      outputRunReadinessStatus:message,
+      pendingPhase6MassReview:{reason:'OUTPUT_RUN_REVIEW_BUILD_FAILED',error:String(error?.message||error)}};
+    render?.();
+    return false; // fail closed, never continue to CII engine on missing evidence
   }
 }
 
@@ -340,7 +348,7 @@ export async function runWorkflowFromUi(stateRef, render) {
     render();
     return;
   }
-  if (!await reviewRigidWeights(stateRef, xmlCiiEnrichedConfigFromState(stateRef.current))) return;
+  if (!await reviewRigidWeights(stateRef, xmlCiiEnrichedConfigFromState(stateRef.current), render)) return;
   stateRef.current = updateWorkflowState(stateRef.current, { running: true, result: null });
   render();
   try {
