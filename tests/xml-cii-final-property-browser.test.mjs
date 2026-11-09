@@ -711,6 +711,83 @@ try {
     assert.equal(await dialog.count(), 0, 'second Escape in normal mode closes the review');
     await page.setViewportSize({ width: 1440, height: 900 });
   });
+  await test('Held 19.1 mm RIGID correction is manual, evidence-backed and REVIEW-ONLY',async()=>{
+    await page.goto(address+'/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async(ciiText)=>{
+      const {openFinalRigidWeightReview,finalRigidReviewAvailable}=
+        await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js');
+      const audit={
+        schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',
+        status:'HOLD',flags:[
+          {rigidPointer:1,element:1,from:1000,to:1001,lengthMm:19.1,
+           physicalComponentRef:'=134234934/28062',weightN:430,
+           code:'DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION'},
+          {rigidPointer:1,element:1,from:1000,to:1001,lengthMm:19.1,
+           physicalComponentRef:'=134234934/28062',weightN:430,
+           code:'POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT'},
+        ],
+      };
+      window.currentResult={
+        ok:false,error:'RIGID_MASS_CONSERVATION_HOLD',ciiText:'',ciiName:'',
+        rigidMassRepairCandidate:{
+          status:'QUARANTINED_REVIEW_ONLY',
+          ciiText,ciiName:'GLRD_held.cii',engineeringReleaseAuthorized:false,
+        },
+        diagnostics:{rigidMassAudit:audit},
+      };
+      if(!finalRigidReviewAvailable({result:window.currentResult}))
+        throw Error('Flagged CII should be available only for quarantined repair');
+      openFinalRigidWeightReview(window.currentResult,{
+        getCurrentResult:()=>window.currentResult,
+      });
+    },original);
+    assert.equal(await page.locator('[data-final-rigid-engineering-hold]').count(),1);
+    assert.equal(await page.locator('[data-final-rigid-filter]').inputValue(),
+      'REPAIR_CANDIDATES');
+    await page.locator('[data-final-rigid-filter]').selectOption('SHORT_SPAN');
+    const short=page.locator('[data-final-rigid-row][data-pointer="1"]');
+    assert.equal(await short.isVisible(),true);
+    assert.equal(await page.locator('[data-final-rigid-row]:visible').count(),1);
+    assert.match(await short.locator('[data-final-rigid-repair-evidence]').innerText(),
+      /SHORT SPAN|19\.100|short final/i);
+    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
+      'catalog batch mass promotion prohibited on engineering HOLD');
+    const edited=short.locator('[data-final-rigid-edited]');
+    await edited.fill('17.48');
+    assert.match(await short.locator('[data-final-rigid-edit-feedback]').innerText(),
+      /physical mass source/i);
+    await short.locator('[data-final-rigid-edit-basis]').fill(
+      'Independent PCOM owner =134234934/28062, source mass verified separately');
+    await page.locator('[data-final-rigid-preview]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-final-rigid-preview-report]')
+      ?.textContent.includes('VERIFIED PREVIEW'));
+    await page.locator('[data-final-rigid-apply]').click();
+    assert.match(await page.locator('[data-final-rigid-preview-report]').innerText(),
+      /REFUSED.*HOLD/);
+    await page.locator('[data-final-rigid-hold-ack]').check();
+    await page.locator('[data-final-rigid-apply]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-final-rigid-preview-report]')
+      ?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
+    const [ciiDownload]=await Promise.all([
+      page.waitForEvent('download'),page.locator('[data-final-rigid-download]').click(),
+    ]);
+    assert.match(ciiDownload.suggestedFilename(),/REVIEW_ONLY\.cii$/);
+    const revised=await readFile(await ciiDownload.path(),'utf8');
+    assert.deepEqual(parseFinalCiiRigidInventory(revised).rows.map(row=>row.weight),
+      [17.48,590,590]);
+    const [auditDownload]=await Promise.all([
+      page.waitForEvent('download'),page.locator('[data-final-rigid-audit]').click(),
+    ]);
+    const changes=JSON.parse(await readFile(await auditDownload.path(),'utf8'));
+    assert.equal(changes.engineeringReleaseStatus,'HELD_NOT_APPROVED');
+    assert.equal(changes.physicalMassVerification,'NOT_ESTABLISHED_BY_CII_PATCH');
+    assert.equal(changes.sourceCiiAuditFlags.length,2);
+    assert.match(changes.changes[0].reference.physicalMassBasis,/28062/);
+    assert.equal(changes.untouchedBytesEqual,true);
+    assert.equal(await page.evaluate(()=>window.currentResult.ciiText),'',
+      'mass HOLD must still withhold released CII after the review-only patch');
+    assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
+  });
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
