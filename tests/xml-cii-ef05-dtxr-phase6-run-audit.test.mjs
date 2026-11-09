@@ -83,7 +83,7 @@ test('Run routes unresolved source XML to Phase 6 and never opens duplicate lega
   assert.match(fast,/pendingPhase6MassReview/);
   assert.doesNotMatch(fast,/openModeAConsolidatedRigidWeightReviewPopup\(/);
   assert.match(fast,/if \(review\.cancelled\)/);
-  assert.match(single,/if\(actual==='inputxml'\)return true/);
+  assert.match(single,/if\(actual==='inputxml'\)return reviewInputXmlRigidWeights\(stateRef,config\)/);
   assert.match(single,/activePhaseId:'weight-match'/);
   assert.match(single,/pendingPhase6MassReview/);
   assert.match(single,/return false; \/\/ fail closed/);
