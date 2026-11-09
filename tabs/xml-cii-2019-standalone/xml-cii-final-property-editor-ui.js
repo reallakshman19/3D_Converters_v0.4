@@ -24,6 +24,7 @@ function fileDownload(filename, data, mime) {
 }
 
 export function installFinalCiiPropertyEditor({ overlay, result, inventory, plans = [], refresh, getCurrentResult }) {
+  const reviewOnly=result.rigidMassReviewOnly===true;
   const rows = [...overlay.querySelectorAll('[data-final-rigid-row]')];
   const heading = overlay.querySelector('thead tr');
   const titles = [...heading.querySelectorAll('th')];
@@ -91,7 +92,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   addButton('reset-selected', 'Reset Selected');
   addButton('reset-all', 'Reset All');
   addButton('preview', 'Preview Changes');
-  addButton('apply', 'Apply Changes & Re-extract CII').disabled = true;
+  addButton('apply', reviewOnly
+    ? 'Apply & Re-extract REVIEW-ONLY CII'
+    : 'Apply Changes & Re-extract CII').disabled = true;
   addButton('download', 'Download Revised CII').disabled = true;
   addButton('audit', 'Download Change Audit JSON').disabled = true;
   const report = element('pre', 'Preparing immutable final CII baseline…', { 'data-final-rigid-preview-report': '' });
@@ -99,6 +102,17 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   const scrollTable = overlay.querySelector('table')?.parentElement;
   scrollTable?.insertAdjacentElement('afterend', tools);
   tools.insertAdjacentElement('afterend', report);
+  let holdAcknowledgement=null;
+  if(reviewOnly){
+    const label=element('label',null,{'data-final-rigid-hold-warning':''});
+    label.style.cssText='display:block;color:#ffdfa0;background:#39240f;border:1px solid #d09436;border-radius:6px;padding:10px;margin:6px 0;font-size:12px;';
+    holdAcknowledgement=element('input',null,{
+      type:'checkbox','data-final-rigid-hold-ack':'',
+    });
+    label.append(holdAcknowledgement,
+      document.createTextNode(' I understand: this flagged CII has NOT passed the source mass audit. My edits are explicit review drafts; downloading revised CII does not release it as engineering approved.'));
+    report.insertAdjacentElement('beforebegin',label);
+  }
 
   const runIdentity = String(result.finalRigidReviewEvidence?.engineInputDigest ||
     result.diagnostics?.converterInputDigest || 'digest-unavailable') + ':' +
@@ -347,6 +361,10 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     } catch (error) { buttons.apply.disabled = true; report.textContent = 'REFUSED: ' + error.message; }
   });
   buttons.apply.addEventListener('click', async () => {
+    if(reviewOnly && !holdAcknowledgement?.checked){
+      report.textContent='REFUSED: Confirm that the original engineering HOLD remains and the corrected CII is REVIEW-ONLY.';
+      return;
+    }
     if (!session || invalid.size || !session.edits.size || previewVersion !== version) {
       report.textContent = 'REFUSED: Preview all valid changes first.'; return;
     }
@@ -357,10 +375,24 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         currentCiiText: current().ciiText, runIdentity,
       });
       if (ticket !== version) throw new Error('Edits changed during apply.');
-      committed = revised;
+      committed = reviewOnly ? {
+        ...revised,
+        revisedName:revised.revisedName.replace(/\\.cii$/i,'_REVIEW_ONLY.cii'),
+        auditName:revised.auditName.replace(/\\.json$/i,'_REVIEW_ONLY.json'),
+        audit:{
+          ...revised.audit,
+          engineeringReleaseStatus:'HELD_NOT_APPROVED',
+          physicalMassVerification:'NOT_ESTABLISHED_BY_CII_PATCH',
+          sourceCiiAuditFlags:result.diagnostics?.rigidMassAudit?.flags||[],
+          reviewerAcknowledgedHold:true,
+          originalConversionStatus:result.error||'RIGID_MASS_CONSERVATION_HOLD',
+        },
+      } : revised;
       buttons.download.disabled = buttons.audit.disabled = false;
-      report.textContent = 'VERIFIED REVISED CII READY — original CII unchanged\n' +
-        revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\nSHA-256: ' +
+      report.textContent = (reviewOnly
+        ? 'REVIEW-ONLY REVISED CII READY — engineering HOLD is NOT cleared\\n'
+        : 'VERIFIED REVISED CII READY — original CII unchanged\\n') +
+        revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\\nSHA-256: ' +
         revised.audit.revisedSha256;
     } catch (error) {
       committed = null; buttons.download.disabled = buttons.audit.disabled = true;
@@ -380,7 +412,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       session = ready;
       for (const pointer of byPointer.keys()) syncOne(pointer);
       dirty(); repaint();
-      report.textContent = 'Ready: ' + inventory.rows.length + ' original RIGID records. Original CII preserved.';
+      report.textContent = 'Ready: ' + inventory.rows.length + ' original RIGID records. '+
+        (reviewOnly ? 'Source audit HOLD — only review-only corrected CII can be downloaded.' :
+          'Original CII preserved.');
     })
     .catch((error) => {
       report.textContent = 'REFUSED: ' + error.message;
