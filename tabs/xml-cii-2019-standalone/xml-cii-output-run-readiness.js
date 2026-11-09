@@ -188,7 +188,7 @@ export function runLogLevel(message) {
   // stderr when the CAESAR default policy is disabled. This is diagnostic
   // information, not a failed conversion. Do not reclassify every stderr
   // line as an error; retain true exception/error classification.
-  if (/^(?:stderr:\\s*)?BEND_RADIUS_POLICY\\s+node=\\S+\\s+action=OMIT\\b/i.test(line))
+  if (/^(?:stderr:\s*)?BEND_RADIUS_POLICY\s+node=\S+\s+action=OMIT\b/i.test(line))
     return 'info';
   if (/traceback|error|exception|^stderr:/i.test(line)) return 'error';
   if (/warning/i.test(line)) return 'warning';
