@@ -1,4 +1,4 @@
-import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261108-rigid-choice-buttons-1';
+import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-final-cii-review-v035-r1';
 import {
   activateModeASource,
   buildModeABatchManifest,
