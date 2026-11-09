@@ -13,8 +13,13 @@ test('fast Mode A runner preserves sequential isolation while removing per-sourc
   assert.match(source, /downloadModeACiiZip\(batchRunResult\)/u);
   assert.doesNotMatch(source, /Promise\.all\([^)]*runSingleWorkflow/u);
 
-  const loopStart = source.indexOf('for (let index = 0; index < enabled.length; index += 1)');
-  const loopEnd = source.indexOf('const succeeded = rows.filter', loopStart);
+  // The first loop enumerates PRE-RUN source mass issues, and intentional
+  // preflight errors may render once. Performance invariant applies only to
+  // the second loop that actually converts each independent XML model.
+  const conversionStart = source.indexOf('const rows = [];');
+  const loopStart = source.indexOf(
+    'for (let index = 0; index < enabled.length; index += 1)',conversionStart);
+  const loopEnd = source.indexOf('const succeeded = rows.filter',loopStart);
   assert.ok(loopStart >= 0 && loopEnd > loopStart);
   const loop = source.slice(loopStart, loopEnd);
   assert.doesNotMatch(loop, /render\?\.\(\)|render\(\)/u);
