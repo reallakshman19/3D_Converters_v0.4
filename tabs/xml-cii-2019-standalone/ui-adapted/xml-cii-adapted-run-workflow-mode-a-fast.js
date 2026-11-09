@@ -84,6 +84,12 @@ function yieldUi() {
   });
 }
 
+// Review routing ends BEFORE the conversion loop. Re-render only once after
+// the preflight review decision, never while converting individual sources.
+function renderAfterMassReviewRedirect(render) {
+  if(typeof render==='function')render();
+}
+
 async function consolidatedRigidReview(stateRef, state, enabled, preflight, progressElement) {
   const entries = [];
   const errors = [];
@@ -170,7 +176,7 @@ export async function runModeABatchFastFromUi(stateRef, render, options = {}) {
   await yieldUi();
   const review = await consolidatedRigidReview(stateRef, state, enabled, preflight, progressElement);
   if (review.cancelled) {
-    render?.();
+    renderAfterMassReviewRedirect(render);
     return null;
   }
   state = review.state;
