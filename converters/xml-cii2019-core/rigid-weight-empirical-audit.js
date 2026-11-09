@@ -271,7 +271,12 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
        equal(next.weightN,group.massKg*kgToNewtonScale)) {
       row.flags.push('DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
       row.duplicatedWithElement=next.element;
-    }else row.flags.push('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER');
+    }else if(!row.physicalComponentRef)
+      row.flags.push('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER');
+    // Known zero-mass owner already has POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT.
+    // Do not falsely claim it has NO physical owner unless the source mapping
+    // is genuinely absent. The GLRD adjacent-flange duplicate check above
+    // remains mandatory for mapped zero-mass PCOMs.
   }
   for(const group of groups) {
     const children=rows.filter(row=>row.physicalComponentKey===group.key);
