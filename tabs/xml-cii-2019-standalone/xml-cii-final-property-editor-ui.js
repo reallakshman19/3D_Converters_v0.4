@@ -24,6 +24,7 @@ function fileDownload(filename, data, mime) {
 }
 
 export function installFinalCiiPropertyEditor({ overlay, result, inventory, plans = [], refresh, getCurrentResult }) {
+  const reviewOnly=result.rigidMassReviewOnly===true;
   const rows = [...overlay.querySelectorAll('[data-final-rigid-row]')];
   const heading = overlay.querySelector('thead tr');
   const titles = [...heading.querySelectorAll('th')];
@@ -58,7 +59,16 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     zeroLabel.prepend(zeroInput);
     const feedback = element('div', '', { 'data-final-rigid-edit-feedback': String(pointer) });
     feedback.style.cssText = 'font-size:10px;color:#fca5a5;max-width:190px;white-space:normal;';
-    editedCell.append(editInput, zeroLabel, feedback);
+    const basisInput=reviewOnly?element('input',null,{
+      type:'text','data-final-rigid-edit-basis':String(pointer),
+      placeholder:'Verified physical mass source / ComponentRefNo',
+      'aria-label':'Physical mass evidence for RIGID pointer '+pointer,
+    }):null;
+    if(basisInput)basisInput.style.cssText=
+      'display:block;width:210px;max-width:100%;margin:5px 0;padding:5px;border:1px solid #e0a441;border-radius:4px;background:#292012;color:#ffe4b5;font-size:11px;';
+    editedCell.append(editInput,zeroLabel);
+    if(basisInput)editedCell.appendChild(basisInput);
+    editedCell.appendChild(feedback);
     cells[8].insertAdjacentElement('afterend', editedCell);
     const origError = element('td', '—', { 'data-final-rigid-original-error': String(pointer) });
     origError.style.cssText = 'padding:9px;border-bottom:1px solid #26364b;';
@@ -71,7 +81,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     status.append(element('span', ' '), selected);
     cells[11].insertAdjacentElement('afterend', diff);
     diff.insertAdjacentElement('afterend', status);
-    byPointer.set(pointer, { tr, original, editInput, zeroInput, feedback, origError, diff, status, selected });
+    byPointer.set(pointer,{tr,original,editInput,zeroInput,basisInput,feedback,origError,diff,status,selected});
   }
 
   const tools = element('div', null);
@@ -91,7 +101,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   addButton('reset-selected', 'Reset Selected');
   addButton('reset-all', 'Reset All');
   addButton('preview', 'Preview Changes');
-  addButton('apply', 'Apply Changes & Re-extract CII').disabled = true;
+  addButton('apply', reviewOnly
+    ? 'Apply & Re-extract REVIEW-ONLY CII'
+    : 'Apply Changes & Re-extract CII').disabled = true;
   addButton('download', 'Download Revised CII').disabled = true;
   addButton('audit', 'Download Change Audit JSON').disabled = true;
   const report = element('pre', 'Preparing immutable final CII baseline…', { 'data-final-rigid-preview-report': '' });
@@ -99,6 +111,17 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   const scrollTable = overlay.querySelector('table')?.parentElement;
   scrollTable?.insertAdjacentElement('afterend', tools);
   tools.insertAdjacentElement('afterend', report);
+  let holdAcknowledgement=null;
+  if(reviewOnly){
+    const label=element('label',null,{'data-final-rigid-hold-warning':''});
+    label.style.cssText='display:block;color:#ffdfa0;background:#39240f;border:1px solid #d09436;border-radius:6px;padding:10px;margin:6px 0;font-size:12px;';
+    holdAcknowledgement=element('input',null,{
+      type:'checkbox','data-final-rigid-hold-ack':'',
+    });
+    label.append(holdAcknowledgement,
+      document.createTextNode(' I understand: this flagged CII has NOT passed the source mass audit. My edits are explicit review drafts; downloading revised CII does not release it as engineering approved.'));
+    report.insertAdjacentElement('beforebegin',label);
+  }
 
   const runIdentity = String(result.finalRigidReviewEvidence?.engineInputDigest ||
     result.diagnostics?.converterInputDigest || 'digest-unavailable') + ':' +
@@ -123,9 +146,17 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       row.querySelector('[data-final-rigid-edited]')?.value === row.dataset.batchProposedValue &&
       reference?.value === row.dataset.batchProposedValue && row.batchReferenceEvidence)
       return row.batchReferenceEvidence;
-    if (!reference?.value) return { kind: 'not-assessed', value: '', sourceContext };
+    const physicalMassBasis=byPointer.get(pointer).basisInput?.value.trim()||'';
+    if (!reference?.value) return {
+      kind:'manual-correction',value:'',sourceContext,physicalMassBasis,
+      massAuthority:'UNVERIFIED_REVIEW_ONLY',
+    };
     const kind = reference.dataset.referenceKind || 'manual';
-    return { kind, value: reference.value, basis: row.querySelector('[data-final-rigid-basis-detail]')?.textContent || '', sourceContext };
+    return { kind,value:reference.value,
+      basis:row.querySelector('[data-final-rigid-basis-detail]')?.textContent||'',
+      sourceContext,physicalMassBasis,
+      massAuthority:reviewOnly?'UNVERIFIED_REVIEW_ONLY':'UNCHANGED',
+    };
   };
 
   const syncOne = (pointer) => {
@@ -138,6 +169,11 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       return;
     }
     try {
+      // Quarantined conversions cannot use comparison scores as physical
+      // source-mass approval. Every edited final pointer needs explicit,
+      // pointer-local engineering basis in the change audit.
+      if(reviewOnly && (row.basisInput?.value.trim().length||0)<5)
+        throw new Error('Enter verified physical mass source / ComponentRefNo (at least 5 characters) before changing a held RIGID weight.');
       stageCiiPropertyEdit(session, {
         propertyId: 'RIGID.weight', recordPointer: pointer,
         originalToken: row.original.rawWeight,
@@ -202,6 +238,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   for (const [pointer, row] of byPointer) {
     row.editInput.addEventListener('input', () => changed(pointer));
     row.zeroInput.addEventListener('change', () => changed(pointer));
+    row.basisInput?.addEventListener('input',()=>changed(pointer));
     row.tr.querySelector('[data-final-rigid-reference]')?.addEventListener('input', () => changed(pointer));
     row.tr.querySelector('[data-final-rigid-suggestion]')?.addEventListener('change', () => changed(pointer));
   }
@@ -234,7 +271,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   // The batch toolbar is a PREVIEW and explicitly approved staging aid, not a
   // second writer. The same property transaction verifies the original source
   // digest, exact RIGID pointers, reparse and all bytes outside edited fields.
-  installFinalRigidBatchControls({
+  if(!reviewOnly)installFinalRigidBatchControls({
     overlay, inventory, plans,
     getEditedValues: () => new Map([...byPointer].map(([pointer, row]) =>
       [pointer, row.editInput.value])),
@@ -326,6 +363,13 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     },
   });
 
+  if(reviewOnly){
+    const note=element('div',
+      'Held CII: catalog/batch suggestions are comparison evidence only. Enter a verified source basis and a manual weight for each selected pointer. Source mass audit remains HOLD after a direct CII patch.',
+      {'data-final-rigid-manual-only':''});
+    note.style.cssText='font-size:12px;color:#ffddaa;margin:8px 0;';
+    report.insertAdjacentElement('beforebegin',note);
+  }
   buttons.preview.addEventListener('click', async () => {
     if (!session || invalid.size || !session.edits.size) {
       report.textContent = invalid.size ? 'REFUSED: Invalid edited values or missing zero confirmation.' : 'No modified fields.';
@@ -347,6 +391,10 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     } catch (error) { buttons.apply.disabled = true; report.textContent = 'REFUSED: ' + error.message; }
   });
   buttons.apply.addEventListener('click', async () => {
+    if(reviewOnly && !holdAcknowledgement?.checked){
+      report.textContent='REFUSED: Confirm that the original engineering HOLD remains and the corrected CII is REVIEW-ONLY.';
+      return;
+    }
     if (!session || invalid.size || !session.edits.size || previewVersion !== version) {
       report.textContent = 'REFUSED: Preview all valid changes first.'; return;
     }
@@ -357,9 +405,23 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         currentCiiText: current().ciiText, runIdentity,
       });
       if (ticket !== version) throw new Error('Edits changed during apply.');
-      committed = revised;
+      committed = reviewOnly ? {
+        ...revised,
+        revisedName:revised.revisedName.replace(/\.cii$/i,'_REVIEW_ONLY.cii'),
+        auditName:revised.auditName.replace(/\.json$/i,'_REVIEW_ONLY.json'),
+        audit:{
+          ...revised.audit,
+          engineeringReleaseStatus:'HELD_NOT_APPROVED',
+          physicalMassVerification:'NOT_ESTABLISHED_BY_CII_PATCH',
+          sourceCiiAuditFlags:result.diagnostics?.rigidMassAudit?.flags||[],
+          reviewerAcknowledgedHold:true,
+          originalConversionStatus:result.error||'RIGID_MASS_CONSERVATION_HOLD',
+        },
+      } : revised;
       buttons.download.disabled = buttons.audit.disabled = false;
-      report.textContent = 'VERIFIED REVISED CII READY — original CII unchanged\n' +
+      report.textContent = (reviewOnly
+        ? 'REVIEW-ONLY REVISED CII READY — engineering HOLD is NOT cleared\n'
+        : 'VERIFIED REVISED CII READY — original CII unchanged\n') +
         revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\nSHA-256: ' +
         revised.audit.revisedSha256;
     } catch (error) {
@@ -380,7 +442,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       session = ready;
       for (const pointer of byPointer.keys()) syncOne(pointer);
       dirty(); repaint();
-      report.textContent = 'Ready: ' + inventory.rows.length + ' original RIGID records. Original CII preserved.';
+      report.textContent = 'Ready: ' + inventory.rows.length + ' original RIGID records. '+
+        (reviewOnly ? 'Source audit HOLD — only review-only corrected CII can be downloaded.' :
+          'Original CII preserved.');
     })
     .catch((error) => {
       report.textContent = 'REFUSED: ' + error.message;

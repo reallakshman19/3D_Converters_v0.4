@@ -9,7 +9,7 @@ import {
 } from '../tabs/xml-cii-2019-standalone/xml-cii-final-property-transactions.js';
 
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-const rev='20261109-final-cii-review-v035-r1';
+const rev='20261109-final-rigid-remediate-r2';
 const nativeRows=(from,to,pointer)=>[
   [from,to,0,0,0,100],
   ...Array.from({length:11},()=>[0,0,0,0,0,0]),
@@ -66,7 +66,8 @@ test('v0.4 run evidence, release hold, active-model binding and browser cache ch
   assert.match(service,/return holdDuplicateRigidMassOutput\(normalized, audit\)/);
   assert.match(panel,/createFinalRigidWeightReviewButton\(state, \(\) => stateRef\.current\?\.result\)/);
   assert.match(panel,/finalRigidPrerequisite/);
-  assert.match(modal,/parseFinalCiiRigidInventory\(result\.ciiText\)/);
+  assert.match(modal,/parseFinalCiiRigidInventory\(reviewResult\.ciiText\)/);
+  assert.match(modal,/finalRigidRepairReviewResult\(result\)/);
   assert.match(modal,/getCurrentResult/);
   assert.match(editor,/verifyCiiPropertyTransaction/);
   assert.match(editor,/current\(\) !== result/);

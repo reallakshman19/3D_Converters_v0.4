@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const version='20261108-rigid-choice-buttons-1';
 const phase6Version='20261109-phase6-readable-table-r4';
-const finalReviewVersion='20261109-final-cii-review-v035-r1';
+const finalReviewVersion='20261109-final-rigid-remediate-r2';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js'],

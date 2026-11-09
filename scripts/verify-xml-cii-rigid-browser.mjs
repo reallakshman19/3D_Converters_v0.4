@@ -73,6 +73,24 @@ try {
     const host=document.getElementById('output-run-qualification');
     renderStandaloneOutputRunPanel(host,state,()=>{});
     const buttons=[...host.querySelectorAll('button')].map(b=>({label:b.textContent?.trim(),disabled:b.disabled,action:b.dataset.action}));
+    const heldRepairBtn=host.querySelector('[data-action="review-final-weight"]');
+    const heldRepairAvailable=heldRepairBtn?.disabled===false;
+    if(heldRepairAvailable)heldRepairBtn.click();
+    const repairDialog=document.querySelector('.mc-rigid-review-overlay');
+    const shortRow=repairDialog?.querySelector('[data-final-rigid-row][data-pointer="1"]');
+    const flangeRow=repairDialog?.querySelector('[data-final-rigid-row][data-pointer="2"]');
+    const repairEvidence={
+      quarantinedStatus:dupe.rigidMassRepairCandidate?.status||'NONE',
+      quarantinedSourceEqual:dupe.rigidMassRepairCandidate?.ciiText===dupeCii,
+      releasedCiiStillBlank:dupe.ciiText==='',
+      reviewButtonEnabled:heldRepairAvailable,
+      heldBannerPresent:!!repairDialog?.querySelector('[data-final-rigid-engineering-hold]'),
+      defaultFilter:repairDialog?.querySelector('[data-final-rigid-filter]')?.value,
+      connectionShortSpan:shortRow?.dataset.finalRigidShortSpan,
+      connectionAuditFlagged:shortRow?.dataset.finalRigidAuditFlagged,
+      flangeAuditFlagged:flangeRow?.dataset.finalRigidAuditFlagged,
+      sourceEvidence:shortRow?.querySelector('[data-final-rigid-repair-evidence]')?.textContent||'',
+    };
     const evidence={
       status:dupe.diagnostics?.rigidMassAudit?.status,
       flags:dupe.diagnostics?.rigidMassAudit?.flags?.map(x=>x.code),
@@ -82,6 +100,7 @@ try {
       ok:dupe.ok,error:dupe.error,ciiText:dupe.ciiText,
       diagnosticAvailable:report.artifactRows.find(x=>x.kind==='diagnostics')?.available,
       ciiAvailable:report.artifactRows.find(x=>x.kind==='cii')?.available,
+      repairEvidence,
       buttons,
       panelText:host.innerText.slice(0,10000)
     };
@@ -128,6 +147,20 @@ try {
   assert.equal(result.evidence.elements[1].api,'API_ESTIMATE');
   const ciiButton=result.evidence.buttons.find(x=>x.action==='download-cii');
   assert.equal(ciiButton?.disabled,true);
+  assert.deepEqual([
+    result.evidence.repairEvidence.quarantinedStatus,
+    result.evidence.repairEvidence.quarantinedSourceEqual,
+    result.evidence.repairEvidence.releasedCiiStillBlank,
+    result.evidence.repairEvidence.reviewButtonEnabled,
+    result.evidence.repairEvidence.heldBannerPresent,
+    result.evidence.repairEvidence.defaultFilter,
+    result.evidence.repairEvidence.connectionShortSpan,
+    result.evidence.repairEvidence.connectionAuditFlagged,
+    result.evidence.repairEvidence.flangeAuditFlagged,
+  ],[
+    'QUARANTINED_REVIEW_ONLY',true,true,true,true,
+    'REPAIR_CANDIDATES','true','true','false',
+  ],'genuine service HOLD must open focused 19.1mm PCOM review but not release CII');
   assert.match(result.evidence.panelText,/Rigid Mass Ownership/u);
   assert.match(result.evidence.panelText,/RIGID_MASS_CONSERVATION_HOLD/u);
   assert.equal(result.heavy.ok,true);
@@ -143,6 +176,7 @@ try {
   receipt.statements.push({id:'BROWSER_DOM',status:'PASS',meaning:'Real Chromium parses XML; 19.1mm owns PCOM and 109mm owns flange'});
   receipt.statements.push({id:'BROWSER_OUTPUT_RUN_SERVICE',status:'PASS',meaning:'CII withheld with duplicate mass; no manufactured allocation'});
   receipt.statements.push({id:'BROWSER_OUTPUT_RUN_UI',status:'PASS',meaning:'Held CII download disabled; diagnostics downloadable and HOLD visible'});
+  receipt.statements.push({id:'BROWSER_HELD_RIGID_REPAIR',status:'PASS',meaning:'Real 19.1mm PCOM audit flag opens quarantined review; 109mm flange remains separate; no normal CII release'});
   receipt.statements.push({id:'HEAVY_SHORT_RIGID',status:'PASS',meaning:'Legitimate short heavy rigid not rejected by length alone; not engineering approved'});
   receipt.statements.push({id:'TOPOFIX_CUSTODY',status:'PASS',meaning:'Audits committed fixed XML, refuses missing TopoFix CII-input custody'});
   await page.screenshot({path:resolve(artifactDir,'output-run-held-cii.png'),fullPage:true});

@@ -85,12 +85,21 @@ const output={ok:true,ciiText:raw,ciiName:'test.cii',diagnostics:{},logs:[]};
 const held=holdDuplicateRigidMassOutput(output,audit);
 assert.equal(held.ok,false);
 assert.equal(held.ciiText,'');
+assert.equal(held.rigidMassRepairCandidate.status,'QUARANTINED_REVIEW_ONLY');
+assert.equal(held.rigidMassRepairCandidate.ciiText,raw,
+  'unreleased CII is retained only as isolated, flagged repair source');
+assert.equal(held.rigidMassRepairCandidate.engineeringReleaseAuthorized,false);
 assert.equal(held.diagnostics.rigidMassEngineeringQualified,false);
 assert.equal(held.diagnostics.rigidMassCiiReleaseAuthorized,false);
 for(const invalid of [null,undefined,{status:'NOT_RUN',flags:[]},
   {...audit,status:'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY',flags:[]},
   {...audit,schema:'wrong',flags:[]}])
-  assert.equal(holdDuplicateRigidMassOutput(output,invalid).ciiText,'');
+  {
+    const notQualified=holdDuplicateRigidMassOutput(output,invalid);
+    assert.equal(notQualified.ciiText,'');
+    assert.equal(notQualified.rigidMassRepairCandidate,null,
+      'NOT_RUN/malformed/stale audits must never open a quarantined editor');
+  }
 
 const heavyCii=ciiText([{from:9000,to:9001,mm:1.1,pointer:1,weightN:1100,branch:'HEAVY'}]);
 const clean=auditRigidWeightOwnership({ciiText:heavyCii,xmlRows:heavy,estimator});
