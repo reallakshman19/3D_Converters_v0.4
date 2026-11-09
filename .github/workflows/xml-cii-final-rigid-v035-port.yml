@@ -27,7 +27,9 @@ jobs:
           for module in tabs/xml-cii-2019-standalone/xml-cii-final-{rigid,property}-*.js             tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js             tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-output-run.js             tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js; do
             node --check "$module"
           done
-          node --test tests/xml-cii-final-v04-integration.test.mjs
+          node --test tests/xml-cii-final-v04-integration.test.mjs tests/xml-cii-final-rigid-remediation.test.mjs
+          node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
+          node --test tests/rigid-weight-empirical-audit.test.mjs
       - name: Full property transaction, adversarial and source context tests
         shell: bash
         run: |
