@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const version='20261108-rigid-choice-buttons-1';
 const phase6Version='20261109-phase6-readable-table-r4';
-const finalReviewVersion='20261109-final-rigid-remediate-r2';
+const finalReviewVersion='20261109-final-rigid-nearest-length-r3';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js'],
@@ -83,4 +83,17 @@ test('final RIGID review and exact run-pinned output are versioned through both 
   for(const [path,dependency] of edits)
     assert.ok(read(path).includes(dependency+'?v='+finalReviewVersion),
       path+' must load '+dependency+' at final-CII version '+finalReviewVersion);
+});
+
+
+test('Review Final weight opens the revised batch action/length modules, never cached obsolete code',()=>{
+  const rev=finalReviewVersion;
+  const editor=read('tabs/xml-cii-2019-standalone/xml-cii-final-property-editor-ui.js');
+  const batchUi=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-ui.js');
+  const planner=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-corrections.js');
+  assert.ok(editor.includes('xml-cii-final-rigid-batch-ui.js?v='+rev));
+  assert.ok(batchUi.includes('xml-cii-final-rigid-batch-corrections.js?v='+rev));
+  assert.match(batchUi,/data-final-rigid-batch-apply-nearest/);
+  assert.ok(batchUi.includes('Element Length (mm)'));
+  assert.match(planner,/planAllNearestBatchDraftSelection/);
 });

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { planFinalRigidBatchCorrections } from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-corrections.js';
+import {
+  planFinalRigidBatchCorrections, planAllNearestBatchDraftSelection,
+} from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-corrections.js';
 import { parseFinalCiiRigidInventory } from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-inventory.js';
 import {
   createCiiPropertySession, stageCiiPropertyEdit, verifyCiiPropertyTransaction,
@@ -106,6 +108,60 @@ test('alternative choice is requalified against threshold, shared source owner i
   inventory.rows[19].linkedElements.pop();
   inventory.rows[19].status = 'SHARED_POINTER';
   assert.equal(planFinalRigidBatchCorrections(inventory, plans).proposals[19].status, 'HOLD');
+});
+
+test('Apply All Nearest creates review selections but no mass approval or CII mutation', () => {
+  const {inventory,plans}=inventoryAndPlans(24);
+  plans[19].mapping=null;
+  plans[19].sourceContext.status='NOT_RESOLVED';
+  plans[19].nearestSuggestions=[
+    candidate(29.84,{approximate:true,comparisonOnly:true,direct:false,
+      sourceVerified:false,method:'length-extrapolated',matchPct:50}),
+    candidate(120,{approximate:true,comparisonOnly:true,direct:false}),
+  ];
+  plans[20].sourceContext.conflicts=['RATING_CONFLICT']; // hard-held
+  const frozen=JSON.stringify(inventory);
+  const base=planFinalRigidBatchCorrections(inventory,plans);
+  assert.equal(base.proposals[19].status,'REVIEW_ONLY');
+  assert.equal(base.proposals[20].status,'HOLD');
+  const prepared=planAllNearestBatchDraftSelection(inventory,plans,{
+    thresholdPct:40,scope:'all',includeReviewOnly:false,
+    selectedIndices:new Map([[20,1]]),
+  });
+  assert.deepEqual(prepared.selectedPointers,[20]);
+  assert.equal(prepared.candidateIndices.get(20),0,
+    'explicit Apply All Nearest resets alternative candidate to index 0');
+  assert.equal(prepared.reviewRequired,1);
+  assert.equal(prepared.includeReviewOnly,true);
+  assert.equal(prepared.plan.proposals[19].status,'ELIGIBLE');
+  assert.equal(prepared.plan.proposals[20].status,'HOLD');
+  assert.equal(prepared.plan.proposals[19].reviewRequired,true);
+  assert.equal(prepared.plan.proposals[19].candidate.approximate,true);
+  assert.equal(prepared.plan.proposals[19].proposedWeight,29.84);
+  assert.equal(prepared.selectedPointers.includes(21),false,
+    'conflicted source metadata must stay hard-held');
+  assert.equal(prepared.selectedPointers.includes(1),false,
+    'below-threshold rows must not be silently promoted');
+  assert.equal(JSON.stringify(inventory),frozen,'no exported RIGID weights mutated');
+});
+test('Apply All Nearest respects filtered/selected scopes, existing edits and never bypasses threshold',()=>{
+  const {inventory,plans}=inventoryAndPlans(24);
+  plans[20].nearestSuggestions=[candidate(100)];
+  const chosen=planAllNearestBatchDraftSelection(inventory,plans,{
+    scope:'filtered',visiblePointers:[20,21],thresholdPct:40,
+    currentEditedValues:new Map([[20,'151']]),
+  });
+  assert.deepEqual(chosen.selectedPointers,[21]);
+  assert.equal(chosen.plan.proposals[19].status,'ALREADY_EDITED');
+  assert.equal(chosen.plan.proposals[21].status,'OUT_OF_SCOPE');
+  const below=planAllNearestBatchDraftSelection(inventory,plans,{
+    scope:'selected',selectedPointers:[20,21],thresholdPct:403,
+  });
+  assert.deepEqual(below.selectedPointers,[]);
+  assert.ok(below.belowThreshold>=2);
+  assert.throws(()=>planAllNearestBatchDraftSelection(inventory,plans,{
+    thresholdPct:-1,
+  }),/threshold/);
 });
 
 function row(vals) { return vals.map((v,i) => String(v).padStart(i ? 13 : 15,' ')).join(''); }

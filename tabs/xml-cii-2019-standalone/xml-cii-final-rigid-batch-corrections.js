@@ -100,3 +100,43 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     belowThreshold: proposals.filter((r) => r.status === 'BELOW_THRESHOLD'),
   };
 }
+
+/**
+ * Prepare a nearest-candidate SELECTION, not a mass approval or edit.
+ * In the batch dialog the operator intentionally requested every nearest
+ * proposal; includeReviewOnly enables PROVISIONAL candidates for selection,
+ * but the independent review acknowledgement and Stage/Verify are separate.
+ *
+ * Hard holds, existing manual edits, threshold-excluded rows and out-of-scope
+ * pointers are never selected. Do not change any original RIGID weights.
+ */
+export function planAllNearestBatchDraftSelection(inventory, plans, options = {}) {
+  const candidateIndices = new Map(options.selectedIndices || []);
+  const scope = options.scope || 'all';
+  const visible = new Set(options.visiblePointers || []);
+  const selected = new Set(options.selectedPointers || []);
+  const rows = Array.isArray(inventory?.rows) ? inventory.rows : [];
+  for (const row of rows) {
+    const pointer = row.rigidPointer;
+    if (scope === 'filtered' && !visible.has(pointer) ||
+        scope === 'selected' && !selected.has(pointer)) continue;
+    if (plans?.[pointer - 1]?.nearestSuggestions?.length) {
+      candidateIndices.set(pointer, 0);
+    }
+  }
+  const planned = planFinalRigidBatchCorrections(inventory, plans, {
+    ...options,
+    selectedIndices: candidateIndices,
+    includeReviewOnly: true,
+  });
+  return {
+    candidateIndices,
+    includeReviewOnly: true,
+    selectedPointers: planned.eligible.map((row) => row.pointer),
+    reviewRequired: planned.eligible.filter((row) => row.reviewRequired).length,
+    hardHeld: planned.proposals.filter((row) =>
+      row.status === 'HOLD' || row.status === 'ALREADY_EDITED').length,
+    belowThreshold: planned.belowThreshold.length,
+    plan: planned,
+  };
+}

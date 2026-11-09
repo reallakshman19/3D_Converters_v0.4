@@ -3,7 +3,9 @@
  * Preview is read-only. Per-row selection is mandatory, and provisional
  * catalog suggestions additionally require a review-only opt-in + approval.
  */
-import { planFinalRigidBatchCorrections } from './xml-cii-final-rigid-batch-corrections.js';
+import {
+  planFinalRigidBatchCorrections, planAllNearestBatchDraftSelection,
+} from './xml-cii-final-rigid-batch-corrections.js?v=20261109-final-rigid-nearest-length-r3';
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -85,23 +87,26 @@ export function installFinalRigidBatchControls({
     dialogLayer.innerHTML = '<div style="background:#0f172a;color:#e2e8f0;border:1px solid #64748b;border-radius:8px;' +
       'padding:15px;max-width:1200px;width:97%;max-height:88vh;display:flex;flex-direction:column;gap:10px;">' +
       '<h3 style="margin:0;">Preview Batch Weight Corrections</h3>' +
-      '<p style="margin:0;font-size:12px;color:#fbbf24;">A nearest catalog suggestion is not a proven physical mass. Confirm each proposed pointer. Unverified or approximate estimates require explicit approval. No CII output changes at this stage.</p>' +
+      '<p style="margin:0;font-size:12px;color:#fbbf24;">A nearest catalog suggestion is not a proven physical mass. Apply All Nearest Suggestions prepares review drafts only. Hard-held, out-of-scope and below-threshold pointers are excluded. Independent review acknowledgement and verified staging are still required; no CII output changes at this stage.</p>' +
       '<div data-final-rigid-batch-summary role="status" style="font-size:12px;color:#dbeafe;"></div>' +
       '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;">' +
       '<label title="Unlock separately reviewed approximate/unverified suggestions; hard HOLD and below-threshold rows remain blocked">' +
       '<input type="checkbox" data-final-rigid-batch-include-review> Include approximate / unverified nearest</label>' +
+      '<button type="button" data-final-rigid-batch-apply-nearest title="Select the nearest candidate for each eligible RIGID in scope, including review-only drafts. Does not approve, stage or change any CII weights." style="cursor:pointer;background:#744c13;color:#fff;' +
+      'padding:6px 10px;border-radius:5px;border:1px solid #eab308;">Apply All Nearest Suggestions</button>' +
       '<button type="button" data-final-rigid-batch-approve-all disabled style="cursor:pointer;background:#1d4ed8;color:#fff;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #60a5fa;">✓ Approve All Eligible (0)</button>' +
       '<button type="button" data-final-rigid-batch-clear-all disabled style="cursor:pointer;background:#1e293b;color:#e2e8f0;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #475569;">Clear Selection</button>' +
-      '</div><label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show held / below-threshold rows</label>' +
+      '</div><div data-final-rigid-batch-nearest-note role="status" style="font-size:11px;color:#fbd38d;display:none;"></div>' +
+      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show held / below-threshold rows</label>' +
       '<div style="overflow:auto;flex:1;border:1px solid #334155;border-radius:5px;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">' +
       '<thead><tr style="position:sticky;top:0;background:#1e293b;">' +
       ['<label title="Select/deselect all currently eligible RIGIDs in the selected scope">' +
         '<input type="checkbox" data-final-rigid-batch-approve-all-checkbox disabled ' +
         'aria-label="Approve all eligible RIGID pointers"> All eligible</label>',
-        'RIGID', 'Element / FROM → TO', 'Original CII units', 'Nearest suggestion (kg / score)',
+        'RIGID', 'Element / FROM → TO', 'Element Length (mm)', 'Original CII units', 'Nearest suggestion (kg / score)',
         'Proposed CII units', 'Error %', 'Decision / evidence'].map((s) =>
         '<th style="padding:8px;white-space:nowrap;">' + s + '</th>').join('') +
       '</tr></thead><tbody data-final-rigid-batch-rows></tbody></table></div>' +
@@ -117,6 +122,8 @@ export function installFinalRigidBatchControls({
     const showHeld = dialogLayer.querySelector('[data-final-rigid-batch-show-held]');
     const includeReview = dialogLayer.querySelector('[data-final-rigid-batch-include-review]');
     const approveAll = dialogLayer.querySelector('[data-final-rigid-batch-approve-all]');
+    const applyAllNearest = dialogLayer.querySelector('[data-final-rigid-batch-apply-nearest]');
+    const nearestNote = dialogLayer.querySelector('[data-final-rigid-batch-nearest-note]');
     const clearAll = dialogLayer.querySelector('[data-final-rigid-batch-clear-all]');
     const approveAllCheckbox = dialogLayer.querySelector('[data-final-rigid-batch-approve-all-checkbox]');
     const confirm = dialogLayer.querySelector('[data-final-rigid-batch-confirm-review]');
@@ -159,7 +166,14 @@ export function installFinalRigidBatchControls({
             row.status !== 'OUT_OF_SCOPE'))
         .map((row) => {
           const item = inventory.rows[row.pointer - 1];
-          const element = item?.linkedElements?.[0];
+          const linked = item?.linkedElements || [];
+          // Final CII ELEMENTS geometry, not source physical-component length.
+          // Preserve every linked element when a pointer is shared (hard-held).
+          const elementTrace = linked.map((element) =>
+            '#' + element.index + ' · ' + element.fromNode + ' → ' + element.toNode).join('; ') || 'Unreferenced';
+          const elementLengths = linked.map((element) =>
+            Number.isFinite(Number(element.lengthMm)) && Number(element.lengthMm) >= 0
+              ? Number(Number(element.lengthMm).toFixed(3)).toString() : '—').join(', ') || '—';
           const available = candidateFor(row);
           const options = available.map((candidate, i) =>
             '<option value="' + i + '"' + (row.candidateIndex === i ? ' selected' : '') + '>' +
@@ -175,7 +189,10 @@ export function installFinalRigidBatchControls({
               (checked ? ' checked' : '') + (approved ? '' : ' disabled') +
               ' aria-label="Approve RIGID pointer ' + row.pointer + '">') +
             cell(String(row.pointer)) +
-            cell(esc(element ? '#' + element.index + ' · ' + element.fromNode + ' → ' + element.toNode : 'Unreferenced')) +
+            cell(esc(elementTrace)) +
+            '<td data-final-rigid-batch-element-length="' + row.pointer +
+              '" title="Emitted CII ELEMENT length from final DX/DY/DZ geometry; NOT necessarily physical component length" style="padding:7px;border-bottom:1px solid #26364b;vertical-align:top;white-space:nowrap;">' +
+              esc(elementLengths) + '</td>' +
             cell(esc(pretty(row.originalWeight))) +
             cell(available.length ? '<select data-final-rigid-batch-candidate="' + row.pointer +
               '" style="max-width:260px;background:#0b1220;border:1px solid #475569;color:#fff;border-radius:4px;padding:4px;">' +
@@ -189,7 +206,7 @@ export function installFinalRigidBatchControls({
               esc(row.reason) + (row.candidate ? '<div>' +
                 esc(row.candidate.method + ' · ' + (row.candidate.source || 'unidentified master row')) +
                 '</div>' : '') + '</div>') + '</tr>';
-        }).join('') || '<tr><td colspan="8" style="padding:14px;">No qualifying RIGIDs for this scope and threshold.</td></tr>';
+        }).join('') || '<tr><td colspan="9" style="padding:14px;">No qualifying RIGIDs for this scope and threshold.</td></tr>';
       updateStage();
     }
     const selectAllEligible = (checked) => {
@@ -205,6 +222,36 @@ export function installFinalRigidBatchControls({
       includeInput.checked = includeReview.checked;
       selections.clear();
       confirm.checked = false;
+      render();
+    });
+    applyAllNearest.addEventListener('click', () => {
+      if (!isReady() || !getCurrentResult()) {
+        nearestNote.style.display = 'block';
+        nearestNote.textContent = 'REFUSED: Conversion run changed; reopen the current CII review.';
+        return;
+      }
+      // Every click resets all candidates IN SCOPE to nearest index 0.
+      // This deliberately enables provisional draft inclusion, but does
+      // NOT check the independent review acknowledgement or stage an edit.
+      const planned = planAllNearestBatchDraftSelection(inventory, plans, {
+        ...base,
+        selectedIndices: candidateIndices,
+      });
+      candidateIndices.clear();
+      for (const [pointer, index] of planned.candidateIndices) candidateIndices.set(pointer, index);
+      base.includeReviewOnly = true;
+      includeReview.checked = true;
+      includeInput.checked = true;
+      selections.clear();
+      for (const pointer of planned.selectedPointers) selections.add(pointer);
+      confirm.checked = false;
+      nearestNote.style.display = 'block';
+      nearestNote.textContent = 'Nearest review drafts selected for ' +
+        planned.selectedPointers.length + ' eligible pointers (' + planned.reviewRequired +
+        ' require independent review); ' + planned.hardHeld + ' hard-held / already edited and ' +
+        planned.belowThreshold + ' below ±' + planned.plan.thresholdPct +
+        '% not selected. Confirm reviewed values separately before Stage & Verify. ' +
+        'No source mass or CII bytes have changed.';
       render();
     });
     approveAll.addEventListener('click', () => selectAllEligible(true));
