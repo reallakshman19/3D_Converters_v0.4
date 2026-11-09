@@ -123,6 +123,20 @@ export async function runXmlCii2019WorkflowService(job, runtime = {}) {
   const result = await runXmlCii2019StandaloneEngineJob(engineJob, runtime);
   if (Array.isArray(result?.logs) && parity.logs.length) result.logs = [...parity.logs, ...result.logs];
   const normalized = normalizeXmlEngineResult(result);
+  // The final RIGID editor operates only on a released, exact run result.
+  // Capture the XML actually handed to the converter, without granting
+  // physical component ownership, mass approval or TopoFix correspondence.
+  // A later RIGID conservation HOLD still clears CII and disables the editor.
+  if (normalized.ok && normalized.ciiText && normalized.ciiInputSource !== 'topofix') {
+    normalized.finalRigidReviewEvidence = {
+      sourceKind: 'xml',
+      engineInputText: parity.xmlText,
+      stagedJsonText: factedJob.stagedJsonText || '',
+      supportConfigJson: factedJob.supportConfigJson,
+      weightScale: factedJob.options?.kgToNewton === false ? 1 : 10,
+      engineInputDigest: parity.evidence.engineInputDigest,
+    };
+  }
   if (normalized.diagnostics) {
     normalized.diagnostics.runParityStats = parity.stats;
     normalized.diagnostics.runParityEvidence = parity.evidence;
