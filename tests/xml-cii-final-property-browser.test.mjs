@@ -430,6 +430,27 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isDisabled(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(), '150');
+    assert.match(await modal.locator('thead').innerText(),/Element Length \(mm\)/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1',
+      'batch length must be the final CII 19.1 mm route, not a catalog/physical length');
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),0,
+      'hidden below-threshold pointers are not silently shown');
+
+    // Apply All Nearest is only a draft-selection action: it explicitly opts
+    // provisional suggestions into review without granting mass authority.
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-include-review]').isChecked(),true);
+    assert.match(await modal.locator('[data-final-rigid-batch-nearest-note]').innerText(),
+      /Nearest review drafts selected for 1 eligible pointers/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(),true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150',
+      'the Apply All Nearest click cannot modify CII/editor weights');
+
+    // Restore initial state to keep the preexisting individual approval test.
+    await modal.locator('[data-final-rigid-batch-clear-all]').click();
+    await modal.locator('[data-final-rigid-batch-include-review]').uncheck();
 
     // The review-only opt-in is available inside this modal; no need to close,
     // search for the toolbar toggle and restart the preview.
@@ -553,6 +574,16 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
       'review-only approval is independent of selecting all eligible pointers');
+    await modal.locator('[data-final-rigid-batch-clear-all]').click();
+    await modal.locator('[data-final-rigid-batch-include-review]').uncheck();
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(),/2 selected/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(), false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1');
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').innerText(),'19.1');
     const hardHeldRow = modal.locator('[data-final-rigid-batch-row="3"]');
     assert.equal(await hardHeldRow.count(), 0,
       'hard-held row is hidden by default but not eligible for bulk approval');
