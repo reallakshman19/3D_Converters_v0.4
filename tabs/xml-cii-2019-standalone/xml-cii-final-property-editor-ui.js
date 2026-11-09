@@ -59,7 +59,16 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     zeroLabel.prepend(zeroInput);
     const feedback = element('div', '', { 'data-final-rigid-edit-feedback': String(pointer) });
     feedback.style.cssText = 'font-size:10px;color:#fca5a5;max-width:190px;white-space:normal;';
-    editedCell.append(editInput, zeroLabel, feedback);
+    const basisInput=reviewOnly?element('input',null,{
+      type:'text','data-final-rigid-edit-basis':String(pointer),
+      placeholder:'Verified physical mass source / ComponentRefNo',
+      'aria-label':'Physical mass evidence for RIGID pointer '+pointer,
+    }):null;
+    if(basisInput)basisInput.style.cssText=
+      'display:block;width:210px;max-width:100%;margin:5px 0;padding:5px;border:1px solid #e0a441;border-radius:4px;background:#292012;color:#ffe4b5;font-size:11px;';
+    editedCell.append(editInput,zeroLabel);
+    if(basisInput)editedCell.appendChild(basisInput);
+    editedCell.appendChild(feedback);
     cells[8].insertAdjacentElement('afterend', editedCell);
     const origError = element('td', '—', { 'data-final-rigid-original-error': String(pointer) });
     origError.style.cssText = 'padding:9px;border-bottom:1px solid #26364b;';
@@ -72,7 +81,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     status.append(element('span', ' '), selected);
     cells[11].insertAdjacentElement('afterend', diff);
     diff.insertAdjacentElement('afterend', status);
-    byPointer.set(pointer, { tr, original, editInput, zeroInput, feedback, origError, diff, status, selected });
+    byPointer.set(pointer,{tr,original,editInput,zeroInput,basisInput,feedback,origError,diff,status,selected});
   }
 
   const tools = element('div', null);
@@ -137,9 +146,17 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       row.querySelector('[data-final-rigid-edited]')?.value === row.dataset.batchProposedValue &&
       reference?.value === row.dataset.batchProposedValue && row.batchReferenceEvidence)
       return row.batchReferenceEvidence;
-    if (!reference?.value) return { kind: 'not-assessed', value: '', sourceContext };
+    const physicalMassBasis=byPointer.get(pointer).basisInput?.value.trim()||'';
+    if (!reference?.value) return {
+      kind:'manual-correction',value:'',sourceContext,physicalMassBasis,
+      massAuthority:'UNVERIFIED_REVIEW_ONLY',
+    };
     const kind = reference.dataset.referenceKind || 'manual';
-    return { kind, value: reference.value, basis: row.querySelector('[data-final-rigid-basis-detail]')?.textContent || '', sourceContext };
+    return { kind,value:reference.value,
+      basis:row.querySelector('[data-final-rigid-basis-detail]')?.textContent||'',
+      sourceContext,physicalMassBasis,
+      massAuthority:reviewOnly?'UNVERIFIED_REVIEW_ONLY':'UNCHANGED',
+    };
   };
 
   const syncOne = (pointer) => {
@@ -152,6 +169,11 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       return;
     }
     try {
+      // Quarantined conversions cannot use comparison scores as physical
+      // source-mass approval. Every edited final pointer needs explicit,
+      // pointer-local engineering basis in the change audit.
+      if(reviewOnly && (row.basisInput?.value.trim().length||0)<5)
+        throw new Error('Enter verified physical mass source / ComponentRefNo (at least 5 characters) before changing a held RIGID weight.');
       stageCiiPropertyEdit(session, {
         propertyId: 'RIGID.weight', recordPointer: pointer,
         originalToken: row.original.rawWeight,
@@ -216,6 +238,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   for (const [pointer, row] of byPointer) {
     row.editInput.addEventListener('input', () => changed(pointer));
     row.zeroInput.addEventListener('change', () => changed(pointer));
+    row.basisInput?.addEventListener('input',()=>changed(pointer));
     row.tr.querySelector('[data-final-rigid-reference]')?.addEventListener('input', () => changed(pointer));
     row.tr.querySelector('[data-final-rigid-suggestion]')?.addEventListener('change', () => changed(pointer));
   }
@@ -248,7 +271,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   // The batch toolbar is a PREVIEW and explicitly approved staging aid, not a
   // second writer. The same property transaction verifies the original source
   // digest, exact RIGID pointers, reparse and all bytes outside edited fields.
-  installFinalRigidBatchControls({
+  if(!reviewOnly)installFinalRigidBatchControls({
     overlay, inventory, plans,
     getEditedValues: () => new Map([...byPointer].map(([pointer, row]) =>
       [pointer, row.editInput.value])),
@@ -340,6 +363,13 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     },
   });
 
+  if(reviewOnly){
+    const note=element('div',
+      'Held CII: catalog/batch suggestions are comparison evidence only. Enter a verified source basis and a manual weight for each selected pointer. Source mass audit remains HOLD after a direct CII patch.',
+      {'data-final-rigid-manual-only':''});
+    note.style.cssText='font-size:12px;color:#ffddaa;margin:8px 0;';
+    report.insertAdjacentElement('beforebegin',note);
+  }
   buttons.preview.addEventListener('click', async () => {
     if (!session || invalid.size || !session.edits.size) {
       report.textContent = invalid.size ? 'REFUSED: Invalid edited values or missing zero confirmation.' : 'No modified fields.';
