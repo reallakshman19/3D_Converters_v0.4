@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseFinalCiiRigidInventory} from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-inventory.js';
-import {buildFinalRigidRepairAssessments} from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-repair-assessment.js';
+import {buildFinalRigidRepairAssessments,orderFinalRigidReviewIndices} from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-repair-assessment.js';
 import {
   finalRigidReviewAvailable,finalRigidRepairReviewResult,
 } from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js';
@@ -70,6 +70,14 @@ test('19.1mm final CII pointer 1 is prioritised but 109mm flange pointer 2 is no
   assert.equal(flange.automaticMassApproval,false);
   assert.deepEqual(inv.rows.map(x=>x.weight),[150,150],
     'review prioritisation must never change the original CII');
+});
+test('real source-audit failure outranks a short-only row without RIGID pointer renumbering',()=>{
+  const flipped={...audit,flags:audit.flags.map(item=>({
+    ...item,rigidPointer:2,element:2,from:10020,to:1120,lengthMm:109,
+  }))};
+  const issues=buildFinalRigidRepairAssessments(inv,refs,flipped);
+  assert.deepEqual(orderFinalRigidReviewIndices(issues),[1,0]);
+  assert.deepEqual(inv.rows.map(row=>row.rigidPointer),[1,2]);
 });
 test('short span alone triggers RECHECK, never physical owner or automatic weight',()=>{
   const result=buildFinalRigidRepairAssessments(inv,refs,null);
