@@ -6,7 +6,7 @@ import {auditRigidWeightOwnership,parseCiiRigidElementWeights,holdDuplicateRigid
 const section=(name,lines)=>['#$ '+name,...lines].join('\n');
 function element(e) {
   const rows=Array.from({length:15},()=> '0 0 0 0 0 0');
-  rows[0]=[e.from,e.to,0,e.mm,0,60.3].join(' ');
+  rows[0]=[e.from,e.to,e.dx??0,e.dy??e.mm,e.dz??0,60.3].join(' ');
   rows[10]=e.branch.length+' '+e.branch;
   rows[12]=[0,e.pointer,0,0,0,0].join(' ');
   rows[14]='0 0 0';
@@ -119,6 +119,56 @@ const cleanZero=auditRigidWeightOwnership({ciiText:cleanZeroCii,xmlRows:cleanZer
 assert.equal(cleanZero.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
 assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:cleanZeroCii},cleanZero).ciiText,cleanZeroCii,
   'explicit zero mass structural rigid must remain available');
+// EF-05-PRO.TEST original source flange: endpoint 1 has NodeNumber=-1,
+ // while final CII assigns generated 7369; endpoint 2 is real node 7370.
+ // A complete unique 86 mm flange span can be recovered geometrically,
+ // without treating the generated number as a source component identity.
+const efBranch='/ASIM-1836-4"-P8810031-31441C4-PP/B1';
+const efRef='=1006649732/121030';
+const efSource=[
+  source(efBranch,-1,efRef,1,3,13,'FLAN'),
+  source(efBranch,7370,efRef,2,89,13,'RIGID'),
+];
+const efCii=ciiText([{
+  from:7369,to:7370,mm:86,dy:0,dz:86,
+  pointer:1,weightN:130,branch:efBranch,
+}]);
+const efAudit=auditRigidWeightOwnership({
+  ciiText:efCii,xmlRows:efSource,estimator,
+});
+assert.equal(efAudit.rows[0].physicalComponentRef,efRef);
+assert.equal(efAudit.rows[0].ownerSpanMm,86);
+assert.equal(efAudit.rows[0].sourceGeneratedEndpoint,'FROM');
+assert.equal(efAudit.rows[0].sourceNodeGeometryRecovery,
+  'UNIQUE_ORIGINAL_COMPONENT_SPAN_CONFIRMED');
+assert.equal(efAudit.rows[0].fromRef,null,
+  'generated CII node must never be fabricated as an original XML ref');
+assert.equal(efAudit.rows[0].toRef,efRef);
+assert.deepEqual(efAudit.rows[0].flags,[]);
+assert.equal(efAudit.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
+assert.equal(efAudit.massVerified,false);
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:efCii},efAudit).ciiText,
+  efCii,'unique complete geometric identity can pass source parity, NOT engineering mass approval');
+const efShifted=efSource.map(x=>x.endpoint===1
+  ?{...x,position:[0,0,3.4]}:x);
+const efWrong=auditRigidWeightOwnership({
+  ciiText:efCii,xmlRows:efShifted,estimator,
+});
+assert.equal(efWrong.rows[0].physicalComponentRef,null);
+assert.ok(efWrong.rows[0].flags.includes('PHYSICAL_OWNER_UNRESOLVED'),
+  '0.4mm mismatch must not be accepted as physical owner');
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:efCii},efWrong).ciiText,'');
+const efUnapprovedZero=auditRigidWeightOwnership({
+  ciiText:efCii,xmlRows:efSource.map(x=>({...x,weightKg:0})),estimator,
+});
+assert.ok(efUnapprovedZero.rows[0].flags.includes('POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT'),
+  'geometric ownership is never positive physical-mass approval');
+const efAmbiguous=auditRigidWeightOwnership({
+  ciiText:efCii,xmlRows:[...efSource,{...efSource[1]}],estimator,
+});
+assert.ok(efAmbiguous.rows[0].flags.includes('SOURCE_NODE_UNRESOLVED'),
+  'duplicated genuine endpoint cannot anchor generated-node recovery');
+
 const qualifiedApiSource=[
   source('API',6000,'=WELDNECK',1,0,15,'FLAN',flangeInfo),
   source('API',6001,'=WELDNECK',2,109,15,'RIGID',flangeInfo)
