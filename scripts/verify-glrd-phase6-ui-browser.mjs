@@ -29,7 +29,15 @@ try{
       const bounds=scroll.getBoundingClientRect();
       const first=rows[0]?.getBoundingClientRect();
       const save=dialog.querySelector('[data-mode-a-rigid-apply]')?.getBoundingClientRect();
+      const dialogBounds=dialog.getBoundingClientRect();
+      const footer=dialog.querySelector('.mc-phase6-dialog-footer')?.getBoundingClientRect();
+      const toolbar=dialog.querySelector('.mc-phase6-toolbar')?.getBoundingClientRect();
       return {height:Math.round(bounds.height),width:Math.round(bounds.width),
+        dialogTop:Math.round(dialogBounds.top),dialogBottom:Math.round(dialogBounds.bottom),
+        tableTop:Math.round(bounds.top),tableBottom:Math.round(bounds.bottom),
+        footerTop:Math.round(footer?.top??-1),footerBottom:Math.round(footer?.bottom??-1),
+        saveTop:Math.round(save?.top??-1),saveBottom:Math.round(save?.bottom??-1),
+        viewportHeight:window.innerHeight,toolbarHeight:Math.round(toolbar?.height??-1),
         rows:rows.length,firstRowVisible:!!first && first.bottom>bounds.top+45 &&
           first.top<bounds.bottom-20,
         saveVisible:!!save && save.top>=0 && save.bottom<=window.innerHeight,
@@ -38,11 +46,13 @@ try{
         moreCollapsed:!dialog.querySelector('[data-phase6-more-actions]')?.open,
         columnsToggle:!!dialog.querySelector('[data-phase6-toggle-columns]')};
     });
+    console.log('PHASE6_VISIBLE_LAYOUT',JSON.stringify(measurements));
     assert.ok(measurements.height>=minHeight,
       'Editable table too short: '+JSON.stringify(measurements));
     assert.equal(measurements.rows,114);
     assert.equal(measurements.firstRowVisible,true,'first editable row must be visible above fold');
-    assert.equal(measurements.saveVisible,true,'fixed Save must be visible with table');
+    assert.equal(measurements.saveVisible,true,
+      'Save must stay in viewport: '+JSON.stringify(measurements));
     assert.equal(measurements.guidanceCollapsed,true);
     assert.equal(measurements.moreCollapsed,true);
     assert.equal(measurements.columnsToggle,true);
