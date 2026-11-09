@@ -3,7 +3,7 @@ import { installFinalRigidReviewLayout } from '../xml-cii-final-rigid-layout.js'
 import { buildFinalRigidReferencePlans } from '../xml-cii-final-rigid-master-references.js';
 import { classifyFinalRigidWeightError, configuredFinalRigidErrorThreshold, formatFinalRigidErrorPercent } from '../xml-cii-final-rigid-weight-error.js';
 import { parseFinalCiiRigidInventory } from '../xml-cii-final-rigid-inventory.js';
-import { buildFinalRigidRepairAssessments } from '../xml-cii-final-rigid-repair-assessment.js';
+import { buildFinalRigidRepairAssessments,orderFinalRigidReviewIndices } from '../xml-cii-final-rigid-repair-assessment.js';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;')
   .replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -272,7 +272,8 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = [], assessm
             'Bore (mm)', 'Rating', 'DTXR', 'Final CII weight (as exported)', 'Nearest Suggestions', 'Error %', 'Basis / evidence', 'Status'].map((item) =>
               `<th style="padding:9px;white-space:nowrap;">${item}</th>`).join('')}
         </tr></thead>
-        <tbody>${rows.map((row, index) => rowMarkup(row, plans[index],assessments.rows?.[index])).join('')}</tbody>
+        <tbody>${orderFinalRigidReviewIndices(assessments).map(index =>
+          rowMarkup(rows[index],plans[index],assessments.rows[index])).join('')}</tbody>
       </table>
       ${rows.length ? '' : '<div style="padding:14px;">Final CII contains zero RIGID records.</div>'}
     </div>
