@@ -9,7 +9,7 @@ import {
 } from '../tabs/xml-cii-2019-standalone/xml-cii-final-property-transactions.js';
 
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-const rev='20261109-final-cii-review-v035-r1';
+const rev='20261109-final-rigid-remediate-r2';
 const nativeRows=(from,to,pointer)=>[
   [from,to,0,0,0,100],
   ...Array.from({length:11},()=>[0,0,0,0,0,0]),
