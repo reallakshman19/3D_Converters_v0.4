@@ -18,7 +18,8 @@ const nativeRows=(from,to,pointer)=>[
 const cii=[
   '#$ VERSION','2019','#$ CONTROL',
   '1 0 0 0 0 0','0 1 0 0 0 0','0 0 0 0 0 0','0',
-  '#$ ELEMENTS',nativeRows(58,60,1),'#$ RIGID','590.000000 0',
+  '#$ ELEMENTS',nativeRows(58,60,1),'#$ RIGID',
+  '590.000000'.padStart(15)+'0'.padStart(13),
 ].join('\r\n')+'\r\n';
 
 test('final weight button only accepts released successful CII, never an audit HOLD',()=>{
@@ -35,7 +36,11 @@ test('explicit final 590N→610N patch changes only registered RIGID.weight and 
   const session=await createCiiPropertySession(pristine,{
     filename:'GLRD.cii',runIdentity:'test-run-1',
   });
-  stageCiiPropertyEdit(session,{propertyId:'RIGID.weight',recordPointer:1,value:610});
+  stageCiiPropertyEdit(session,{
+    propertyId:'RIGID.weight',recordPointer:1,
+    originalToken:'590.000000',newValue:'610',
+    unit:'CII_OUTPUT_WEIGHT',confirmed:true,
+  });
   const result=await verifyCiiPropertyTransaction(session,{
     currentCiiText:pristine,runIdentity:'test-run-1',
   });
