@@ -3,7 +3,7 @@ import { runXmlCii2019StandaloneEngineJob } from './xml-cii-workflow-engine-clie
 import { createWorkflowDiagnostics, normalizeWorkflowResult } from './xml-cii-workflow-types.js';
 import { applyStandaloneSifFacts } from './xml-cii-standalone-sif-apply.js';
 import { enrichStandaloneXmlForRun } from './xml-cii-standalone-run-parity.js';
-import { auditRigidWeightFromXml, holdDuplicateRigidMassOutput } from '../../converters/xml-cii2019-core/rigid-weight-empirical-audit.js?v=20261109-final-rigid-nearest-length-r3';
+import { auditRigidWeightFromXml, holdDuplicateRigidMassOutput } from '../../converters/xml-cii2019-core/rigid-weight-empirical-audit.js?v=20261109-ef05-dtxr-phase6-r5';
 
 function parseSupportConfig(raw) {
   try {
