@@ -748,7 +748,8 @@ try {
     const short=page.locator('[data-final-rigid-row][data-pointer="1"]');
     assert.equal(await short.isVisible(),true);
     assert.equal(await page.locator('[data-final-rigid-row]:visible').count(),1);
-    assert.match(await short.locator('[data-final-rigid-repair-evidence]').innerText(),
+    await short.locator('[data-final-rigid-repair-evidence] summary').click();
+    assert.match(await short.locator('[data-final-rigid-repair-evidence] pre').innerText(),
       /SHORT SPAN|19\.100|short final/i);
     assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
       'catalog batch mass promotion prohibited on engineering HOLD');
