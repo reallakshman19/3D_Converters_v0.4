@@ -407,8 +407,8 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       if (ticket !== version) throw new Error('Edits changed during apply.');
       committed = reviewOnly ? {
         ...revised,
-        revisedName:revised.revisedName.replace(/\\.cii$/i,'_REVIEW_ONLY.cii'),
-        auditName:revised.auditName.replace(/\\.json$/i,'_REVIEW_ONLY.json'),
+        revisedName:revised.revisedName.replace(/\.cii$/i,'_REVIEW_ONLY.cii'),
+        auditName:revised.auditName.replace(/\.json$/i,'_REVIEW_ONLY.json'),
         audit:{
           ...revised.audit,
           engineeringReleaseStatus:'HELD_NOT_APPROVED',
@@ -420,9 +420,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       } : revised;
       buttons.download.disabled = buttons.audit.disabled = false;
       report.textContent = (reviewOnly
-        ? 'REVIEW-ONLY REVISED CII READY — engineering HOLD is NOT cleared\\n'
-        : 'VERIFIED REVISED CII READY — original CII unchanged\\n') +
-        revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\\nSHA-256: ' +
+        ? 'REVIEW-ONLY REVISED CII READY — engineering HOLD is NOT cleared\n'
+        : 'VERIFIED REVISED CII READY — original CII unchanged\n') +
+        revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\nSHA-256: ' +
         revised.audit.revisedSha256;
     } catch (error) {
       committed = null; buttons.download.disabled = buttons.audit.disabled = true;
