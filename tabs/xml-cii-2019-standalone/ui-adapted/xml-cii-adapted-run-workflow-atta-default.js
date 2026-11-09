@@ -308,7 +308,14 @@ async function unresolvedRigidIssues(state, config) {
       candidates: ranking.candidates.slice(0, 5),
       rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
     }, config);
-  }).filter((issue) => !issue.mapped);
+  }).filter(issue=>{
+    if(issue.mapped)return false;
+    const skip=config?.overrides?.rigidWeightSkipped?.[issue.key];
+    // An explicit, source-local 0 kg skip is a recorded owner decision,
+    // NOT an approved positive mass. Do not send a previously skipped row
+    // back into the missing-weight loop on every Run.
+    return !(skip?.skipped===true && Number(skip.weightKg)===0);
+  });
 }
 
 async function reviewRigidWeights(stateRef, config, render) {
