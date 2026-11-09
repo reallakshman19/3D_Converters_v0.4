@@ -84,3 +84,16 @@ test('final RIGID review and exact run-pinned output are versioned through both 
     assert.ok(read(path).includes(dependency+'?v='+finalReviewVersion),
       path+' must load '+dependency+' at final-CII version '+finalReviewVersion);
 });
+
+
+test('Review Final weight opens the revised batch action/length modules, never cached obsolete code',()=>{
+  const rev=finalReviewVersion;
+  const editor=read('tabs/xml-cii-2019-standalone/xml-cii-final-property-editor-ui.js');
+  const batchUi=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-ui.js');
+  const planner=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-corrections.js');
+  assert.ok(editor.includes('xml-cii-final-rigid-batch-ui.js?v='+rev));
+  assert.ok(batchUi.includes('xml-cii-final-rigid-batch-corrections.js?v='+rev));
+  assert.match(batchUi,/data-final-rigid-batch-apply-nearest/);
+  assert.match(batchUi,/Element Length \\(mm\\)/);
+  assert.match(planner,/planAllNearestBatchDraftSelection/);
+});
