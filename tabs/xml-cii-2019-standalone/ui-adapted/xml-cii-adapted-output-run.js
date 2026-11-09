@@ -99,15 +99,23 @@ function renderRigidMassAudit(parent,state) {
   }
   const flags=Array.isArray(audit.flags)?audit.flags:[];
   if(flags.length) {
-    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Mass finding','Component','Reason'],
-      flags.slice(0,80).map(f=>({
-        Element:f.element,Nodes:f.from+' → '+f.to,'Rigid pointer':f.rigidPointer,
-        'Weight (N)':f.weightN,
-        'Mass finding':Number(f.weightN)>0
-          ? 'POSITIVE MASS: owner review required'
-          : 'ZERO MASS: identity/connection review',
-        Component:f.physicalComponentRef||'UNRESOLVED',Reason:f.code,
-      })),'No flagged masses.'));
+    const rowsByPointer=new Map(rows(audit.rows).map(row=>[row.rigidPointer,row]));
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Mass finding',
+      'Source FROM ref','Source TO ref','Identity evidence','Component','Reason'],
+      flags.slice(0,80).map(f=>{
+        const row=rowsByPointer.get(f.rigidPointer)||{};
+        return {
+          Element:f.element,Nodes:f.from+' → '+f.to,'Rigid pointer':f.rigidPointer,
+          'Weight (N)':f.weightN,
+          'Mass finding':Number(f.weightN)>0
+            ? 'POSITIVE MASS: owner review required'
+            : 'ZERO MASS: identity/connection review',
+          'Source FROM ref':row.fromRef||'generated/unresolved',
+          'Source TO ref':row.toRef||'generated/unresolved',
+          'Identity evidence':row.sourceNodeGeometryRecovery||row.ownership||'NOT_RUN',
+          Component:f.physicalComponentRef||'UNRESOLVED',Reason:f.code,
+        };
+      }),'No flagged masses.'));
     if(flags.length>80)panel.appendChild(createElement('p',
       'Showing first 80 of '+flags.length+' flags. Download Diagnostics JSON for full evidence.',
       'model-converters-workflow-detail-note'));
