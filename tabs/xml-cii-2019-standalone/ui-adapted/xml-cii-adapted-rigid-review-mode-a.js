@@ -508,6 +508,8 @@ function installPhase6ReviewLayout(overlay) {
     '.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions{margin:2px 0 0;border:1px solid #283c55;border-radius:5px;color:#b2c9e6;}',
     '.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions > summary{cursor:pointer;padding:5px 8px;font-size:12px;}',
     '.mc-rigid-review-dialog--phase6 .mc-phase6-extra-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:6px 8px 8px;max-height:140px;overflow:auto;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions:not([open]) > .mc-phase6-extra-actions{display:none!important;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-guidance:not([open]) > :not(summary){display:none!important;}',
     '.mc-rigid-review-dialog--phase6 .mc-phase6-extra-actions button{font-size:12px;padding:6px 10px!important;min-height:31px;}',
     '.mc-rigid-review-dialog--phase6 .mc-phase6-action-status:not(:empty){display:block;margin:5px 2px;font-size:12px;}',
     '.mc-rigid-review-dialog--phase6 .mc-phase6-action-status:empty{display:none;}',
