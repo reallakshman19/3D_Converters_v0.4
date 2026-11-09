@@ -198,6 +198,8 @@ export function phase6QualifiedExactCandidate(row){
 
 function phase6EvidenceDetails(issue) {
   const fields=[
+    ['Source XML',issue.fileName||issue.alias||issue.sourceId],
+    ['Branch',issue.branchName],
     ['Line Key',issue.lineKey],['Component Type',issue.componentType],
     ['Component Ref / Endpoint',(issue.componentRefNo||'')+(issue.endpoint?'_'+issue.endpoint:'')],
     ['Valve Hint',formatValveHint(issue.nodeHint)],
