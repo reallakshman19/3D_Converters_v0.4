@@ -1,5 +1,6 @@
 import { createFinalRigidWeightReviewButton, finalRigidReviewAvailable } from './xml-cii-adapted-final-rigid-review.js?v=20261109-final-rigid-nearest-length-r3';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
+import { explainRigidMassAudit } from '../xml-cii-rigid-mass-audit-presentation.js';
 import { detectXmlCiiWorkflowSourceKind, maskedFileName } from '../xml-cii-workflow-source-detect.js';
 import { createElement, createOption, downloadTextFile } from './xml-cii-adapted-dom.js';
 import { updateWorkflowOptions, applyStandaloneOutputRunReadiness, updateWorkflowState, xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js';
@@ -76,21 +77,39 @@ function renderRigidMassAudit(parent,state) {
     'Status: '+status+' · Engineering mass verified: NO · CII release: '+
       (state?.result?.ciiText?'SOURCE-PARITY-ONLY (NOT ENGINEERING APPROVED)':'HELD'),
     'model-converters-workflow-detail-note'));
+  const summary=explainRigidMassAudit(audit);
   panel.appendChild(table(['ID','Value'],[
     {id:'Element count',Value:audit.elementCount??'NOT_RUN'},
     {id:'Rigid pointers audited',Value:audit.auditedRigidCount??'NOT_RUN'},
-    {id:'Flagged elements',Value:audit.summary?.flaggedElements??'NOT_RUN'},
+    {id:'Distinct flagged elements',Value:audit.summary?.flaggedElements??'NOT_RUN'},
+    {id:'Diagnostic findings (may repeat an element)',Value:summary.flagRecords},
+    {id:'Flagged zero-weight RIGIDs',Value:summary.zeroWeightCount},
+    {id:'Flagged positive-weight RIGIDs',Value:summary.positiveWeightCount},
+    {id:'Zero-weight intercomponent links (source refs distinct)',Value:summary.zeroBetweenDistinctRefs},
+    {id:'Other zero-weight source identity gaps',Value:summary.zeroNeedsNodeReconciliation},
     {id:'Audit exception',Value:audit.errorCode||'none'},
   ],'No independent mass audit evidence.'));
+  if(summary.flagRecords){
+    panel.appendChild(createElement('p',
+      'WHY HELD: the CII converter ran, but the source-to-final-RIGID audit could not establish a unique physical owner for every emitted RIGID element. '+
+      summary.zeroWeightCount+' flagged elements currently carry 0 weight: an unresolved owner on a zero-weight connection does not by itself prove an incorrect positive mass, but still fails strict identity traceability. '+
+      summary.positiveWeightCount+' flagged RIGID(s) carry positive weight and need higher-priority owner/mass reconciliation. '+
+      'Multiple flags can refer to the SAME element. Correct source mapping/approval, then re-run the conversion and ownership audit; manually changing CII output does NOT clear the original engineering HOLD.',
+      'model-converters-workflow-detail-note'));
+  }
   const flags=Array.isArray(audit.flags)?audit.flags:[];
   if(flags.length) {
-    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Component','Reason'],
-      flags.slice(0,30).map(f=>({
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Mass finding','Component','Reason'],
+      flags.slice(0,80).map(f=>({
         Element:f.element,Nodes:f.from+' → '+f.to,'Rigid pointer':f.rigidPointer,
-        'Weight (N)':f.weightN,Component:f.physicalComponentRef||'UNRESOLVED',Reason:f.code,
+        'Weight (N)':f.weightN,
+        'Mass finding':Number(f.weightN)>0
+          ? 'POSITIVE MASS: owner review required'
+          : 'ZERO MASS: identity/connection review',
+        Component:f.physicalComponentRef||'UNRESOLVED',Reason:f.code,
       })),'No flagged masses.'));
-    if(flags.length>30)panel.appendChild(createElement('p',
-      'Showing first 30 of '+flags.length+' flags. Download Diagnostics JSON for full evidence.',
+    if(flags.length>80)panel.appendChild(createElement('p',
+      'Showing first 80 of '+flags.length+' flags. Download Diagnostics JSON for full evidence.',
       'model-converters-workflow-detail-note'));
   }
 }
