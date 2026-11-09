@@ -94,6 +94,6 @@ test('Review Final weight opens the revised batch action/length modules, never c
   assert.ok(editor.includes('xml-cii-final-rigid-batch-ui.js?v='+rev));
   assert.ok(batchUi.includes('xml-cii-final-rigid-batch-corrections.js?v='+rev));
   assert.match(batchUi,/data-final-rigid-batch-apply-nearest/);
-  assert.match(batchUi,/Element Length \\(mm\\)/);
+  assert.ok(batchUi.includes('Element Length (mm)'));
   assert.match(planner,/planAllNearestBatchDraftSelection/);
 });
