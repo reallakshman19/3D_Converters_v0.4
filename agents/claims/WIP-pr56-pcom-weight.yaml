@@ -1,0 +1,30 @@
+schema: AgentClaim.v1
+repository: reallakshman19/3D_Converters_v0.4
+claim_id: WIP-pr56-pcom-weight
+branch: codex/fix-pr56-rigid-pcom-weight-20261107
+workstream: XML_CII_RIGID_PHYSICAL_MASS
+criticality: ENGINEERING_CRITICAL
+authority: WRITE_ALLOWED_AFTER_QUALIFICATION
+qualification: QUALIFIED_96_OF_100
+claimed_paths:
+  - tabs/xml-cii-2019-standalone/xml-cii-standalone-run-parity.js
+  - converters/scripts/xml_to_cii2019.py
+  - tests/test_xml_cii_native_rigid_owner_guard.py
+  - tests/test_xml_cii_native_cli_guard.py
+  - tests/xml-cii-standalone-run-parity-weight.test.mjs
+  - agents/WIP-pr56-pcom-weight_workreport.md
+  - agents/status/WIP-pr56-pcom-weight.yaml
+  - agents/claims/WIP-pr56-pcom-weight.yaml
+exclusions:
+  - .github/workflows/**
+  - empirical master rows, formulas, tolerances, or automatic approval
+  - CII ELEMENTS pointer layout
+  - flange or valve mass values
+  - topology/renumbering policy
+  - split-rigid-weight propagation
+coordination:
+  PR9: SAFE_NO_FILE_OR_AUTHORITY_OVERLAP
+  PR4: READ_ONLY_WITNESS_NO_FILE_OVERLAP
+  audit_pr5_pr6_combined_branch: EVIDENCE_ONLY_NO_PRODUCTION_OVERLAP
+merge_authority: OWNER_ONLY
+last_updated: 2026-11-07T00:00:00+05:30
