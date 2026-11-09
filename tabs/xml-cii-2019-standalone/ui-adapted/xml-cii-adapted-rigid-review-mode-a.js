@@ -18,6 +18,30 @@ const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, 
 const attr = (value) => esc(value).replace(/'/g, '&#39;');
 const text = (value) => value === undefined || value === null ? '' : String(value).trim();
 
+/**
+ * DTXR is a staged physical-component description, not an approved mass or
+ * a Rating override. A JSONPath like $[187].children[43] is provenance,
+ * never the text to show as the standalone tooltip.
+ */
+export function formatModeARigidDtxrEvidenceTooltip(issue = {}) {
+  const description=text(issue.dtxr);
+  const rating=extractXmlCiiRatingFromDtxr(description);
+  const path=text(issue.dtxrSourcePath);
+  const match=path.match(/\$[\[{](\d+)[\]}]\.children\[(\d+)\]/);
+  const where=match
+    ? 'Staged JSON branch ' + (Number(match[1])+1) +
+      ', component ' + (Number(match[2])+1) + ' (1-based labels)'
+    : (path?'Staged JSON provenance available in row Details':
+      'No staged JSON source path recorded');
+  return [
+    description ? 'DTXR: '+description : 'DTXR unavailable',
+    rating ? 'Class '+rating+'# parsed from DTXR — comparison evidence ONLY; not saved as Rating'
+      : 'DTXR contains no qualified Rating',
+    where,
+  ].join(' · ');
+}
+
+
 export async function collectModeARigidWeightReviewIssues(state = {}, config = {}, {includeSkipped = false, includeMapped = false} = {}) {
   const sourceRows=includeMapped ? collectXmlCiiWeightMatchRows : collectXmlCiiZeroRigidWeightIssues;
   return reconcileXmlCiiWeightMatchSourceBores(sourceRows(state.sourceText || '', state.stagedJsonText || '', config), state.sourceText || '').filter(isRigidWeightReviewEligibleIssue).map((issue) => {
@@ -209,6 +233,8 @@ function phase6EvidenceDetails(issue) {
     ['Status',issue.mapped?'MAPPED':issue.existingSkipped?'SKIPPED':'REVIEW'],
     ['Match Score',issue.candidates?.[0]?.totalScore],
     ['Reference kg',phase6ComparableReference(issue)?.kg??'None (qualified match unavailable)'],
+    ['DTXR staged source path (technical)',issue.dtxrSourcePath||'Not available'],
+    ['DTXR Rating status','Comparison evidence only unless explicitly applied through the DTXR Rating control'],
     ['Reference authority',phase6ComparableReference(issue)?.authority??'NO_MATCH'],
     ['Candidate Type',issue.candidates?.[0]?.typeDesc],
   ];
@@ -241,7 +267,7 @@ function rowMarkup(issue, rowIndex) {
       <strong>${esc(issue.nodeNumberDisplay || issue.nodeNumber)}</strong>
       <div data-rigid-review-source-ref style="font-size:10px;color:#9fb5d1;overflow-wrap:anywhere;">${esc(issue.componentRefNo || 'No ref')}${issue.endpoint ? '_' + esc(issue.endpoint) : ''}</div>
       ${issue.phase6?phase6EvidenceDetails(issue):''}</td>
-    <td title="${attr(issue.dtxrSourcePath || '')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>
+    <td title="${attr(formatModeARigidDtxrEvidenceTooltip(issue))}" data-dtxr-source-path="${attr(issue.dtxrSourcePath||'')}" style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);min-width:180px;">${esc(issue.dtxr || 'Not found')}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap;">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
     <td style="padding:7px;border-bottom:1px solid rgba(148,163,184,.1);">
        <input type="number" min="0" step="0.001" class="mc-rigid-review-input"
