@@ -3,6 +3,7 @@ import { classifySourceWeightFamily, isWeightMasterPhysicalFamilyMatch } from '.
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261107-weights-pyodide-fix-1';
 import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api-atta-default.js?v=20261109-final-rigid-nearest-length-r3';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
+import { detectXmlCiiWorkflowSourceKind } from '../xml-cii-workflow-source-detect.js';
 import { buildXmlCiiWorkflowJobFromUiState } from '../xml-cii-workflow-ui-adapter.js';
 import { applyStandaloneOutputRunReadiness, updateWorkflowState, xmlCiiEnrichedConfigFromState, saveMasterContextToLocalStorage } from './xml-cii-adapted-state.js';
 import {
@@ -311,6 +312,9 @@ async function unresolvedRigidIssues(state, config) {
 }
 
 async function reviewRigidWeights(stateRef, config, render) {
+  const actual=detectXmlCiiWorkflowSourceKind(
+    stateRef.current?.sourceText,stateRef.current?.sourceKind);
+  if(actual==='inputxml')return true; // preserve existing InputXML workflow
   // InputXML keeps its own established route; XML source-mass decisions live
   // exclusively in unified 6 Rigid Weight Review (Phase 6), in both single
   // and Mode A. Run is never allowed to silently use a second popup.
