@@ -5,7 +5,7 @@
  */
 import {
   planFinalRigidBatchCorrections, planAllNearestBatchDraftSelection,
-} from './xml-cii-final-rigid-batch-corrections.js';
+} from './xml-cii-final-rigid-batch-corrections.js?v=20261109-final-rigid-nearest-length-r3';
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
