@@ -3,6 +3,7 @@ import { installFinalRigidReviewLayout } from '../xml-cii-final-rigid-layout.js'
 import { buildFinalRigidReferencePlans } from '../xml-cii-final-rigid-master-references.js';
 import { classifyFinalRigidWeightError, configuredFinalRigidErrorThreshold, formatFinalRigidErrorPercent } from '../xml-cii-final-rigid-weight-error.js';
 import { parseFinalCiiRigidInventory } from '../xml-cii-final-rigid-inventory.js';
+import { buildFinalRigidRepairAssessments } from '../xml-cii-final-rigid-repair-assessment.js';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;')
   .replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -13,11 +14,31 @@ function ciiEvidence(result) {
     ? result.ciiText : '';
 }
 
-export function finalRigidReviewAvailable(state) {
-  return !state?.running && Boolean(ciiEvidence(state?.result));
+// A flagged native CII is not a released artifact, but can be opened in a
+// separate review-only workbench. Never replace state.result or set ok=true.
+export function finalRigidRepairReviewResult(result) {
+  if (ciiEvidence(result)) return result;
+  const held=result?.rigidMassRepairCandidate;
+  const audit=result?.diagnostics?.rigidMassAudit;
+  if(result?.ok!==false||result?.error!=='RIGID_MASS_CONSERVATION_HOLD'||
+    held?.status!=='QUARANTINED_REVIEW_ONLY'||
+    held.engineeringReleaseAuthorized!==false||
+    audit?.status!=='HOLD'||!Array.isArray(audit.flags)||!audit.flags.length||
+    typeof held.ciiText!=='string'||!held.ciiText.trim())return null;
+  return {
+    ...result,
+    ciiText:held.ciiText,
+    ciiName:held.ciiName||'held-rigid-weights.cii',
+    rigidMassReviewOnly:true,
+    rigidMassOriginalHold:true,
+  };
 }
 
-function rowMarkup(row, plan) {
+export function finalRigidReviewAvailable(state) {
+  return !state?.running && Boolean(finalRigidRepairReviewResult(state?.result));
+}
+
+function rowMarkup(row, plan, assessment = {}) {
   const linked = row.linkedElements;
   const elementIds = linked.map((element) => element.index).join(', ') || '—';
   const fromNodes = linked.map((element) => element.fromNode).join(', ') || '—';
@@ -99,9 +120,18 @@ function rowMarkup(row, plan) {
   const status = [
     !linked.length ? 'Unreferenced pointer' : (linked.length > 1 ? 'Shared by multiple elements' : 'Linked'),
     row.weight <= 0 ? 'Zero / negative weight' : '',
+    assessment.auditFlagged ? 'SOURCE AUDIT FLAGGED' : '',
+    assessment.shortSpan ? 'SHORT SPAN REVIEW' : '',
+    assessment.sourceUnresolved ? 'SOURCE UNRESOLVED' : '',
   ].filter(Boolean).join(' · ');
-  return `<tr data-final-rigid-row data-pointer="${row.rigidPointer}" data-search="${esc(search)}" data-status="${esc(row.status)}"
-    data-nonpositive="${row.weight <= 0}">
+  const repairReason=(assessment.reasons||[]).join('\\n');
+  return `<tr data-final-rigid-row data-pointer="${row.rigidPointer}" data-search="${esc(search+' '+repairReason)}" data-status="${esc(row.status)}"
+    data-nonpositive="${row.weight <= 0}"
+    data-final-rigid-repair-needed="${assessment.repairNeeded===true}"
+    data-final-rigid-audit-flagged="${assessment.auditFlagged===true}"
+    data-final-rigid-short-span="${assessment.shortSpan===true}"
+    data-final-rigid-source-unresolved="${assessment.sourceUnresolved===true}"
+    title="${esc(repairReason)}">
     ${cell(row.rigidPointer)}${cell(elementIds)}${cell(fromNodes)}${cell(toNodes)}
     ${cell(lengths)}
     ${metadataCell(context?.bore, 'bore')}
@@ -133,12 +163,19 @@ function rowMarkup(row, plan) {
         <pre data-final-rigid-basis-detail="${row.rigidPointer}" style="white-space:pre-wrap;font-size:11px;max-width:310px;">${esc([trace, auto?.basis || ''].filter(Boolean).join('\n'))}</pre>
       </details>
     </td>
-    ${cell(context?.status === 'CONFLICT_REVIEW' ? status + ' · Source conflict / Review' :
-      context?.status === 'NOT_RESOLVED' ? status + ' · Source unresolved' : status)}</tr>`;
+    <td style="padding:8px;border-bottom:1px solid #26364b;min-width:190px;max-width:300px;">
+      <strong style="color:${assessment.auditFlagged?'#fca5a5':assessment.repairNeeded?'#fbbf24':'#9fd9bc'};">
+        ${esc(status||'No flagged issue')}</strong>
+      ${assessment.repairNeeded?`<details data-final-rigid-repair-evidence="${row.rigidPointer}">
+        <summary style="cursor:pointer;color:#93c5fd;">Why review? / owner evidence</summary>
+        <pre style="white-space:pre-wrap;font-size:11px;">${esc(repairReason)}
+        </pre></details>`:''}
+    </td></tr>`;
 }
 
-function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
+function modalMarkup(inventory, filename, thresholdPct = 20, plans = [], assessments = {}, reviewOnly = false) {
   const { rows, declared, unreferencedCount, sharedCount, nonpositiveCount } = inventory;
+  const flagged=assessments.summary||{};
   return `<div class="mc-rigid-review-dialog" role="dialog" aria-modal="true"
       aria-label="Review final CII rigid weights" tabindex="-1"
       style="background:#0f172a;color:#e2e8f0;border:1px solid #253a55;border-radius:8px;
@@ -150,7 +187,9 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
         <div data-final-rigid-subtitle title="${esc(filename)}" style="font-size:12px;color:#94a3b8;margin-top:4px;">${esc(filename)}
           · ${rows.length} RIGID pointers · ${declared.elements} final elements
           · ${unreferencedCount} unreferenced · ${sharedCount} shared
-          · ${nonpositiveCount} zero/negative weights</div>
+          · ${nonpositiveCount} zero/negative weights
+          · ${flagged.repairNeeded||0} need review · ${flagged.auditFlagged||0} audit flagged
+          · ${flagged.shortSpan||0} short spans</div>
       </div>
       <div data-final-rigid-header-actions>
         <button type="button" data-final-rigid-fullscreen aria-pressed="false" aria-label="Enter fullscreen"
@@ -160,6 +199,12 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
           border:1px solid #475569;color:#e2e8f0;border-radius:6px;cursor:pointer;">Close</button>
       </div>
     </div>
+    ${reviewOnly?`<div data-final-rigid-engineering-hold style="border:1px solid #e59b37;
+      background:#36210d;color:#ffe7a3;padding:10px;margin-bottom:8px;border-radius:6px;font-size:12px;">
+      ENGINEERING HOLD — source-to-CII mass ownership failed. This is a QUARANTINED review copy,
+      not a released CII. Manual corrections create a separately named review-only revised file.
+      The source mass/conservation audit is NOT cleared or approved by editing CII bytes.
+    </div>`:''}
     <details data-final-rigid-guidance style="background:#2a210b;border:1px solid #7c5a18;
       border-radius:6px;padding:9px;font-size:12px;color:#ffe7a3;margin-bottom:12px;">
       <summary style="cursor:pointer;display:flex;align-items:center;gap:7px;font-weight:600;list-style:none;">
@@ -193,6 +238,10 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
           padding:7px;min-width:300px;">
       <select data-final-rigid-filter style="background:#0b1220;color:#e2e8f0;border:1px solid #475569;
         border-radius:5px;padding:7px;">
+        <option value="REPAIR_CANDIDATES" selected>Needs weight correction / review</option>
+        <option value="AUDIT_FLAGGED">Source audit flags</option>
+        <option value="SHORT_SPAN">Short final CII spans (≤25 mm)</option>
+        <option value="SOURCE_UNRESOLVED">Unresolved physical owner</option>
         <option value="all">All final rigids</option>
         <option value="LINKED">Linked</option>
         <option value="ZERO_OR_NEGATIVE">Zero / negative weight</option>
@@ -206,6 +255,12 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
       </label>
       <span data-final-rigid-visible style="color:#94a3b8;font-size:12px;"></span>
     </div>
+    <div data-final-rigid-remediation-overview style="color:#fbd38d;margin-bottom:7px;font-size:12px;">
+      Focused review: ${flagged.repairNeeded||0} of ${rows.length} final RIGID weights need
+      investigation. A short span is a CHECK, not a component identity or mass estimate.
+      Enter a physically verified replacement in the editable output-weight column,
+      preview the change, then generate the separate revised CII.
+    </div>
     <div data-final-rigid-assessment role="status"
       style="margin:0 0 10px;color:#cbd5e1;font-size:12px;">
       Reference-based weight error not assessed until independent weights are supplied.
@@ -217,7 +272,7 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = []) {
             'Bore (mm)', 'Rating', 'DTXR', 'Final CII weight (as exported)', 'Nearest Suggestions', 'Error %', 'Basis / evidence', 'Status'].map((item) =>
               `<th style="padding:9px;white-space:nowrap;">${item}</th>`).join('')}
         </tr></thead>
-        <tbody>${rows.map((row, index) => rowMarkup(row, plans[index])).join('')}</tbody>
+        <tbody>${rows.map((row, index) => rowMarkup(row, plans[index],assessments.rows?.[index])).join('')}</tbody>
       </table>
       ${rows.length ? '' : '<div style="padding:14px;">Final CII contains zero RIGID records.</div>'}
     </div>
@@ -248,21 +303,25 @@ function errorMarkup(error) {
 }
 
 export function openFinalRigidWeightReview(result, options = {}) {
-  if (!ciiEvidence(result)) return false;
+  const reviewResult=finalRigidRepairReviewResult(result);
+  if (!reviewResult) return false;
   let inventory;
-  try { inventory = parseFinalCiiRigidInventory(result.ciiText); }
+  try { inventory = parseFinalCiiRigidInventory(reviewResult.ciiText); }
   catch (error) { errorMarkup(error); return false; }
   const overlay = document.createElement('div');
   overlay.className = 'model-converters-workflow-popup-overlay mc-rigid-review-overlay';
   let plans;
-  try { plans = buildFinalRigidReferencePlans(inventory, result.finalRigidReviewEvidence); }
+  try { plans = buildFinalRigidReferencePlans(inventory, reviewResult.finalRigidReviewEvidence); }
   catch (error) {
     plans = inventory.rows.map((row) => ({
       rigidPointer: row.rigidPointer, candidates: [], autoIndex: -1,
       reason: 'Catalog reference lookup failed: ' + (error?.message || String(error)),
     }));
   }
-  overlay.innerHTML = modalMarkup(inventory, result.ciiName || 'Generated CII', options.errorThresholdPct ?? 20, plans);
+  const assessments=buildFinalRigidRepairAssessments(inventory,plans,
+    result.diagnostics?.rigidMassAudit);
+  overlay.innerHTML = modalMarkup(inventory, reviewResult.ciiName || 'Generated CII',
+    options.errorThresholdPct ?? 20, plans, assessments, reviewResult.rigidMassReviewOnly===true);
   document.body.appendChild(overlay);
   const search = overlay.querySelector('[data-final-rigid-search]');
   const filter = overlay.querySelector('[data-final-rigid-filter]');
@@ -327,7 +386,11 @@ export function openFinalRigidWeightReview(result, options = {}) {
       if (comparison.outside === true) overLimit += 1;
       tr.dataset.outsideError = String(comparison.outside === true);
       const matchesStatus = choice === 'all'
-        || (choice === 'OVER_LIMIT' ? tr.dataset.outsideError === 'true'
+        || (choice === 'REPAIR_CANDIDATES' ? tr.dataset.finalRigidRepairNeeded === 'true'
+          : choice === 'AUDIT_FLAGGED' ? tr.dataset.finalRigidAuditFlagged === 'true'
+          : choice === 'SHORT_SPAN' ? tr.dataset.finalRigidShortSpan === 'true'
+          : choice === 'SOURCE_UNRESOLVED' ? tr.dataset.finalRigidSourceUnresolved === 'true'
+          : choice === 'OVER_LIMIT' ? tr.dataset.outsideError === 'true'
           : choice === 'ZERO_OR_NEGATIVE' ? tr.dataset.nonpositive === 'true'
           : tr.dataset.status === choice);
       const modifiedOnly = overlay.querySelector('[data-final-rigid-modified-only]')?.checked === true;
@@ -405,7 +468,14 @@ export function openFinalRigidWeightReview(result, options = {}) {
   limitInput?.addEventListener('input', refresh);
   search?.addEventListener('input', refresh);
   filter?.addEventListener('change', refresh);
-  installFinalCiiPropertyEditor({ overlay, result, inventory, plans, refresh, getCurrentResult: options.getCurrentResult });
+  installFinalCiiPropertyEditor({
+    overlay, result:reviewResult, inventory, plans, refresh,
+    // Binding retains original *actual* result identity, not a fabricated
+    // successful run. Switching source or running again invalidates edits.
+    getCurrentResult:()=>
+      (typeof options.getCurrentResult!=='function'||options.getCurrentResult()===result)
+        ?reviewResult:null,
+  });
   layout = installFinalRigidReviewLayout(overlay);
   refresh();
   search?.focus();
@@ -416,11 +486,15 @@ export function createFinalRigidWeightReviewButton(state, getCurrentResult = () 
   const available = finalRigidReviewAvailable(state);
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = 'Review Final weight';
+  const quarantined=state?.result?.rigidMassRepairCandidate?.status==='QUARANTINED_REVIEW_ONLY' &&
+    !ciiEvidence(state?.result);
+  button.textContent = quarantined ? 'Review Final weight — repair held RIGIDs' : 'Review Final weight';
   button.dataset.action = 'review-final-weight';
   button.className = 'model-converters-download-btn';
   button.disabled = !available;
-  button.title = available ? 'Review every RIGID pointer and its exported CII weight'
+  button.title = available ? (quarantined
+    ? 'Correct flagged emitted RIGID weights in quarantined review-only CII; original release remains held'
+    : 'Find unresolved and suspicious final RIGID pointers, correct with verified mass and re-extract CII')
     : 'Run a successful CII conversion first to enable final rigid review.';
   button.style.cssText = 'width:100%;padding:12px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;font-weight:700;cursor:pointer;';
   button.addEventListener('click', () => openFinalRigidWeightReview(state.result, {
