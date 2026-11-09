@@ -290,8 +290,7 @@ function renderRunControls(parent, stateRef, state, report, render) {
   if (finalizeBtn.style) Object.assign(finalizeBtn.style, { width: '100%', padding: '12px', background: (state.running || report.summary.blockingCount > 0) ? '#334155' : '#1e4ed8', color: '#fff', border: 'none', fontWeight: '700' });
   finalizeBtn.disabled = !!(state.running || report.summary.blockingCount > 0);
   finalizeBtn.dataset.action = 'run';
-  const finalReview = createFinalRigidWeightReviewButton(state,
-    () => stateRef.current?.result);
+  const finalReview = createFinalRigidWeightReviewButton(state, () => stateRef.current?.result);
   actionDiv.append(runReviewBtn, noteDiv, refreshBtn, finalizeBtn, finalReview);
   if (!finalRigidReviewAvailable(state)) {
     const reason = !state?.result?.ciiText
