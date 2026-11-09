@@ -1,4 +1,4 @@
-import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-final-rigid-nearest-length-r3';
+import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-ef05-dtxr-phase6-r5';
 import {
   activateModeASource,
   buildModeABatchManifest,
