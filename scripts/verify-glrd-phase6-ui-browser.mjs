@@ -360,6 +360,7 @@ try{
   assert.equal(Number(await changedInput.inputValue()),refKg*2);
   assert.match(await changedInput.locator('xpath=..').locator('xpath=..')
     .locator('[data-phase6-error-pct]').innerText(),/\+100\.0%/);
+  await showExtra();
   assert.match(await page.locator('[data-phase6-deviation40]').innerText(),/\([1-9]/);
   await showExtra();
   await page.locator('[data-phase6-deviation40]').click();
