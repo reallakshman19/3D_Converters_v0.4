@@ -225,6 +225,10 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
       const span=len(group.start.position,group.end.position);
       return overlap>=0.5*Math.min(edge.lengthMm,span)?{group,overlap}:null;
     }).filter(Boolean);
+    // A reconstructed coordinate is not a recovered SOURCE node. It may
+    // replace SOURCE_NODE_UNRESOLVED only after a unique original physical
+    // component with both authentic endpoints is independently established.
+    if(recovered&&matches.length!==1)flags.push('SOURCE_NODE_UNRESOLVED');
     if(matches.length>1)flags.push('PHYSICAL_OWNER_AMBIGUOUS');
     const hit=matches.length===1?matches[0]:null;
     const group=hit?.group||null;
