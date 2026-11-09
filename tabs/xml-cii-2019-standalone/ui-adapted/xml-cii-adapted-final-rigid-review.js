@@ -1,4 +1,4 @@
-import { installFinalCiiPropertyEditor } from '../xml-cii-final-property-editor-ui.js';
+import { installFinalCiiPropertyEditor } from '../xml-cii-final-property-editor-ui.js?v=20261109-final-rigid-remediate-r2';
 import { installFinalRigidReviewLayout } from '../xml-cii-final-rigid-layout.js';
 import { buildFinalRigidReferencePlans } from '../xml-cii-final-rigid-master-references.js';
 import { classifyFinalRigidWeightError, configuredFinalRigidErrorThreshold, formatFinalRigidErrorPercent } from '../xml-cii-final-rigid-weight-error.js';
