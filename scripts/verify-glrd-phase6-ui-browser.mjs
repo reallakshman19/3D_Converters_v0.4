@@ -372,6 +372,13 @@ try{
   await page.locator('[data-mode-a-rigid-apply]').click();
   assert.equal(await page.evaluate(()=>window.__phase6Ref.current.supportConfigJson),
     pendingConfig,'threshold button must not commit without explicit review');
+  const approvalLayout=await page.locator('.mc-rigid-review-dialog').evaluate(dialog=>{
+    const review=dialog.querySelector('[data-mode-a-rigid-bulk-review-panel]').getBoundingClientRect();
+    const approve=dialog.querySelector('[data-phase6-approve-all]').getBoundingClientRect();
+    return {reviewTop:Math.round(review.top),approveBottom:Math.round(approve.bottom)};
+  });
+  assert.ok(approvalLayout.reviewTop>=approvalLayout.approveBottom,
+    'auto-opened bulk-review panel must not cover Approve all: '+JSON.stringify(approvalLayout));
   await page.locator('[data-phase6-approve-all]').click();
   assert.equal(await page.locator('[data-mode-a-rigid-bulk-review-panel]').isVisible(),true);
   assert.equal(await page.locator('[data-mode-a-rigid-confirm-bulk-review]').isDisabled(),true);
