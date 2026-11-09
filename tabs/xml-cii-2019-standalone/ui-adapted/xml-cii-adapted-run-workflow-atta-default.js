@@ -318,10 +318,35 @@ async function unresolvedRigidIssues(state, config) {
   });
 }
 
+async function reviewInputXmlRigidWeights(stateRef,config){
+  // InputXML has its own element-based review semantics. Keep this legacy
+  // source-kind-specific workflow; only PSI116 XML is unified with Phase 6.
+  try{
+    const result=await openStandaloneRigidWeightReviewPopup(
+      await unresolvedRigidIssues(stateRef.current,config),stateRef,config);
+    if(result.cancelled)return false;
+    if(Object.keys(result.weightsByKey||{}).length||Object.keys(result.ratingsByKey||{}).length){
+      config.overrides={...(config.overrides||{}),
+        rigidWeight:{...(config.overrides?.rigidWeight||{}),...(result.weightsByKey||{})},
+        rating:{...(config.overrides?.rating||{}),...(result.ratingsByKey||{})},
+      };
+      stateRef.current.supportConfigJson=JSON.stringify(config,null,2);
+      if(stateRef.current.masterContext){
+        stateRef.current.masterContext.config=config;
+        saveMasterContextToLocalStorage(stateRef.current.masterContext);
+      }
+    }
+    return true;
+  }catch(error){
+    console.warn('InputXML rigid weight review failed:',error);
+    return false; // never continue CII conversion after a failed review
+  }
+}
+
 async function reviewRigidWeights(stateRef, config, render) {
   const actual=detectXmlCiiWorkflowSourceKind(
     stateRef.current?.sourceText,stateRef.current?.sourceKind);
-  if(actual==='inputxml')return true; // preserve existing InputXML workflow
+  if(actual==='inputxml')return reviewInputXmlRigidWeights(stateRef,config);
   // InputXML keeps its own established route; XML source-mass decisions live
   // exclusively in unified 6 Rigid Weight Review (Phase 6), in both single
   // and Mode A. Run is never allowed to silently use a second popup.
