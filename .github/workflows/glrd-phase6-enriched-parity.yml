@@ -15,6 +15,7 @@ on:
       - 'tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js'
       - 'scripts/verify-glrd-phase6-ui-browser.mjs'
       - 'scripts/verify-glrd-phase6-edited-cii.py'
+      - 'scripts/verify-glrd-v04-final-rigid-property.mjs'
       - 'converters/xml-cii2019-core/phase6-mass-comparison.js'
       - 'tests/xml-cii-phase6-*.test.mjs'
   workflow_dispatch:
@@ -111,6 +112,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/verify-glrd-phase6-edited-cii.py
+      - name: Verify v0.35 final RIGID property editor against actual GLRD emitted CII
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-glrd-v04-final-rigid-property.mjs
       - name: Upload original and re-extracted enriched XML, hashes and receipts
         if: always()
         uses: actions/upload-artifact@v4

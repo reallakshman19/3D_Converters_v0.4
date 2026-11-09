@@ -1,3 +1,4 @@
+import { createFinalRigidWeightReviewButton, finalRigidReviewAvailable } from './xml-cii-adapted-final-rigid-review.js?v=20261109-final-cii-review-v035-r1';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
 import { detectXmlCiiWorkflowSourceKind, maskedFileName } from '../xml-cii-workflow-source-detect.js';
 import { createElement, createOption, downloadTextFile } from './xml-cii-adapted-dom.js';
@@ -289,7 +290,16 @@ function renderRunControls(parent, stateRef, state, report, render) {
   if (finalizeBtn.style) Object.assign(finalizeBtn.style, { width: '100%', padding: '12px', background: (state.running || report.summary.blockingCount > 0) ? '#334155' : '#1e4ed8', color: '#fff', border: 'none', fontWeight: '700' });
   finalizeBtn.disabled = !!(state.running || report.summary.blockingCount > 0);
   finalizeBtn.dataset.action = 'run';
-  actionDiv.append(runReviewBtn, noteDiv, refreshBtn, finalizeBtn);
+  const finalReview = createFinalRigidWeightReviewButton(state, () => stateRef.current?.result);
+  actionDiv.append(runReviewBtn, noteDiv, refreshBtn, finalizeBtn, finalReview);
+  if (!finalRigidReviewAvailable(state)) {
+    const reason = !state?.result?.ciiText
+      ? 'Review Final weight becomes available after a successful, released CII conversion. Held or missing CII outputs cannot be edited.'
+      : 'Final CII review is unavailable while conversion is running.';
+    const note = createElement('div', reason, 'model-converters-workflow-detail-note');
+    note.dataset.finalRigidPrerequisite = 'true';
+    actionDiv.appendChild(note);
+  }
   ctrlCard.appendChild(actionDiv);
 }
 
