@@ -1,0 +1,63 @@
+name: XML-CII 2019 Final RIGID weight review / v0.35 port
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/xml-cii-final-rigid-v035-port.yml'
+      - 'tabs/xml-cii-2019-standalone/**'
+      - 'converters/xml-cii2019-core/weight-match-model.js'
+      - 'tests/xml-cii-final-*.test.mjs'
+      - 'tests/fixtures/final-cii-property-ui-host.html'
+      - 'tests/xml-cii-final-v04-integration.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  final-rigid-engineering-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check ported modules and v0.4 output integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in tabs/xml-cii-2019-standalone/xml-cii-final-{rigid,property}-*.js             tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js             tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-output-run.js             tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js; do
+            node --check "$module"
+          done
+          node --test tests/xml-cii-final-v04-integration.test.mjs
+      - name: Full property transaction, adversarial and source context tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test             tests/xml-cii-final-rigid-review.test.mjs             tests/xml-cii-final-property-transactions.test.mjs             tests/xml-cii-final-property-scale.test.mjs             tests/xml-cii-final-property-mutations.test.mjs             tests/xml-cii-final-rigid-source-context.test.mjs             tests/xml-cii-final-rigid-nearest-suggestions.test.mjs             tests/xml-cii-final-rigid-master-reference.test.mjs             tests/xml-cii-final-rigid-context-fallback.test.mjs             tests/xml-cii-final-rigid-batch-corrections.test.mjs             tests/xml-cii-final-rigid-source-mutations.test.mjs             tests/xml-cii-final-rigid-source-scale.test.mjs             tests/xml-cii-final-rigid-length-error.test.mjs
+      - name: Install isolated browser for final property editor replay
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Browser verify RIGID pointer listing, preview, apply and source byte preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/xml-cii-final-property-browser.test.mjs
+      - name: Existing v0.4 output workflow and mass audit guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/rigid-weight-run-gate.integration.test.mjs
+          node --test tests/xml-cii-standalone-output-run.test.js
+      - name: Record exact qualified head
+        shell: bash
+        run: |
+          printf 'SHA=%s\nFINAL_RIGID_PORT_TEST=SUCCESS\nSOURCE_CII_IMMUTABLE=REQUIRED\n' "$GITHUB_SHA" | tee final-rigid-port-verification.txt
+      - name: Upload qualification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v04-final-rigid-port-${{ github.sha }}
+          path: |
+            final-rigid-port-verification.txt
+            test-results/**
+          if-no-files-found: warn
