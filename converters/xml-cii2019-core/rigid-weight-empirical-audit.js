@@ -304,7 +304,28 @@ export function holdDuplicateRigidMassOutput(output,audit) {
     rigidMassEngineeringQualified:false};
   if(complete)return {...output,diagnostics,logs:[...(output?.logs||[]),'RIGID_MASS_SOURCE_PARITY_ONLY_NOT_ENGINEERING_APPROVED']};
   const error='RIGID_MASS_CONSERVATION_HOLD';
+  // A structurally parsed, fingerprint-matched, FLAGGED CII may be held in
+  // isolated review-only custody. Never put it back in the ordinary output
+  // artifact field, report ok=true, or treat edits as engineering release.
+  // Missing/failed/untrusted audit evidence does NOT qualify for repair view.
+  const repairable=typeof output?.ciiText==='string'&&output.ciiText.length>0&&
+    audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
+    audit.status==='HOLD'&&Array.isArray(audit.flags)&&audit.flags.length>0&&
+    audit.flags.every(f=>Number.isSafeInteger(f.rigidPointer)&&f.rigidPointer>0&&
+      Number.isSafeInteger(f.element)&&f.element>0)&&
+    Array.isArray(audit.rows)&&audit.rows.length===audit.auditedRigidCount&&
+    audit.auditedRigidCount===audit.rigidCount&&audit.rigidCount>0&&
+    audit.ciiFingerprint===ciiFingerprint(output.ciiText);
+  const rigidMassRepairCandidate=repairable?{
+    status:'QUARANTINED_REVIEW_ONLY',
+    ciiText:output.ciiText,
+    ciiName:output.ciiName||'held-rigid-weights.cii',
+    sourceCiiFingerprint:audit.ciiFingerprint,
+    engineeringReleaseAuthorized:false,
+    massAuthority:'NOT_VERIFIED_SOURCE_AUDIT_HOLD',
+  }:null;
   return {...output,ok:false,error,ciiText:'',ciiName:'',
+    rigidMassRepairCandidate,
     diagnostics:{...diagnostics,rigidMassCiiReleaseAuthorized:false},
     logs:[...(output?.logs||[]),error]};
 }
