@@ -163,6 +163,8 @@ const efUnapprovedZero=auditRigidWeightOwnership({
 });
 assert.ok(efUnapprovedZero.rows[0].flags.includes('POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT'),
   'geometric ownership is never positive physical-mass approval');
+assert.ok(!efUnapprovedZero.rows[0].flags.includes('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER'),
+  'a known physical zero-mass component must not be mislabeled ownerless');
 const efAmbiguous=auditRigidWeightOwnership({
   ciiText:efCii,xmlRows:[...efSource,{...efSource[1]}],estimator,
 });
