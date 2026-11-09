@@ -1,4 +1,4 @@
-import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-final-cii-review-v035-r1';
+import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-final-rigid-remediate-r2';
 import {
   activateModeASource,
   buildModeABatchManifest,
