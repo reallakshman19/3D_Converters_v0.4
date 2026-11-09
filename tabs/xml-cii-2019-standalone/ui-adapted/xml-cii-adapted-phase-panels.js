@@ -12,7 +12,7 @@ import { renderStandaloneDiagnosticsReportPanel, renderStandalonePreviewReportPa
 import { renderStandalonePropagationAuditPanel } from './xml-cii-adapted-propagation-audit.js?v=20260708-v8';
 import { renderUnifiedPhase6WeightReview } from './xml-cii-adapted-phase6-unified-review.js?v=20261109-phase6-readable-table-r4';
 import { renderStandaloneSupportTypeMapperPanel } from './xml-cii-adapted-support-type-mapper.js';
-import { renderStandaloneOutputRunPanel } from './xml-cii-adapted-output-run.js?v=20261109-final-cii-review-v035-r1';
+import { renderStandaloneOutputRunPanel } from './xml-cii-adapted-output-run.js?v=20261109-final-rigid-remediate-r2';
 import { renderAdaptedConfigPanel } from './xml-cii-adapted-config-tabs.js?v=20260713-config-tabs-p7';
 import { appendBendRadiusConfigToggle } from './xml-cii-adapted-bend-radius-toggle.js';
 import { summarizeWorkflowFile } from '../xml-cii-workflow-ui-adapter.js';
