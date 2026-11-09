@@ -352,6 +352,196 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
   </div>`;
 }
 
+
+/**
+ * Phase 6 is a source-mass workbench, not a 20-column report.
+ * Keep the essential engineering columns and actual editable rows above the
+ * fold. Preserve every column/control in DOM; advanced tools/columns are
+ * explicitly expandable and use the same existing event handlers.
+ *
+ * The conversion-time popup (phase6=false) deliberately retains its current
+ * layout. This is presentation only: neither collector nor save policy changes.
+ */
+function installPhase6ReviewLayout(overlay) {
+  const dialog=overlay.querySelector('.mc-rigid-review-dialog');
+  if(!dialog)return;
+  dialog.classList.add('mc-rigid-review-dialog--phase6');
+  dialog.setAttribute('aria-label','Phase 6 consolidated editable physical mass review');
+  Object.assign(dialog.style,{
+    width:'min(1700px, calc(100vw - 28px))',
+    maxWidth:'1700px',
+    height:'min(860px, calc(100dvh - 28px))',
+    maxHeight:'calc(100dvh - 28px)',
+    boxSizing:'border-box',
+    padding:'12px 14px',
+    overflow:'hidden',
+    display:'flex',
+    flexDirection:'column',
+    position:'relative',
+  });
+
+  const header=dialog.firstElementChild;
+  header?.classList.add('mc-phase6-dialog-header');
+  if(header)Object.assign(header.style,{
+    paddingBottom:'8px',marginBottom:'6px',flex:'0 0 auto'
+  });
+
+  // The long engineering disclaimer remains fully available, but no longer
+  // consumes multiple lines ahead of the editable table on every open.
+  const warning=header?.nextElementSibling;
+  if(warning){
+    const guidance=document.createElement('details');
+    guidance.className='mc-phase6-guidance';
+    guidance.setAttribute('data-phase6-guidance','');
+    const summary=document.createElement('summary');
+    summary.textContent='Engineering rules · estimates need independent review · kg→N (×10) at export';
+    summary.setAttribute('title','Expand the full source-mass approval, draft, and 0 kg skip rules');
+    warning.replaceWith(guidance);
+    warning.style.cssText='padding:8px 10px;color:#ffe7a3;line-height:1.35;font-size:12px;';
+    guidance.append(summary,warning);
+  }
+
+  const counters=dialog.querySelector('[data-phase6-popup-counters]');
+  if(counters)Object.assign(counters.style,{
+    margin:'5px 0',padding:'7px 9px',flex:'0 0 auto',gap:'10px'
+  });
+
+  const search=dialog.querySelector('[data-mode-a-rigid-search]');
+  const toolbar=search?.parentElement;
+  if(toolbar){
+    toolbar.classList.add('mc-phase6-toolbar');
+    Object.assign(toolbar.style,{marginBottom:'4px',display:'block',flex:'0 0 auto'});
+    const primary=document.createElement('div');
+    primary.className='mc-phase6-primary-actions';
+    const extra=document.createElement('div');
+    extra.className='mc-phase6-extra-actions';
+    const more=document.createElement('details');
+    more.className='mc-phase6-more-actions';
+    more.setAttribute('data-phase6-more-actions','');
+    const moreSummary=document.createElement('summary');
+    moreSummary.textContent='More matching and batch tools';
+    moreSummary.setAttribute('title','Show DTXR, exact-match, deviation and other advanced controls');
+
+    const primarySelectors=[
+      '[data-mode-a-rigid-search]','[data-mode-a-rigid-source]',
+      '[data-mode-a-rigid-show-missing]','[data-mode-a-rigid-skip-blanks]',
+      '[data-mode-a-rigid-apply-suggestions]',
+      '[data-mode-a-rigid-open-review]','[data-phase6-approve-all]',
+    ];
+    const extraSelectors=[
+      '[data-mode-a-rigid-refresh]','[data-mode-a-rigid-show-unreviewed]',
+      '[data-phase6-deviation40]','[data-phase6-dtxr]',
+      '[data-phase6-nearest]','[data-phase6-find-exact]',
+      '[data-phase6-fill-similar]','[data-mode-a-rigid-fill-exact]',
+    ];
+    for(const selector of primarySelectors){
+      const control=toolbar.querySelector(selector);
+      if(control)primary.appendChild(control);
+    }
+    for(const selector of extraSelectors){
+      const control=toolbar.querySelector(selector);
+      if(control)extra.appendChild(control);
+    }
+    more.append(moreSummary,extra);
+    toolbar.prepend(primary);
+    toolbar.append(more);
+    const status=toolbar.querySelector('[data-mode-a-rigid-status]');
+    if(status){
+      status.classList.add('mc-phase6-action-status');
+      toolbar.appendChild(status);
+    }
+    // Full original columns are retained, and searchable within every row's
+    // Details expander even when the initial compact view is selected.
+    const toggle=document.createElement('button');
+    toggle.type='button';
+    toggle.className='mc-phase6-columns-toggle';
+    toggle.setAttribute('data-phase6-toggle-columns','');
+    toggle.setAttribute('aria-pressed','false');
+    toggle.textContent='All columns';
+    toggle.title='Switch between readable essential columns and the full engineering table';
+    toggle.addEventListener('click',()=>{
+      const expanded=dialog.classList.toggle('mc-phase6-show-all');
+      toggle.textContent=expanded?'Essential columns':'All columns';
+      toggle.setAttribute('aria-pressed',String(expanded));
+    });
+    primary.appendChild(toggle);
+  }
+
+  const missing=dialog.querySelector('[data-mode-a-rigid-missing-list]');
+  missing?.classList.add('mc-phase6-missing-list');
+  const review=dialog.querySelector('[data-mode-a-rigid-bulk-review-panel]');
+  review?.classList.add('mc-phase6-bulk-review');
+
+  const tableBody=dialog.querySelector('[data-mode-a-rigid-body]');
+  const table=tableBody?.closest('table');
+  const viewport=table?.parentElement;
+  if(viewport){
+    viewport.classList.add('mc-phase6-table-viewport');
+    viewport.style.maxHeight='none';
+    viewport.style.overflow='auto';
+    viewport.setAttribute('tabindex','0');
+    viewport.setAttribute('aria-label','Scroll editable physical-component masses vertically; use All columns to inspect every engineering field');
+    table?.classList.add('mc-phase6-weight-table');
+    // The former horizontal-scroll notice was more visible than the rows.
+    const notice=viewport.previousElementSibling;
+    if(notice && notice.tagName==='DIV' && notice.textContent.includes('Extra engineering columns')){
+      notice.classList.add('mc-phase6-columns-note');
+      notice.textContent='Essential columns shown · expand Details for source evidence or choose All columns';
+    }
+  }
+  const save=dialog.querySelector('[data-mode-a-rigid-apply]');
+  save?.parentElement?.classList.add('mc-phase6-dialog-footer');
+
+  const css=document.createElement('style');
+  css.setAttribute('data-phase6-layout-styles','');
+  css.textContent=[
+    '.mc-rigid-review-dialog--phase6 > :not(style){flex-shrink:0;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-guidance{margin:0 0 4px;border:1px solid #705b1a;background:#2a210b;color:#ffe7a3;border-radius:6px;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-guidance > summary{padding:6px 9px;cursor:pointer;font-weight:600;line-height:1.25;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-guidance[open]{max-height:130px;overflow:auto;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-primary-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:3px 0;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-primary-actions :is(input,select){min-width:0;max-width:100%;box-sizing:border-box;}',
+    '.mc-rigid-review-dialog--phase6 [data-mode-a-rigid-search]{width:clamp(165px,17vw,260px);min-width:165px!important;}',
+    '.mc-rigid-review-dialog--phase6 [data-mode-a-rigid-source]{width:clamp(145px,14vw,205px);}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-primary-actions button{white-space:nowrap;padding:7px 10px!important;min-height:33px;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-columns-toggle{background:#172c48;color:#d7e6ff;border:1px solid #577293;border-radius:6px;cursor:pointer;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions{margin:2px 0 0;border:1px solid #283c55;border-radius:5px;color:#b2c9e6;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions > summary{cursor:pointer;padding:5px 8px;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-extra-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:6px 8px 8px;max-height:140px;overflow:auto;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-extra-actions button{font-size:12px;padding:6px 10px!important;min-height:31px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-action-status:not(:empty){display:block;margin:5px 2px;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-action-status:empty{display:none;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-columns-note{margin:4px 0!important;color:#a9bfda;font-size:11px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-table-viewport{flex:1 1 0!important;min-height:150px;max-height:none!important;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid #48617e;border-radius:6px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table{width:100%;min-width:1320px;table-layout:fixed;border-collapse:separate;border-spacing:0;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td){box-sizing:border-box;vertical-align:top;padding:7px 8px;border-bottom:1px solid #253750;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table th{position:sticky;top:0;z-index:3;background:#1e293b;color:#f3f7ff;white-space:normal;text-align:left;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table td{color:#d9e5f5;font-size:12px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table tr:nth-child(even){background:#13223b;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table tr:focus-within{background:#203654;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(2){width:200px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(3){width:70px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(4){width:86px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(5){width:145px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(6){width:195px;max-width:195px;overflow-wrap:anywhere;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(7){width:75px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(8){width:118px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(9){width:310px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(15){width:105px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(16){width:75px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table :is(th,td):nth-child(19){width:85px;}',
+    '.mc-rigid-review-dialog--phase6:not(.mc-phase6-show-all) .mc-phase6-weight-table :is(th,td):is(:nth-child(1),:nth-child(10),:nth-child(11),:nth-child(12),:nth-child(13),:nth-child(14),:nth-child(17),:nth-child(18),:nth-child(20),:nth-child(21),:nth-child(22)){display:none;}',
+    '.mc-rigid-review-dialog--phase6.mc-phase6-show-all .mc-phase6-weight-table{min-width:2750px;width:max-content;table-layout:auto;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-dialog-footer{flex:0 0 auto!important;margin-top:7px!important;padding-top:9px!important;background:#0f172a;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-dialog-footer button{min-height:39px;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-missing-list{max-height:78px!important;overflow:auto;flex:0 0 auto;}',
+    '.mc-rigid-review-dialog--phase6 .mc-phase6-bulk-review{position:absolute;top:65px;bottom:70px;left:14px;right:14px;max-height:none;overflow:auto;z-index:8;box-shadow:0 16px 40px #050b18;background:#11223a;}',
+    '@media(max-width:720px){.mc-rigid-review-dialog--phase6{padding:8px!important;}.mc-rigid-review-dialog--phase6 .mc-phase6-primary-actions{gap:4px;}.mc-rigid-review-dialog--phase6 .mc-phase6-weight-table{min-width:1260px;}.mc-rigid-review-dialog--phase6 .mc-phase6-table-viewport{min-height:110px;}}',
+    '@media(max-height:600px){.mc-rigid-review-dialog--phase6 .mc-phase6-guidance{display:none;}.mc-rigid-review-dialog--phase6 .mc-phase6-primary-actions button{padding:4px 7px!important;}.mc-rigid-review-dialog--phase6 .mc-phase6-more-actions > summary{padding:3px 8px;}}',
+  ].join('\n');
+  dialog.prepend(css);
+}
+
 function collectCurrentValues(overlay) {
   const weights = new Map();
   const skips = new Set();
@@ -403,6 +593,7 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
     overlay.className = 'model-converters-workflow-popup-overlay mc-rigid-review-overlay';
     overlay.innerHTML = popupMarkup(rows, workingEntries,{phase6});
     document.body.appendChild(overlay);
+    if(phase6)installPhase6ReviewLayout(overlay);
     const body = overlay.querySelector('[data-mode-a-rigid-body]');
     const status = overlay.querySelector('[data-mode-a-rigid-status]');
     const summary = overlay.querySelector('[data-mode-a-rigid-summary]');
