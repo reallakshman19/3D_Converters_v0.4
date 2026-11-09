@@ -61,7 +61,7 @@ try{
       if(!rating)throw Error('Unknown piping class in GLRD '+name);
       ratingByBranch[name]=rating;
     }
-    const module=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js?v=20261108-phase6-error40-r3');
+    const module=await import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js?v=20261109-phase6-readable-table-r4');
     const card=document.createElement('section');
     card.id='phase6-glrd-actual';
     card.style.cssText='background:#0f172a;color:white;padding:18px;';
