@@ -365,6 +365,16 @@ function popupMarkup(rows, entries, {phase6=false}={}) {
  * layout. This is presentation only: neither collector nor save policy changes.
  */
 function installPhase6ReviewLayout(overlay) {
+  // The standalone GLRD harness does not load the full tab stylesheet.
+  // Make the popup's viewport positioning deterministic in both the app
+  // and in the isolated browser verification environment.
+  Object.assign(overlay.style,{
+    position:'fixed',inset:'0',zIndex:'10020',
+    display:'flex',alignItems:'center',justifyContent:'center',
+    padding:'12px',boxSizing:'border-box',
+    background:'rgba(0,0,0,.62)',
+    overflow:'hidden',
+  });
   const dialog=overlay.querySelector('.mc-rigid-review-dialog');
   if(!dialog)return;
   dialog.classList.add('mc-rigid-review-dialog--phase6');
