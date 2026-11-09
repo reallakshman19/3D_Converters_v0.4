@@ -66,7 +66,8 @@ test('v0.4 run evidence, release hold, active-model binding and browser cache ch
   assert.match(service,/return holdDuplicateRigidMassOutput\(normalized, audit\)/);
   assert.match(panel,/createFinalRigidWeightReviewButton\(state, \(\) => stateRef\.current\?\.result\)/);
   assert.match(panel,/finalRigidPrerequisite/);
-  assert.match(modal,/parseFinalCiiRigidInventory\(result\.ciiText\)/);
+  assert.match(modal,/parseFinalCiiRigidInventory\(reviewResult\.ciiText\)/);
+  assert.match(modal,/finalRigidRepairReviewResult\(result\)/);
   assert.match(modal,/getCurrentResult/);
   assert.match(editor,/verifyCiiPropertyTransaction/);
   assert.match(editor,/current\(\) !== result/);
