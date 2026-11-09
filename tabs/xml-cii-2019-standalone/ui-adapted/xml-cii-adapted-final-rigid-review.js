@@ -122,7 +122,7 @@ function rowMarkup(row, plan, assessment = {}) {
     row.weight <= 0 ? 'Zero / negative weight' : '',
     assessment.auditFlagged ? 'SOURCE AUDIT FLAGGED' : '',
     assessment.shortSpan ? 'SHORT SPAN REVIEW' : '',
-    assessment.sourceUnresolved ? 'SOURCE UNRESOLVED' : '',
+    assessment.sourceUnresolved ? 'Source unresolved' : '',
   ].filter(Boolean).join(' · ');
   const repairReason=(assessment.reasons||[]).join('\\n');
   return `<tr data-final-rigid-row data-pointer="${row.rigidPointer}" data-search="${esc(search+' '+repairReason)}" data-status="${esc(row.status)}"
