@@ -681,7 +681,21 @@ export function openModeAConsolidatedRigidWeightReviewPopup(entries = [],{phase6
         });
         reviewPanelExamples.innerHTML=modeABulkReviewTableMarkup(drafts);
       }
-      if(reviewPanel)reviewPanel.style.display='block';
+      if(reviewPanel){
+        // The mass attestation is a separate step laid over the TABLE, not
+        // the toolbar. Keep Approve all / Cancel and matching actions
+        // unobstructed, including when More matching tools is expanded.
+        if(phase6){
+          const dialog=overlay.querySelector('.mc-rigid-review-dialog');
+          const toolbar=overlay.querySelector('.mc-phase6-toolbar');
+          if(dialog && toolbar){
+            const top=toolbar.getBoundingClientRect().bottom-
+              dialog.getBoundingClientRect().top+6;
+            reviewPanel.style.top=Math.max(70,Math.ceil(top))+'px';
+          }
+        }
+        reviewPanel.style.display='block';
+      }
       if(reviewAttest)reviewAttest.checked=false;
       if(reviewConfirm)reviewConfirm.disabled=true;
       reviewPanel?.scrollIntoView?.({block:'nearest'});
