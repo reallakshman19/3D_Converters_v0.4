@@ -173,9 +173,11 @@ function rowMarkup(row, plan, assessment = {}) {
     </td></tr>`;
 }
 
-function modalMarkup(inventory, filename, thresholdPct = 20, plans = [], assessments = {}, reviewOnly = false) {
+function modalMarkup(inventory, filename, thresholdPct = 20, plans = [], assessments = {}, reviewOnly = false, weightScale = null) {
   const { rows, declared, unreferencedCount, sharedCount, nonpositiveCount } = inventory;
   const flagged=assessments.summary||{};
+  const exportedUnits=Number(weightScale)===10?'N (kg→N ×10 export)':Number(weightScale)===1
+    ?'kg (no kg→N scaling)':'CII output units (conversion scale not recorded)';
   return `<div class="mc-rigid-review-dialog" role="dialog" aria-modal="true"
       aria-label="Review final CII rigid weights" tabindex="-1"
       style="background:#0f172a;color:#e2e8f0;border:1px solid #253a55;border-radius:8px;
@@ -204,6 +206,7 @@ function modalMarkup(inventory, filename, thresholdPct = 20, plans = [], assessm
       ENGINEERING HOLD — source-to-CII mass ownership failed. This is a QUARANTINED review copy,
       not a released CII. Manual corrections create a separately named review-only revised file.
       The source mass/conservation audit is NOT cleared or approved by editing CII bytes.
+      Enter replacement RIGID weights in <strong>${esc(exportedUnits)}</strong>, NOT automatically in source kg.
     </div>`:''}
     <details data-final-rigid-guidance style="background:#2a210b;border:1px solid #7c5a18;
       border-radius:6px;padding:9px;font-size:12px;color:#ffe7a3;margin-bottom:12px;">
@@ -322,7 +325,8 @@ export function openFinalRigidWeightReview(result, options = {}) {
   const assessments=buildFinalRigidRepairAssessments(inventory,plans,
     result.diagnostics?.rigidMassAudit);
   overlay.innerHTML = modalMarkup(inventory, reviewResult.ciiName || 'Generated CII',
-    options.errorThresholdPct ?? 20, plans, assessments, reviewResult.rigidMassReviewOnly===true);
+    options.errorThresholdPct ?? 20, plans, assessments, reviewResult.rigidMassReviewOnly===true,
+    reviewResult.finalRigidReviewEvidence?.weightScale);
   document.body.appendChild(overlay);
   const search = overlay.querySelector('[data-final-rigid-search]');
   const filter = overlay.querySelector('[data-final-rigid-filter]');
