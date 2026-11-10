@@ -435,8 +435,8 @@ try {
     assert.match(await modal.locator('thead').innerText(),/Element Length \(mm\)/);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1',
       'batch length must be the final CII 19.1 mm route, not a catalog/physical length');
-    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),0,
-      'hidden below-threshold pointers are not silently shown');
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),1,
+      'source-warning pointers remain visible even below the numeric threshold');
 
     // Apply All Nearest is only a draft-selection action: it explicitly opts
     // provisional suggestions into review without granting mass authority.
