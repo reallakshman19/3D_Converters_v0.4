@@ -912,17 +912,22 @@ try {
     assert.equal(await lineButtons.count(),6);
     await lineButtons.nth(3).click();
     const effective = await page.evaluate(async () => {
-      const [{modeARawState},{buildModeAExecutionState},{deriveLineKeyFromBranchName}] =
+      const [{modeARawState},{buildModeAExecutionState},
+        {deriveLineKeyFromBranchName},{xmlCiiDryRunPreview}] =
         await Promise.all([
           import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-propagation.js'),
           import('/tabs/xml-cii-2019-standalone/xml-cii-mode-a-batch.js'),
           import('/converters/xml-cii2019-core/regex-line-key.js'),
+          import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-preview-dryrun.js'),
         ]);
       const current = modeARawState(window.__glrdRegexClickState);
       const source = buildModeAExecutionState(current,current.sourceBatch.sources[0]);
       const cfg = JSON.parse(source.supportConfigJson);
+      const preview = xmlCiiDryRunPreview(source.sourceText,cfg,'');
       return {
         lineKey:deriveLineKeyFromBranchName('/GLRD-1000-6"-P4110001-93833-01/B6',cfg),
+        previewLineKey:preview.branchRows?.[0]?.lineKey,
+        previewClass:preview.branchRows?.[0]?.pipingClassDerived,
         pipingClassToken:cfg.rating.pipingClassTokenIndex,
         lineToken:cfg.linelist.lineKeyTokenPositions,
         branchRegex:cfg.linelist.branchNameRegex,
@@ -930,8 +935,8 @@ try {
       };
     });
     assert.deepEqual(effective,{
-      lineKey:'P4110001',pipingClassToken:'5',lineToken:'4',
-      branchRegex:'',cached:null,
+      lineKey:'P4110001',previewLineKey:'P4110001',previewClass:'93833',
+      pipingClassToken:'5',lineToken:'4',branchRegex:'',cached:null,
     });
   });
 
