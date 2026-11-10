@@ -62,13 +62,13 @@ test('consolidated rigid review restores DTXR and all-suggestion helpers but not
   assert.match(source, /Use DTXR Ratings & Refresh/u);
   assert.match(source, /Use All Approved Source Weights/u);
   assert.match(source, /modeARigidApproved !== 'true'/u);
-  assert.match(source, /stageRigidReviewProposal\\(input,\\{weight,approved:true/u);
+  assert.ok(source.includes("stageRigidReviewProposal(input,{weight,approved:true"));
   assert.match(source, /not committed until Apply Weights and Run All Models/u);
   // A still-mounting dialog must remain retryable, and DTXR must not depend
   // on column order (the optional Source XML column is easily hidden).
   assert.ok(source.indexOf('if (!controls) return false;') <
     source.indexOf("dialog.dataset.modeARigidExtraTools = 'true';"));
-  assert.match(source, /row\\.querySelector\\('\\[data-dtxr-source-path\\]'\\)/u);
+  assert.ok(source.includes("row.querySelector('[data-dtxr-source-path]')"));
   assert.doesNotMatch(source, /Skip Review/u);
 });
 
