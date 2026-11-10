@@ -282,6 +282,26 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       [pointer, row.editInput.value])),
     getCurrentResult: () => current() === result ? result : null,
     isReady: () => Boolean(session) && current() === result && invalid.size === 0,
+    verifyUnchanged: async () => {
+      if (!session || current() !== result || invalid.size || session.edits.size)
+        throw new Error('No-change verification requires the original current CII with no pending edits.');
+      const snapshotVersion = version;
+      const frozen = { ...session, edits: new Map() };
+      const verified = await verifyCiiPropertyTransaction(frozen, {
+        currentCiiText: current().ciiText, runIdentity,
+      });
+      if (snapshotVersion !== version || current() !== result ||
+          verified.revisedCiiText !== session.originalCiiText ||
+          verified.audit.untouchedBytesEqual !== true ||
+          verified.audit.changes.length !== 0)
+        throw new Error('No-change CII byte parity or run identity failed.');
+      report.textContent = 'VERIFIED UNCHANGED CII — no weight edit staged.\n' +
+        'Full RIGID reparse PASS; 0 changed fields; every source byte identical.\n' +
+        'Original SHA-256: ' + verified.audit.originalSha256 + '\n' +
+        'Rechecked SHA-256: ' + verified.audit.revisedSha256 + '\n' +
+        'Metadata warnings remain review evidence, not engineering mass approval.';
+      return verified;
+    },
     stageAndVerify: async (proposals, thresholdPct, approval) => {
       if (!session || invalid.size || current() !== result)
         throw new Error('Stale conversion run or invalid pre-existing weight edits.');
@@ -315,6 +335,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
             approximate: Boolean(comparison.approximate),
             reviewRequired: item.reviewRequired,
             metadataWarningCodes: [...(item.warnings || [])],
+            ownerResolution: item.ownerResolution || null,
+            manualReferenceProvenance: comparison.manualEvidence || null,
+            massAuthority: item.reviewRequired ? 'UNVERIFIED_REVIEW_ONLY' : 'UNCHANGED',
             individuallyApproved: true, reviewOnlyAccepted: Boolean(item.reviewRequired && approval),
             generatedFromRun: String(result.finalRigidReviewEvidence?.engineInputDigest || ''),
           },
