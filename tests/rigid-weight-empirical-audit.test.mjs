@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {auditRigidWeightOwnership,parseCiiRigidElementWeights,holdDuplicateRigidMassOutput}
   from '../converters/xml-cii2019-core/rigid-weight-empirical-audit.js';
+import {explainRigidMassAudit}
+  from '../tabs/xml-cii-2019-standalone/xml-cii-rigid-mass-audit-presentation.js';
 
 const section=(name,lines)=>['#$ '+name,...lines].join('\n');
 function element(e) {
@@ -119,6 +121,84 @@ const cleanZero=auditRigidWeightOwnership({ciiText:cleanZeroCii,xmlRows:cleanZer
 assert.equal(cleanZero.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
 assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:cleanZeroCii},cleanZero).ciiText,cleanZeroCii,
   'explicit zero mass structural rigid must remain available');
+// GLRD-type connection: final ELEMENT 58 -> 59 carries a dedicated 0 N
+// RIGID, but the two original XML nodes identify DIFFERENT physical refs.
+// It is a nonphysical connecting segment; never invent a common component.
+const zeroLinkBranch='ZERO_LINK';
+const zeroLinkRows=[
+  source(zeroLinkBranch,58,'=134234934/8043',2,0,0,'RIGID'),
+  source(zeroLinkBranch,59,'=134234934/8045',1,10,0,'FLAN'),
+];
+const zeroLinkCii=ciiText([{from:58,to:59,mm:10,dy:0,dz:10,
+  pointer:1,weightN:0,branch:zeroLinkBranch}]);
+const zeroLink=auditRigidWeightOwnership({
+  ciiText:zeroLinkCii,xmlRows:zeroLinkRows,estimator,
+});
+assert.equal(zeroLink.summary.flaggedElements,0,
+  'genuine 0 N connector with two known source refs must not cause mass HOLD');
+assert.equal(zeroLink.status,'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY');
+assert.equal(zeroLink.massVerified,false,'identity advisory cannot approve engineering mass');
+assert.deepEqual(zeroLink.rows[0].flags,[]);
+assert.deepEqual(zeroLink.rows[0].advisories,['ZERO_MASS_INTERCOMPONENT_CONNECTION']);
+assert.equal(zeroLink.rows[0].physicalComponentRef,null,
+  'connection must never acquire fabricated ownership');
+assert.equal(zeroLink.rows[0].allocationBasis,
+  'AUTHENTIC_DISTINCT_SOURCE_REFS_NO_PHYSICAL_SPAN');
+assert.equal(zeroLink.advisories[0].fromRef,'=134234934/8043');
+assert.equal(zeroLink.advisories[0].toRef,'=134234934/8045');
+assert.equal(zeroLink.summary.advisoryElements,1);
+const advisoryPresentation=explainRigidMassAudit(zeroLink);
+assert.equal(advisoryPresentation.nonblockingZeroConnections,1);
+assert.equal(advisoryPresentation.positiveWeightCount,0);
+assert.equal(advisoryPresentation.flagRecords,0);
+const zeroLinkOut=holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkCii},zeroLink);
+assert.equal(zeroLinkOut.ciiText,zeroLinkCii,
+  'source-parity CII is available with a diagnostic warning');
+assert.equal(zeroLinkOut.diagnostics.rigidMassEngineeringQualified,false);
+assert.notEqual(zeroLinkOut.diagnostics.rigidMassCiiReleaseAuthorized,true);
+const zeroLinkHeavyCii=ciiText([{from:58,to:59,mm:10,dy:0,dz:10,
+  pointer:1,weightN:150,branch:zeroLinkBranch}]);
+const positiveLink=auditRigidWeightOwnership({
+  ciiText:zeroLinkHeavyCii,xmlRows:zeroLinkRows,estimator,
+});
+assert.ok(positiveLink.flags.some(f=>f.code==='PHYSICAL_OWNER_UNRESOLVED'));
+assert.ok(positiveLink.flags.some(f=>f.code==='WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER'));
+assert.equal(positiveLink.advisories.length,0);
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkHeavyCii},positiveLink).ciiText,'',
+  'a positive weight on the same unowned connector MUST remain held');
+const missingZeroLink=auditRigidWeightOwnership({
+  ciiText:zeroLinkCii,xmlRows:zeroLinkRows.slice(0,1),estimator,
+});
+assert.ok(missingZeroLink.flags.some(f=>f.code==='SOURCE_NODE_UNRESOLVED'));
+assert.equal(missingZeroLink.advisories.length,0);
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkCii},missingZeroLink).ciiText,'',
+  '0 N does not excuse a missing original source node');
+const geometryMismatch=auditRigidWeightOwnership({
+  ciiText:zeroLinkCii,
+  xmlRows:zeroLinkRows.map(r=>r.nodeNumber===59?{...r,position:[0,0,11]}:r),
+  estimator,
+});
+assert.ok(geometryMismatch.flags.some(f=>f.code==='CII_SOURCE_GEOMETRY_MISMATCH'));
+assert.equal(geometryMismatch.advisories.length,0);
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkCii},geometryMismatch).ciiText,'',
+  '0 N does not excuse source/CII geometry mismatch');
+const sameRefZero=auditRigidWeightOwnership({
+  ciiText:zeroLinkCii,
+  xmlRows:zeroLinkRows.map(r=>({...r,ref:'=SAME',endpoint:1})),estimator,
+});
+assert.ok(sameRefZero.flags.some(f=>f.code==='PHYSICAL_OWNER_UNRESOLVED'));
+assert.equal(sameRefZero.advisories.length,0);
+const tamperedZero={
+  ...zeroLink,
+  rows:zeroLink.rows.map(row=>({...row,weightN:10})),
+};
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkCii},tamperedZero).ciiText,'',
+  'diagnostic exception must not survive fabricated nonzero audit-row mass');
+const fakeAdvisory={
+  ...zeroLink,advisories:[],
+};
+assert.equal(holdDuplicateRigidMassOutput({ok:true,ciiText:zeroLinkCii},fakeAdvisory).ciiText,'',
+  'cannot discard warning evidence and pass a renamed status');
 // EF-05-PRO.TEST original source flange: endpoint 1 has NodeNumber=-1,
  // while final CII assigns generated 7369; endpoint 2 is real node 7370.
  // A complete unique 86 mm flange span can be recovered geometrically,
