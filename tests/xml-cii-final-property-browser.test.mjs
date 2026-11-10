@@ -423,8 +423,8 @@ try {
     await page.locator('[data-final-rigid-batch-preview]').click();
     let modal = page.locator('[data-final-rigid-batch-dialog]');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /0 eligible/);
-    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /1 review-only/);
-    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 hard-held/);
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /1 pending review opt-in/);
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 skipped \(NOT blocking\)/);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all]').isDisabled(), true,
       'Approve All must not bypass the review-only opt-in');
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isDisabled(), true);
@@ -435,8 +435,8 @@ try {
     assert.match(await modal.locator('thead').innerText(),/Element Length \(mm\)/);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1',
       'batch length must be the final CII 19.1 mm route, not a catalog/physical length');
-    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),1,
-      'source-warning pointers remain visible even below the numeric threshold');
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),0,
+      'below-threshold pointers are collapsed by default without blocking staging');
 
     // Apply All Nearest is only a draft-selection action: it explicitly opts
     // provisional suggestions into review without granting mass authority.
@@ -566,12 +566,12 @@ try {
     await page.locator('[data-final-rigid-batch-preview]').click();
     const modal = page.locator('[data-final-rigid-batch-dialog]');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /0 eligible/);
-    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 review-only/);
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 pending review opt-in/);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all]').isDisabled(), true);
 
     await modal.locator('[data-final-rigid-batch-include-review]').check();
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 eligible/);
-    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /1 hard-held/);
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /1 skipped \(NOT blocking\)/);
     await modal.locator('[data-final-rigid-batch-approve-all]').click();
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
@@ -589,8 +589,8 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1');
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').innerText(),'19.1');
     const hardHeldRow = modal.locator('[data-final-rigid-batch-row="3"]');
-    assert.equal(await hardHeldRow.count(), 1,
-      'unsafe rows remain visible as skipped warnings and cannot be auto-approved');
+    assert.equal(await hardHeldRow.count(), 0,
+      'skipped rows are collapsed by default and cannot block selected corrections');
     await modal.locator('[data-final-rigid-batch-show-held]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-row="3"] [data-final-rigid-batch-approve]').isDisabled(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="3"]').innerText(),'109',
@@ -598,6 +598,9 @@ try {
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 selected/);
 
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
+    assert.match(await modal.locator('[data-final-rigid-batch-stage]').innerText(), /2 Selected Corrections/);
+    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /skipped pointers stay unchanged/);
     await modal.locator('[data-final-rigid-batch-stage]').click();
     await page.waitForFunction(() => !document.querySelector('[data-final-rigid-batch-dialog]'));
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="1"] [data-final-rigid-edited]').inputValue(), '29.84');
