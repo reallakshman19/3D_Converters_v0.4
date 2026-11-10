@@ -84,12 +84,18 @@ test('approximate 50% / unverified synthetic-source suggestion remains individua
   });
   assert.equal(edited.proposals[19].status, 'ALREADY_EDITED');
   plans[19].sourceContext.conflicts = ['RATING_CONFLICT'];
-  assert.equal(planFinalRigidBatchCorrections(inventory, plans, { includeReviewOnly: true })
-    .proposals[19].status, 'HOLD');
+  const conflicted = planFinalRigidBatchCorrections(inventory, plans, { includeReviewOnly: true })
+    .proposals[19];
+  assert.equal(conflicted.status, 'ELIGIBLE');
+  assert.equal(conflicted.reviewRequired, true);
+  assert.deepEqual(conflicted.warnings, ['RATING_CONFLICT']);
   plans[19].sourceContext.conflicts = [];
   plans[19].sourceContext.dtxr.suppressed = true;
-  assert.equal(planFinalRigidBatchCorrections(inventory, plans, { includeReviewOnly: true })
-    .proposals[19].status, 'HOLD');
+  const suppressed = planFinalRigidBatchCorrections(inventory, plans, { includeReviewOnly: true })
+    .proposals[19];
+  assert.equal(suppressed.status, 'ELIGIBLE');
+  assert.equal(suppressed.reviewRequired, true);
+  assert.deepEqual(suppressed.warnings, ['DTXR_SUPPRESSED']);
 });
 test('alternative choice is requalified against threshold, shared source owner is blocked', () => {
   const { inventory, plans } = inventoryAndPlans(22);
@@ -119,27 +125,27 @@ test('Apply All Nearest creates review selections but no mass approval or CII mu
       sourceVerified:false,method:'length-extrapolated',matchPct:50}),
     candidate(120,{approximate:true,comparisonOnly:true,direct:false}),
   ];
-  plans[20].sourceContext.conflicts=['RATING_CONFLICT']; // hard-held
+  plans[20].sourceContext.conflicts=['RATING_CONFLICT']; // warning + independent review
   const frozen=JSON.stringify(inventory);
   const base=planFinalRigidBatchCorrections(inventory,plans);
   assert.equal(base.proposals[19].status,'REVIEW_ONLY');
-  assert.equal(base.proposals[20].status,'HOLD');
+  assert.equal(base.proposals[20].status,'REVIEW_ONLY');
   const prepared=planAllNearestBatchDraftSelection(inventory,plans,{
     thresholdPct:40,scope:'all',includeReviewOnly:false,
     selectedIndices:new Map([[20,1]]),
   });
-  assert.deepEqual(prepared.selectedPointers,[20]);
+  assert.deepEqual(prepared.selectedPointers,[20,21]);
   assert.equal(prepared.candidateIndices.get(20),0,
     'explicit Apply All Nearest resets alternative candidate to index 0');
-  assert.equal(prepared.reviewRequired,1);
+  assert.equal(prepared.reviewRequired,2);
   assert.equal(prepared.includeReviewOnly,true);
   assert.equal(prepared.plan.proposals[19].status,'ELIGIBLE');
-  assert.equal(prepared.plan.proposals[20].status,'HOLD');
+  assert.equal(prepared.plan.proposals[20].status,'ELIGIBLE');
   assert.equal(prepared.plan.proposals[19].reviewRequired,true);
   assert.equal(prepared.plan.proposals[19].candidate.approximate,true);
   assert.equal(prepared.plan.proposals[19].proposedWeight,29.84);
-  assert.equal(prepared.selectedPointers.includes(21),false,
-    'conflicted source metadata must stay hard-held');
+  assert.equal(prepared.selectedPointers.includes(21),true,
+    'source metadata warning must not preclude an explicitly reviewed draft');
   assert.equal(prepared.selectedPointers.includes(1),false,
     'below-threshold rows must not be silently promoted');
   assert.equal(JSON.stringify(inventory),frozen,'no exported RIGID weights mutated');
@@ -162,6 +168,43 @@ test('Apply All Nearest respects filtered/selected scopes, existing edits and ne
   assert.throws(()=>planAllNearestBatchDraftSelection(inventory,plans,{
     thresholdPct:-1,
   }),/threshold/);
+});
+
+
+test('GLRD-reported 150-to-150 nearest comparisons retain source warnings but never stage no-ops', () => {
+  const { inventory, plans } = inventoryAndPlans(57);
+  for (const pointer of [56, 57]) {
+    inventory.rows[pointer - 1].weight = 150;
+    inventory.rows[pointer - 1].rawWeight = '150';
+    plans[pointer - 1].nearestSuggestions = [candidate(150, {
+      masterWeightKg: 15, matchPct: 100, title: 'Weldneck Flange',
+    })];
+    plans[pointer - 1].sourceContext.status = 'CONFLICT_REVIEW';
+  }
+  plans[55].sourceContext.conflicts = ['RATING_CONFLICT'];
+  plans[56].sourceContext.dtxr = {
+    suppressed: true, suppressionReason: 'UNTRUSTED_STAGED_DTXR',
+  };
+  const planned = planFinalRigidBatchCorrections(inventory, plans, {
+    includeReviewOnly: true, thresholdPct: 40, scope: 'selected',
+    selectedPointers: [56, 57],
+  });
+  for (const pointer of [56, 57]) {
+    const row = planned.proposals[pointer - 1];
+    assert.equal(row.status, 'BELOW_THRESHOLD');
+    assert.equal(row.errorPct, 0);
+    assert.equal(row.proposedWeight, 150);
+    assert.equal(row.reviewRequired, true);
+    assert.ok(row.warnings.length);
+  }
+  assert.equal(planned.eligible.length, 0);
+  const allNearest = planAllNearestBatchDraftSelection(inventory, plans, {
+    thresholdPct: 40, scope: 'selected', selectedPointers: [56, 57],
+  });
+  assert.deepEqual(allNearest.selectedPointers, []);
+  assert.equal(allNearest.belowThreshold, 2);
+  assert.equal(allNearest.plan.proposals[55].warnings[0], 'RATING_CONFLICT');
+  assert.match(allNearest.plan.proposals[56].warnings[0], /UNTRUSTED_STAGED_DTXR/);
 });
 
 function row(vals) { return vals.map((v,i) => String(v).padStart(i ? 13 : 15,' ')).join(''); }
