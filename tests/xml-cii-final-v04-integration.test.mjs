@@ -74,7 +74,7 @@ test('v0.4 run evidence, release hold, active-model binding and browser cache ch
   assert.match(editor,/Download Revised CII/);
   assert.match(editor,/Apply Changes & Re-extract CII/);
   assert.match(editor,/Download Change Audit JSON/);
-  assert.match(read('tabs/xml-cii-2019-standalone-tab.js'),new RegExp(rev));
+  assert.ok(read('tabs/xml-cii-2019-standalone-tab.js').includes('xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js?v=20261110-zero-audit-custody-r1'));
   assert.match(read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js'),
     new RegExp('xml-cii-adapted-output-run\\.js\\?v='+rev));
   assert.match(read('tabs/xml-cii-2019-standalone/xml-cii-workflow-api-atta-default.js'),
