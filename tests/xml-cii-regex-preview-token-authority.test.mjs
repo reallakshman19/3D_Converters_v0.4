@@ -8,6 +8,10 @@ import { deriveLineKeyFromBranchName } from
   '../converters/xml-cii2019-core/regex-line-key.js';
 import { _derivePipingClassFromBranchName } from
   '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-preview-dryrun-core.js';
+import { createModeASourceEntry, buildModeAExecutionState } from
+  '../tabs/xml-cii-2019-standalone/xml-cii-mode-a-batch.js';
+import { createModeARegexProcessingRef, modeARawState } from
+  '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-propagation.js';
 
 const BRANCH='/GLRD-1000-6"-P4110001-93833-01/B6';
 const sourceXml = '<Root><Branch><Branchname>'+BRANCH.replace(/"/g,'&quot;')+
@@ -72,4 +76,34 @@ test('configured regex continues to work until a token mapping is explicitly sel
   assert.equal(mapped.regexTesterConfig.formats[0].lineKey.regex,'');
   assert.equal(initial.regexTesterConfig.formats[0].lineKey.regex,'-(93833)-',
     'existing input configuration stays unchanged');
+});
+
+test('Mode A shared Regex one-click mapping reaches each source Preview config without toggling',()=>{
+  const regexTesterConfig=createDefaultRegexTesterConfig();
+  regexTesterConfig.formats[0].lineKey={regex:'-(93833)-',group:1,tokenPosition:'5'};
+  regexTesterConfig.formats[0].pipingClass={regex:'',group:1,tokenPosition:'5'};
+  const config=JSON.stringify({linelist:{branchNameRegex:'-(93833)-',lineNoGroup:1,
+    lineKeyTokenPositions:'5'},rating:{pipingClassTokenIndex:5}});
+  const source=createModeASourceEntry({sourceText:sourceXml,sourceFile:null,
+    fileName:'GLRD-TEST.xml',supportConfigJson:config});
+  const baseRef={current:{
+    sourceText:sourceXml,sourceKind:'xml',sourceFile:null,
+    supportConfigJson:config,regexTesterConfig,
+    sourceBatch:{mode:'separate-models',activeSourceId:source.sourceId,
+      sources:[source],sharedSupportConfigJson:config},
+  }};
+  const regexRef=createModeARegexProcessingRef(baseRef);
+  regexRef.current=updateRegexTesterConfig(regexRef.current,'regex-line-key-token','4');
+  const snapshot=regexRef.current;
+  const result=runStandaloneRegexTester({...snapshot,sourceText:snapshot.sourceText,
+    extractionConfig:snapshot.regexTesterConfig});
+  regexRef.current=applyStandaloneRegexTesterResult(snapshot,result);
+  const after=modeARawState(baseRef);
+  const effective=buildModeAExecutionState(after,after.sourceBatch.sources[0]);
+  const effectiveConfig=JSON.parse(effective.supportConfigJson);
+  assert.equal(effective.regexTesterConfig.formats[0].lineKey.tokenPosition,'4');
+  assert.equal(effectiveConfig.linelist.lineKeyTokenPositions,'4');
+  assert.equal(effectiveConfig.linelist.branchNameRegex,'');
+  assert.equal(deriveLineKeyFromBranchName(BRANCH,effectiveConfig),'P4110001');
+  assert.equal(_derivePipingClassFromBranchName(BRANCH,effectiveConfig),'93833');
 });
