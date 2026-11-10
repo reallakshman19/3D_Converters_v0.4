@@ -8,10 +8,10 @@ const finalReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const singlePreviewVersion='20261110-single-xml-preview-r1';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
- ['index.html','main-rhbg-fitguard.js'],
- ['main-rhbg-fitguard.js','core/app.js'],
- ['core/app.js','app-standalone-runtime.js'],
- ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js'],
+ ['index.html','main-rhbg-fitguard.js',singlePreviewVersion],
+ ['main-rhbg-fitguard.js','core/app.js',singlePreviewVersion],
+ ['core/app.js','app-standalone-runtime.js',singlePreviewVersion],
+ ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js',singlePreviewVersion],
  ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',singlePreviewVersion],
  // Phase 6 has been replaced; the legacy Weight Match renderer remains
  // available to independent non-UI consumers, not the active Phase 6 route.
