@@ -107,13 +107,13 @@ test('alternative choice is requalified against threshold, shared source owner i
   assert.equal(alt.proposals[19].status, 'BELOW_THRESHOLD');
   plans[20].mapping.componentRefNo = plans[19].mapping.componentRefNo;
   const shared = planFinalRigidBatchCorrections(inventory, plans);
-  assert.equal(shared.proposals[19].status, 'HOLD');
-  assert.equal(shared.proposals[20].status, 'HOLD');
+  assert.equal(shared.proposals[19].status, 'SKIPPED_WITH_WARNING');
+  assert.equal(shared.proposals[20].status, 'SKIPPED_WITH_WARNING');
   inventory.rows[19].linkedElements.push(inventory.rows[19].linkedElements[0]);
-  assert.equal(planFinalRigidBatchCorrections(inventory, plans).proposals[19].status, 'HOLD');
+  assert.equal(planFinalRigidBatchCorrections(inventory, plans).proposals[19].status, 'SKIPPED_WITH_WARNING');
   inventory.rows[19].linkedElements.pop();
   inventory.rows[19].status = 'SHARED_POINTER';
-  assert.equal(planFinalRigidBatchCorrections(inventory, plans).proposals[19].status, 'HOLD');
+  assert.equal(planFinalRigidBatchCorrections(inventory, plans).proposals[19].status, 'SKIPPED_WITH_WARNING');
 });
 
 test('Apply All Nearest creates review selections but no mass approval or CII mutation', () => {
