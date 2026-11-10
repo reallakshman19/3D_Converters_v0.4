@@ -130,7 +130,7 @@ export function installFinalRigidBatchControls({
     dialogLayer.innerHTML = '<div style="background:#0f172a;color:#e2e8f0;border:1px solid #64748b;border-radius:8px;' +
       'padding:15px;max-width:1200px;width:97%;max-height:88vh;display:flex;flex-direction:column;gap:10px;">' +
       '<h3 style="margin:0;">Preview Batch Weight Corrections</h3>' +
-      '<p style="margin:0;font-size:12px;color:#fbbf24;">A nearest catalog suggestion is not a proven physical mass. Apply All Nearest Suggestions prepares review drafts only. Structural/shared-owner holds, out-of-scope and below-threshold pointers are excluded. Source metadata warnings allow review drafts, not mass approval. Independent review acknowledgement and verified staging are still required; no CII output changes at this stage.</p>' +
+      '<p style="margin:0;font-size:12px;color:#fbbf24;">Selected eligible corrections can be staged even when other pointers are skipped or need metadata review. Skipped rows remain unchanged and do not block. Catalog suggestions are advisory, not approved physical masses; explicit review and transaction verification remain required.</p>' +
       '<div data-final-rigid-batch-summary role="status" style="font-size:12px;color:#dbeafe;"></div>' +
       '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;">' +
       '<label title="Unlock separately reviewed approximate/unverified suggestions and source metadata warnings; structural holds and below-threshold rows remain excluded">' +
@@ -142,7 +142,7 @@ export function installFinalRigidBatchControls({
       '<button type="button" data-final-rigid-batch-clear-all disabled style="cursor:pointer;background:#1e293b;color:#e2e8f0;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #475569;">Clear Selection</button>' +
       '</div><div data-final-rigid-batch-nearest-note role="status" style="font-size:11px;color:#fbd38d;display:none;"></div>' +
-      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show other held / below-threshold rows</label>' +
+      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show skipped, advisory-warning and no-change rows</label>' +
       '<div style="overflow:auto;flex:1;border:1px solid #334155;border-radius:5px;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">' +
       '<thead><tr style="position:sticky;top:0;background:#1e293b;">' +
@@ -173,6 +173,7 @@ export function installFinalRigidBatchControls({
     const approveAllCheckbox = dialogLayer.querySelector('[data-final-rigid-batch-approve-all-checkbox]');
     const confirm = dialogLayer.querySelector('[data-final-rigid-batch-confirm-review]');
     const stage = dialogLayer.querySelector('[data-final-rigid-batch-stage]');
+    const continueButton = dialogLayer.querySelector('[data-final-rigid-batch-continue]');
     const stageReason = dialogLayer.querySelector('[data-final-rigid-batch-stage-reason]');
     includeReview.checked = base.includeReviewOnly;
     const candidateFor = (row) => plans[row.pointer - 1]?.nearestSuggestions || [];
@@ -194,8 +195,18 @@ export function installFinalRigidBatchControls({
               ? 'Explicit review acknowledgement is required for selected warnings / estimates.'
               : '';
       stage.disabled = Boolean(disableReason);
-      stage.title = disableReason || 'Verify selected CII weight corrections.';
-      stageReason.textContent = disableReason;
+      const skippedCount = current.skipped?.length || 0;
+      stage.textContent = chosen.length
+        ? 'Stage & Verify ' + chosen.length + ' Selected Corrections'
+        : 'Stage & Verify Selected Corrections';
+      stage.title = disableReason || ('Only ' + chosen.length +
+        ' selected pointers will change. ' + skippedCount + ' skipped pointers do not block.');
+      stageReason.textContent = disableReason || ('READY: ' + chosen.length +
+        ' selected correction(s). ' + skippedCount + ' skipped pointers stay unchanged. ' +
+        'Next: Apply Changes & Re-extract REVIEW-ONLY CII in the parent editor.');
+      continueButton.textContent = chosen.length
+        ? 'Discard ' + chosen.length + ' selections & continue unchanged'
+        : 'Verify & continue unchanged';
       approveAll.disabled = current.eligible.length === 0;
       approveAll.textContent = '✓ Approve All Eligible (' + current.eligible.length + ')';
       approveAllCheckbox.disabled = current.eligible.length === 0;
@@ -209,23 +220,21 @@ export function installFinalRigidBatchControls({
         r.status === 'SKIPPED_WITH_WARNING' || r.status === 'ALREADY_EDITED').length;
       const warnings = current.proposals.filter((r) =>
         r.warnings?.length && r.status !== 'OUT_OF_SCOPE').length;
-      summary.textContent = current.eligible.length + ' eligible · ' +
-        reviewOnlyCount + ' review-only (requires Include) · ' +
-        warnings + ' metadata warnings · ' +
-        hardHoldCount + ' hard-held (skipped with warning) · ' + current.belowThreshold.length +
-        ' below threshold · ' + chosen.length + ' selected · ' +
-        (needsApproval && !confirm.checked ? 'review acknowledgement required' :
+      summary.textContent = chosen.length + ' selected of ' + current.eligible.length +
+        ' eligible · ' + hardHoldCount + ' skipped (NOT blocking) · ' +
+        current.belowThreshold.length + ' unchanged / below threshold · ' +
+        warnings + ' advisory source warnings · ' +
+        reviewOnlyCount + ' pending review opt-in · ' +
+        (needsApproval && !confirm.checked ? 'acknowledgement required' :
           'no exported weights changed');
     }
 
     function render() {
       const current = recalc();
       body.innerHTML = current.proposals
-        .filter((row) => showHeld.checked ||
-          row.status === 'SKIPPED_WITH_WARNING' ||
-          (row.warnings?.length && row.status !== 'OUT_OF_SCOPE') ||
-          (row.errorPct !== null && Math.abs(row.errorPct) > current.thresholdPct &&
-            row.status !== 'OUT_OF_SCOPE'))
+        .filter((row) => row.status !== 'OUT_OF_SCOPE' &&
+          (showHeld.checked || row.status === 'ELIGIBLE' ||
+            row.status === 'REVIEW_ONLY'))
         .map((row) => {
           const item = inventory.rows[row.pointer - 1];
           const linked = item?.linkedElements || [];
@@ -288,16 +297,24 @@ export function installFinalRigidBatchControls({
               options + '</select>' : '—') +
             cell(esc(pretty(row.proposedWeight))) +
             cell(row.errorPct === null ? '—' : esc((row.errorPct >= 0 ? '+' : '') + row.errorPct.toFixed(1) + '%')) +
-            cell(ownerControl) + cell(manualControl) +
+            cell(sourceChoices.length ?
+              '<details><summary style="cursor:pointer;">' +
+              sourceChoices.length + ' source owner candidate(s)</summary>' +
+              ownerControl + '</details>' :
+              '<span title="No exact-edge candidate proved by source XML">Not verified</span>') +
+            cell('<details><summary style="cursor:pointer;">Manual reference…</summary>' +
+              manualControl + '</details>') +
             cell('<span style="color:' + (approved ? '#86efac' : '#fbbf24') + ';">' +
               esc(badge + (row.disposition || row.status)) +
               (row.skipCode ? ' · ' + esc(row.skipCode) : '') + '</span><div title="' +
               esc(row.candidate?.basis || row.reason) +
               '" style="max-width:240px;white-space:normal;font-size:10px;">' +
-              esc(row.reason) + (row.warnings?.length
-                 ? '<div style="color:#fbbf24;">⚠ Source warnings: ' +
-                   esc(row.warnings.join('; ')) + '</div>' : '') +
-               (row.candidate ? '<div>' +
+              esc(row.reason.split(' Source warnings:')[0]) +
+              (row.warnings?.length ? '<details style="margin-top:4px;">' +
+                '<summary style="cursor:pointer;color:#fbbf24;">' +
+                row.warnings.length + ' advisory warning(s) — details</summary>' +
+                '<div>' + esc(row.warnings.join('; ')) + '</div></details>' : '') +
+              (row.candidate ? '<div>' +
                 esc(row.candidate.method + ' · ' + (row.candidate.source || 'unidentified master row')) +
                 '</div>' : '') + '</div>') + '</tr>';
         }).join('') || '<tr><td colspan="11" style="padding:14px;">No RIGIDs in the selected scope.</td></tr>';
@@ -329,7 +346,7 @@ export function installFinalRigidBatchControls({
       // NOT check the independent review acknowledgement or stage an edit.
       const planned = planAllNearestBatchDraftSelection(inventory, plans, {
         ...base,
-        selectedIndices: candidateIndices,
+        selectedIndices: candidateIndices, ownerSelections, manualReferences,
       });
       candidateIndices.clear();
       for (const [pointer, index] of planned.candidateIndices) candidateIndices.set(pointer, index);
@@ -343,8 +360,9 @@ export function installFinalRigidBatchControls({
       nearestNote.textContent = 'Nearest review drafts selected for ' +
         planned.selectedPointers.length + ' eligible pointers (' + planned.reviewRequired +
         ' require independent review); ' + planned.hardHeld + ' hard-held / already edited and ' +
-        planned.belowThreshold + ' below ±' + planned.plan.thresholdPct +
-        '% not selected. Confirm reviewed values separately before Stage & Verify. ' +
+        planned.belowThreshold + ' unchanged / below ±' + planned.plan.thresholdPct +
+        '% not selected. Skipped rows do NOT block eligible selected corrections. ' +
+        'Acknowledge the reviewed proposals and Stage & Verify; then apply changes in the parent editor. ' +
         'No source mass or CII bytes have changed.';
       render();
     });
