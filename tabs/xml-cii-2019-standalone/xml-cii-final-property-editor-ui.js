@@ -127,6 +127,8 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
     result.diagnostics?.converterInputDigest || 'digest-unavailable') + ':' +
     (result.ciiName || 'generated.cii') + ':' + (globalThis.crypto?.randomUUID?.() || Date.now());
   let session = null, version = 0, previewVersion = -1, committed = null;
+  // A warning-bearing batch edit remains a REVIEW-ONLY export.
+  let stagedMetadataWarnings = [];
   const invalid = new Set();
   const current = () => typeof getCurrentResult === 'function' ? getCurrentResult() : result;
 
@@ -265,6 +267,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   buttons['reset-all'].addEventListener('click', () => {
     for (const pointer of byPointer.keys()) restore(pointer);
     if (session) resetAllCiiPropertyEdits(session);
+    stagedMetadataWarnings = [];
+    buttons.apply.textContent = reviewOnly
+      ? 'Apply & Re-extract REVIEW-ONLY CII' : 'Apply Changes & Re-extract CII';
     dirty(); repaint();
   });
 
@@ -309,6 +314,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
             matchPct: comparison.matchPct ?? null,
             approximate: Boolean(comparison.approximate),
             reviewRequired: item.reviewRequired,
+            metadataWarningCodes: [...(item.warnings || [])],
             individuallyApproved: true, reviewOnlyAccepted: Boolean(item.reviewRequired && approval),
             generatedFromRun: String(result.finalRigidReviewEvidence?.engineInputDigest || ''),
           },
@@ -334,6 +340,10 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       }
       // No UI state or live session edits are committed until all checks pass.
       session.edits = scratch.edits;
+      stagedMetadataWarnings = [...new Set([
+        ...stagedMetadataWarnings,
+        ...staged.flatMap(({ item }) => item.warnings || []),
+      ])];
       for (const { row, item, reference } of staged) {
         row.editInput.value = String(item.proposedWeight);
         row.tr.dataset.batchProposedValue = String(item.proposedWeight);
@@ -352,8 +362,12 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       dirty();
       previewVersion = version;
       buttons.apply.disabled = false;
+      if (stagedMetadataWarnings.length)
+        buttons.apply.textContent = 'Apply & Re-extract REVIEW-ONLY CII';
       repaint();
-      report.textContent = 'VERIFIED BATCH PREVIEW — select Apply Changes & Re-extract CII to publish a separate revised file.\n' +
+      report.textContent = 'VERIFIED BATCH PREVIEW — select Apply & Re-extract to publish a separate revised file.\n' +
+        (stagedMetadataWarnings.length
+          ? 'SOURCE METADATA WARNINGS — review-only output; engineering approval is NOT granted.\n' : '') +
         staged.map(({ pointer, item }) => 'RIGID pointer ' + pointer + ': ' +
           item.originalWeight + ' → ' + item.proposedWeight +
           ' CII units (' + item.errorPct.toFixed(1) + '%)').join('\n') +
@@ -405,22 +419,27 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         currentCiiText: current().ciiText, runIdentity,
       });
       if (ticket !== version) throw new Error('Edits changed during apply.');
-      committed = reviewOnly ? {
+      const reviewedOnly = reviewOnly || stagedMetadataWarnings.length > 0;
+      committed = reviewedOnly ? {
         ...revised,
         revisedName:revised.revisedName.replace(/\.cii$/i,'_REVIEW_ONLY.cii'),
         auditName:revised.auditName.replace(/\.json$/i,'_REVIEW_ONLY.json'),
         audit:{
           ...revised.audit,
-          engineeringReleaseStatus:'HELD_NOT_APPROVED',
-          physicalMassVerification:'NOT_ESTABLISHED_BY_CII_PATCH',
+          engineeringReleaseStatus:reviewOnly ? 'HELD_NOT_APPROVED'
+            : 'REVIEW_ONLY_METADATA_WARNING_NOT_APPROVED',
+          physicalMassVerification:reviewOnly ? 'NOT_ESTABLISHED_BY_CII_PATCH'
+            : 'NOT_ESTABLISHED_BY_CATALOG_REVIEW',
           sourceCiiAuditFlags:result.diagnostics?.rigidMassAudit?.flags||[],
-          reviewerAcknowledgedHold:true,
-          originalConversionStatus:result.error||'RIGID_MASS_CONSERVATION_HOLD',
+          sourceMetadataWarnings: stagedMetadataWarnings,
+          reviewerAcknowledgedHold:reviewOnly,
+          originalConversionStatus:result.error||
+            (reviewOnly ? 'RIGID_MASS_CONSERVATION_HOLD' : 'SOURCE_METADATA_WARNING_REVIEW_ONLY'),
         },
       } : revised;
       buttons.download.disabled = buttons.audit.disabled = false;
-      report.textContent = (reviewOnly
-        ? 'REVIEW-ONLY REVISED CII READY — engineering HOLD is NOT cleared\n'
+      report.textContent = (reviewedOnly
+        ? 'REVIEW-ONLY REVISED CII READY — engineering approval is NOT granted\n'
         : 'VERIFIED REVISED CII READY — original CII unchanged\n') +
         revised.audit.changes.length + ' authorized edits; zero unauthorized bytes changed.\nSHA-256: ' +
         revised.audit.revisedSha256;
