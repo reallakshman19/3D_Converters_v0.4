@@ -8,6 +8,7 @@ import { createDefaultManualElementSideloadConfig } from '../xml-cii-manual-elem
 import { createDefaultTraceTableConfig } from '../xml-cii-table-trace-config.js';
 import { DEFAULT_WEIGHT_MASTER_ROWS } from '../../../converters/xml-cii2019-core/default-weight-master-rows.js';
 import { normalizeAdaptedWorkflowPhaseId } from './xml-cii-adapted-phase-registry.js';
+import { clearPreviewCachesV7 } from './xml-cii-adapted-preview-cache-v7.js';
 
 const SUPPORT_MAPPER_DEFAULTS = Object.freeze([
   { kind: 'REST', aliases: ['Shoe', 'Pipe Rest', 'Wear Pad', 'Rest'], ciiKind: 'REST_STYLE_CII_SUPPORT' },
@@ -281,6 +282,11 @@ function nestedRuleKey(field) {
 function numericRuleValue(key, value) { return key === 'group' ? Number(value || 0) : value; }
 
 function updateAndPersistRegexConfig(state, newConfig) {
+  if (JSON.stringify(state.regexTesterConfig || {}) !== JSON.stringify(newConfig)) {
+    // A token/regex mapping changes the authority used by Preview; do not
+    // restore an earlier valid-looking table from the previous regex config.
+    clearPreviewCachesV7();
+  }
   if (typeof localStorage !== 'undefined') {
     try { localStorage.setItem('xml-cii-regex-config-v1', JSON.stringify(newConfig)); } catch {}
   }
@@ -322,12 +328,20 @@ export function updateRegexTesterConfig(state, field, value) {
   const [ruleName, key] = path;
   const rule = { ...(activeF[ruleName] || {}) };
   rule[key] = numericRuleValue(key, value);
+  if (key === 'tokenPosition' && String(value ?? '').trim()) {
+    // Click-to-map chooses token extraction as the new authority. An old
+    // regex would otherwise silently outrank the visible selected token.
+    rule.regex = '';
+  }
   activeF[ruleName] = rule;
   formats[idx] = activeF;
   return updateAndPersistRegexConfig(state, { ...currentConfig, formats });
 }
 
 export function applyStandaloneRegexTesterResult(state, regexTesterResult) {
+  if (regexTesterResult?.supportConfigJson &&
+      regexTesterResult.supportConfigJson !== state.supportConfigJson)
+    clearPreviewCachesV7();
   if (typeof localStorage !== 'undefined' && state.regexTesterConfig) {
     try { localStorage.setItem('xml-cii-regex-config-v1', JSON.stringify(state.regexTesterConfig)); } catch {}
   }
