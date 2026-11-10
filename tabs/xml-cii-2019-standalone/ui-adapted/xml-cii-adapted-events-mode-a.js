@@ -7,7 +7,7 @@ import {
   removeModeASource,
   replaceModeAState,
   updateModeASource,
-} from './xml-cii-adapted-mode-a-state.js?v=20260813-mode-a-full-propagation-2';
+} from './xml-cii-adapted-mode-a-state.js?v=20261110-single-xml-preview-r1';
 import { modeABatchArtifactValue } from './xml-cii-adapted-mode-a-panel.js?v=20260813-mode-a-full-propagation-2';
 import { runModeABatchFromUi } from './xml-cii-adapted-run-workflow-mode-a.js?v=20260813-mode-a-full-propagation-2';
 import { detectXmlCiiWorkflowSourceKind } from '../xml-cii-workflow-source-detect.js?v=20260813-mode-a-full-propagation-2';
