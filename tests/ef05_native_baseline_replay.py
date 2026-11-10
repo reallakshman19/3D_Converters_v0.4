@@ -165,10 +165,36 @@ print('BEND_POLICY', info.get('enabled'), info.get('published'),info.get('remove
             receipt["generated_matches_historical_enriched_bytes"]=output.read_bytes()==HISTORIC.read_bytes()
     except Exception as err:
         receipt["enrichment_error"]=repr(err)
+    # Historical repo enriched XML has nonzero masses but lacks this run's
+    # source-specific approvals. A separate *diagnostic-only* zero-mass copy
+    # permits native CII geometry/identity comparison without pretending mass
+    # ownership is verified or changing the authentic historical source.
+    try:
+        shutil.copyfile(HISTORIC,OUT/"historical_enriched_unmodified.xml")
+        text=HISTORIC.read_text(encoding="utf-8-sig")
+        count=[0]
+        def zero_mass(match):
+            if match.group(2).strip() not in {"0","0.0","0.000","0.000000"}:
+                count[0]+=1
+            return match.group(1)+"0"+match.group(3)
+        # Entire XML remains structurally the same; only the diagnostic copy's
+        # original Node/Weight values are suppressed for geometry-only replay.
+        zeroed=re.sub(r"(<Weight>)([^<]*)(</Weight>)",zero_mass,text)
+        geometry_xml=OUT/"historical_enriched_geometry_only_ZERO_WEIGHT.xml"
+        geometry_xml.write_text(zeroed,encoding="utf8")
+        receipt["historical_geometry_only"]={
+            "mass_fields_suppressed":count[0],
+            "not_physical_mass_evidence":True,
+            "source":describe(geometry_xml),
+            "run":convert(geometry_xml,"historical_geometry_only",stage),
+        }
+    except Exception as error:
+        receipt["historical_geometry_error"]=repr(error)
     # Summarize source-identical counts & difference from a separate
     # previously reported owner's actual conversion.
-    for name in ["generated","historical","raw"]:
+    for name in ["generated","historical","raw","historical_geometry_only"]:
         x=receipt.get(name,{})
+        x=x.get("run",{}) if name=="historical_geometry_only" else x
         metrics=x.get("metrics")
         if not metrics:continue
         x["comparison_to_report"]={
@@ -186,6 +212,12 @@ print('BEND_POLICY', info.get('enabled'), info.get('published'),info.get('remove
     print(json.dumps({k:{"status":v.get("exit_code"),"elements":v.get("metrics",{}).get("elements_count"),
                           "rigids":v.get("metrics",{}).get("rigid_count"),"sha256":v.get("cii",{}).get("sha256")}
             for k,v in receipt.items() if k in ["generated","historical","raw"]},indent=2))
+    print("HISTORICAL_GEOMETRY_ONLY", json.dumps({
+        "status":receipt.get("historical_geometry_only",{}).get("run",{}).get("exit_code"),
+        "elements":receipt.get("historical_geometry_only",{}).get("run",{}).get("metrics",{}).get("elements_count"),
+        "rigids":receipt.get("historical_geometry_only",{}).get("run",{}).get("metrics",{}).get("rigid_count"),
+        "flagged_replay_matches":receipt.get("historical_geometry_only",{}).get("run",{}).get("metrics",{}).get("flag_identity_exact_matches")
+    }))
     print("SOURCE_SHA_MATCH",receipt["source_blob_matches_uploaded"],"STAGE_SHA_MATCH",receipt.get("staged",{}).get("exact_user_staged_sha256"))
     print("RECEIPT",OUT/"replay_receipt.json")
     return 0 if receipt.get("generated",{}).get("cii") or receipt.get("historical",{}).get("cii") else 1
