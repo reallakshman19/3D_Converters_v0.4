@@ -430,6 +430,8 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isDisabled(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(), '150');
+    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /No eligible numerical corrections/);
     assert.match(await modal.locator('thead').innerText(),/Element Length \(mm\)/);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1',
       'batch length must be the final CII 19.1 mm route, not a catalog/physical length');
@@ -477,6 +479,8 @@ try {
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
       'bulk selection still requires review acknowledgement');
+    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /Explicit review acknowledgement/);
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     await modal.locator('[data-final-rigid-batch-stage]').click();
