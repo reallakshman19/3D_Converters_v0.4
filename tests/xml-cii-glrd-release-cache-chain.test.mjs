@@ -30,7 +30,7 @@ test('entire live XML-CII Weight Match and consolidated popup import chain is ve
 test('new Phase 6 review and advanced matcher are versioned on the live import chain',()=>{
   const phase6Chain=[
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',
-     'xml-cii-adapted-phase-panels-mode-a.js',finalReviewVersion],
+     'xml-cii-adapted-phase-panels-mode-a.js',singlePreviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-mode-a.js',
      'xml-cii-adapted-phase6-unified-review.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js',
