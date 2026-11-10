@@ -46,6 +46,7 @@ export function installFinalRigidBatchControls({
   const preview = toolbar.querySelector('[data-final-rigid-batch-preview]');
   const nearestShortcut = toolbar.querySelector('[data-final-rigid-batch-open-nearest]');
   let dialogLayer = null;
+  let shortcutPreviousInclude = null;
 
   const snapshot = () => ({
     thresholdPct: thresholdInput.value,
@@ -59,7 +60,15 @@ export function installFinalRigidBatchControls({
       select.value !== '').map((select) =>
       [Number(select.getAttribute('data-final-rigid-suggestion')), Number(select.value)])),
   });
-  const close = () => { dialogLayer?.remove(); dialogLayer = null; };
+  const close = ({ committed = false } = {}) => {
+    // The nearest shortcut temporarily opts review-only drafts into the
+    // modal. Cancel/Escape must restore the prior outer toolbar preference.
+    if (!committed && shortcutPreviousInclude !== null)
+      includeInput.checked = shortcutPreviousInclude;
+    shortcutPreviousInclude = null;
+    dialogLayer?.remove();
+    dialogLayer = null;
+  };
   overlay.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && dialogLayer) { ev.stopImmediatePropagation(); ev.preventDefault(); close(); }
   }, true);
@@ -69,6 +78,7 @@ export function installFinalRigidBatchControls({
       status.textContent = 'REFUSED: Weight editor is not ready or conversion run changed.';
       return;
     }
+    if (autoSelectNearest) shortcutPreviousInclude = includeInput.checked;
     const base = snapshot();
     let plan;
     try { plan = planFinalRigidBatchCorrections(inventory, plans, base); }
@@ -290,7 +300,7 @@ export function installFinalRigidBatchControls({
         await stageAndVerify(chosen, current.thresholdPct, confirm.checked);
         status.textContent = 'Batch VERIFIED: ' + chosen.length +
           ' selected corrections staged. Click Apply Changes & Re-extract CII, then Download Revised CII.';
-        close();
+        close({ committed: true });
       } catch (error) {
         summary.textContent = 'REFUSED: ' + (error?.message || error) + '. No batch changes were staged.';
         updateStage();
