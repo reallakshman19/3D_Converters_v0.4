@@ -22,8 +22,10 @@ const finite = (x) => clean(x) && Number.isFinite(Number(x)) ? Number(x) : null;
 const positive = (x) => { const n = finite(x); return n !== null && n > 0 ? n : null; };
 const observed = (val, sourceNode, basis, details = {}) =>
   ({ value: val || null, sourceNode: sourceNode || null, basis, ...details });
-function empty(pointer, reason) {
+function empty(pointer, reason, ownerCandidates = []) {
   return { rigidPointer: pointer, status: 'NOT_RESOLVED', reason, mapping: null,
+    // Source-local FROM/TO candidates are review choices, never authority.
+    ownerCandidates,
     bore: observed(null, null, 'Not resolved'),
     rating: observed(null, null, 'Not resolved'),
     dtxr: observed(null, null, 'Not resolved'), conflicts: [],
@@ -82,6 +84,20 @@ function sourceIndex(xmlText, forwardLengths) {
     });
   }
   return edges;
+}
+function sourceOwnerCandidates(edge) {
+  // Only expose ComponentRefNos witnessed on the *exact* source branch/edge.
+  // Nothing inferred from the catalog or from CII's synthetic identifiers.
+  const candidates = [];
+  for (const [side, node] of [['FROM', edge.from], ['TO', edge.to]]) {
+    if (!node.componentRefNo || !weightBearing(node)) continue;
+    candidates.push({
+      branchName: edge.branchName, componentRefNo: node.componentRefNo,
+      componentType: node.componentType, sourceNode: node.number, side,
+      sourceLengthMm: edge.lengthMm,
+    });
+  }
+  return candidates;
 }
 function authoritativeOwner(edge) {
   const to = edge.to, from = edge.from;
@@ -208,12 +224,13 @@ export function buildFinalRigidSourceContexts(inventory, evidence = {}, authorit
     const edge = candidates[0];
     if (Math.abs(edge.lengthMm - Number(element.lengthMm)) > 0.03)
       return empty(row.rigidPointer, 'Final CII length disagrees with exact source edge (>0.03 mm).');
+    const ownerCandidates = sourceOwnerCandidates(edge);
     const chosen = authoritativeOwner(edge);
-    if (!chosen.node) return empty(row.rigidPointer, chosen.reason);
+    if (!chosen.node) return empty(row.rigidPointer, chosen.reason, ownerCandidates);
     const owner = chosen.node;
     const matches = issueByOwner.get(ownerKey(owner.branchName, owner.number, owner.componentRefNo)) || [];
     if (matches.length > 1)
-      return empty(row.rigidPointer, 'Ambiguous Weight Match rows for verified component and source node.');
+      return empty(row.rigidPointer, 'Ambiguous Weight Match rows for verified component and source node.', ownerCandidates);
     const metadata = metadataFor(owner, matches[0], config, dtxrContext, edge.branchBore);
     const conflicts = [];
     if (metadata.rating.conflict) conflicts.push('RATING_CONFLICT');
@@ -239,7 +256,7 @@ export function buildFinalRigidSourceContexts(inventory, evidence = {}, authorit
     return { rigidPointer: row.rigidPointer,
       status: conflicts.length ? 'CONFLICT_REVIEW' : 'VERIFIED',
       reason: conflicts.length ? conflicts.join(', ') : 'Exact run/branch/edge/geometry/source-component evidence.',
-      mapping, ...metadata, conflicts,
+      mapping, ownerCandidates, ...metadata, conflicts,
       eligibleForAutomaticReference: conflicts.length === 0 &&
         metadata.bore.value !== null && Boolean(metadata.rating.value) && !metadata.dtxr.suppressed };
   }));
