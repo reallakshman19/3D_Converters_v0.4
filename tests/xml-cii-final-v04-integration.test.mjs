@@ -74,9 +74,9 @@ test('v0.4 run evidence, release hold, active-model binding and browser cache ch
   assert.match(editor,/Download Revised CII/);
   assert.match(editor,/Apply Changes & Re-extract CII/);
   assert.match(editor,/Download Change Audit JSON/);
-  assert.ok(read('tabs/xml-cii-2019-standalone-tab.js').includes('xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js?v=20261110-zero-audit-custody-r1'));
+  assert.ok(read('tabs/xml-cii-2019-standalone-tab.js').includes('xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js?v=20261110-final-rigid-nearest-toolbar-r1'));
   assert.ok(read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js')
-    .includes('xml-cii-adapted-output-run.js?v=20261110-zero-audit-custody-r1'));
+    .includes('xml-cii-adapted-output-run.js?v=20261110-final-rigid-nearest-toolbar-r1'));
   assert.ok(read('tabs/xml-cii-2019-standalone/xml-cii-workflow-api-atta-default.js')
     .includes('xml-cii-workflow-service.js?v=20261110-zero-audit-custody-r1'));
 });

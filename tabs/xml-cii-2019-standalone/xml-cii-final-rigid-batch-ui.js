@@ -34,6 +34,7 @@ export function installFinalRigidBatchControls({
     '<label title="Unverified source owner or approximate catalog estimates require manual approval">' +
     '<input type="checkbox" data-final-rigid-batch-review-only> Include approximate / unverified nearest</label>' +
     '<button type="button" data-final-rigid-batch-preview style="cursor:pointer;padding:7px 11px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;border-radius:5px;">Preview Batch Corrections</button>' +
+    '<button type="button" data-final-rigid-batch-open-nearest title="Select nearest catalog suggestions as batch REVIEW DRAFTS in a preview. Requires independent approval and Stage & Verify; does not alter CII weights." style="cursor:pointer;padding:7px 11px;border:1px solid #eab308;background:#744c13;color:#fff;border-radius:5px;">Apply nearest suggestions</button>' +
     '</div><div data-final-rigid-batch-status role="status" style="font-size:11px;color:#94a3b8;margin-top:5px;">' +
     'Preview → choose exact RIGID pointers → verify transaction → re-extract revised CII. No automatic mass approval.</div>';
   tableScroller.insertAdjacentElement('beforebegin', toolbar);
@@ -43,7 +44,9 @@ export function installFinalRigidBatchControls({
   const includeInput = toolbar.querySelector('[data-final-rigid-batch-review-only]');
   const status = toolbar.querySelector('[data-final-rigid-batch-status]');
   const preview = toolbar.querySelector('[data-final-rigid-batch-preview]');
+  const nearestShortcut = toolbar.querySelector('[data-final-rigid-batch-open-nearest]');
   let dialogLayer = null;
+  let shortcutPreviousInclude = null;
 
   const snapshot = () => ({
     thresholdPct: thresholdInput.value,
@@ -57,16 +60,25 @@ export function installFinalRigidBatchControls({
       select.value !== '').map((select) =>
       [Number(select.getAttribute('data-final-rigid-suggestion')), Number(select.value)])),
   });
-  const close = () => { dialogLayer?.remove(); dialogLayer = null; };
+  const close = ({ committed = false } = {}) => {
+    // The nearest shortcut temporarily opts review-only drafts into the
+    // modal. Cancel/Escape must restore the prior outer toolbar preference.
+    if (!committed && shortcutPreviousInclude !== null)
+      includeInput.checked = shortcutPreviousInclude;
+    shortcutPreviousInclude = null;
+    dialogLayer?.remove();
+    dialogLayer = null;
+  };
   overlay.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && dialogLayer) { ev.stopImmediatePropagation(); ev.preventDefault(); close(); }
   }, true);
-  preview.addEventListener('click', () => {
+  const openBatchPreview = (autoSelectNearest = false) => {
     close();
     if (!isReady() || !getCurrentResult()) {
       status.textContent = 'REFUSED: Weight editor is not ready or conversion run changed.';
       return;
     }
+    if (autoSelectNearest) shortcutPreviousInclude = includeInput.checked;
     const base = snapshot();
     let plan;
     try { plan = planFinalRigidBatchCorrections(inventory, plans, base); }
@@ -224,7 +236,7 @@ export function installFinalRigidBatchControls({
       confirm.checked = false;
       render();
     });
-    applyAllNearest.addEventListener('click', () => {
+    const selectNearestDrafts = () => {
       if (!isReady() || !getCurrentResult()) {
         nearestNote.style.display = 'block';
         nearestNote.textContent = 'REFUSED: Conversion run changed; reopen the current CII review.';
@@ -253,7 +265,8 @@ export function installFinalRigidBatchControls({
         '% not selected. Confirm reviewed values separately before Stage & Verify. ' +
         'No source mass or CII bytes have changed.';
       render();
-    });
+    };
+    applyAllNearest.addEventListener('click', selectNearestDrafts);
     approveAll.addEventListener('click', () => selectAllEligible(true));
     clearAll.addEventListener('click', () => selectAllEligible(false));
     approveAllCheckbox.addEventListener('change', () =>
@@ -287,14 +300,20 @@ export function installFinalRigidBatchControls({
         await stageAndVerify(chosen, current.thresholdPct, confirm.checked);
         status.textContent = 'Batch VERIFIED: ' + chosen.length +
           ' selected corrections staged. Click Apply Changes & Re-extract CII, then Download Revised CII.';
-        close();
+        close({ committed: true });
       } catch (error) {
         summary.textContent = 'REFUSED: ' + (error?.message || error) + '. No batch changes were staged.';
         updateStage();
       }
     });
     render();
+    // The main Batch Weight Correction toolbar now exposes the shortcut.
+    // It uses the EXACT same provisional selection as the nested dialog;
+    // no staging, review acknowledgement, or CII edit happens on opening.
+    if (autoSelectNearest) selectNearestDrafts();
     dialogLayer.querySelector('[data-final-rigid-batch-cancel]').focus();
-  });
+  };
+  preview.addEventListener('click', () => openBatchPreview(false));
+  nearestShortcut.addEventListener('click', () => openBatchPreview(true));
   return { toolbar, close };
 }

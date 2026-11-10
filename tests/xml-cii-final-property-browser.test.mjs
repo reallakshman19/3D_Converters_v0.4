@@ -420,6 +420,24 @@ try {
     assert.match(await suggestion.innerText(), /2\.984 kg · 50%/);
     assert.equal(await first.locator('[data-final-rigid-reference]').inputValue(), '');
     assert.equal(await page.locator('[data-final-rigid-batch-threshold]').inputValue(), '40');
+    // New main-panel shortcut MUST be discoverable without opening another
+    // popup first; it selects DRAFTS but cannot stage/approve/edit any mass.
+    const nearestShortcut=page.locator('[data-final-rigid-batch-open-nearest]');
+    assert.equal(await nearestShortcut.count(),1);
+    assert.equal(await nearestShortcut.innerText(),'Apply nearest suggestions');
+    await nearestShortcut.click();
+    const shortcutModal=page.locator('[data-final-rigid-batch-dialog]');
+    assert.equal(await shortcutModal.count(),1);
+    assert.match(await shortcutModal.locator('[data-final-rigid-batch-summary]').innerText(),/1 selected/);
+    assert.equal(await shortcutModal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await shortcutModal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150',
+      'single-click nearest must not alter output-weight mass');
+    assert.equal(await page.evaluate(()=>window.currentResult.ciiText),sourceCii);
+    await shortcutModal.locator('[data-final-rigid-batch-cancel]').click();
+    assert.equal(await page.locator('[data-final-rigid-batch-dialog]').count(),0);
+    assert.equal(await page.locator('[data-final-rigid-batch-review-only]').isChecked(),false,
+      'Cancel must restore pre-shortcut review-only opt-in');
     await page.locator('[data-final-rigid-batch-preview]').click();
     let modal = page.locator('[data-final-rigid-batch-dialog]');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /0 eligible/);
@@ -786,6 +804,17 @@ try {
       /SHORT SPAN|19\.100|short final/i);
     assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
       'catalog batch mass promotion prohibited on engineering HOLD');
+    const heldNearest=page.locator('[data-final-rigid-batch-nearest-held]');
+    assert.equal(await heldNearest.count(),1,
+      'held review must still offer batch nearest comparisons, never edits');
+    const heldCiiBefore=await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText);
+    await heldNearest.click();
+    assert.match(await page.locator('[data-final-rigid-batch-nearest-held-status]').innerText(),
+      /No RIGID weights staged|0 nearest suggestion/);
+    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
+      'held CII must not acquire release-mode batch staging');
+    assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),
+      heldCiiBefore,'held source CII remains intact');
     const edited=short.locator('[data-final-rigid-edited]');
     await edited.fill('17.48');
     assert.match(await short.locator('[data-final-rigid-edit-feedback]').innerText(),

@@ -6,7 +6,7 @@
 import { createCiiPropertySession, stageCiiPropertyEdit, resetCiiPropertyEdit,
   resetAllCiiPropertyEdits, verifyCiiPropertyTransaction } from './xml-cii-final-property-transactions.js';
 import { classifyFinalRigidWeightError, formatFinalRigidErrorPercent } from './xml-cii-final-rigid-weight-error.js';
-import { installFinalRigidBatchControls } from './xml-cii-final-rigid-batch-ui.js?v=20261109-ef05-dtxr-phase6-r5';
+import { installFinalRigidBatchControls } from './xml-cii-final-rigid-batch-ui.js?v=20261110-final-rigid-nearest-toolbar-r1';
 
 function element(tag, content, attributes = {}) {
   const item = document.createElement(tag);
@@ -362,6 +362,59 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       return verified;
     },
   });
+
+  if(reviewOnly){
+    // The quarantined Final RIGID editor previously hid the batch toolbar
+    // entirely. Show a bulk nearest action but keep its authority limited to
+    // COMPARISON REFERENCES. An unresolved source audit is never cleared by
+    // copying catalog matches into a physical mass field.
+    const heldBatch=element('section',null,{'data-final-rigid-batch-review-only-toolbar':''});
+    heldBatch.style.cssText='padding:9px;margin:8px 0;border:1px solid #9c6925;border-radius:6px;background:#282012;color:#fde7bc;';
+    const label=element('strong','Batch nearest suggestions — held CII (review drafts only)');
+    const heldNearest=element('button','Apply nearest suggestions',{
+      type:'button','data-final-rigid-batch-nearest-held':'',
+      title:'Select nearest catalog comparisons for review. Never edits the CII, replaces 0 N, or grants engineering mass approval.',
+    });
+    heldNearest.style.cssText='margin:0 10px;padding:7px 11px;border:1px solid #eab308;border-radius:5px;background:#744c13;color:#fff;cursor:pointer;';
+    const message=element('div','Catalog suggestions can be copied to Error % references, not mass fields, while the source audit is held.',{
+      'data-final-rigid-batch-nearest-held-status':'',role:'status',
+    });
+    message.style.cssText='font-size:11px;margin-top:6px;white-space:normal;';
+    heldBatch.append(label,heldNearest,message);
+    scrollTable?.insertAdjacentElement('beforebegin',heldBatch);
+    heldNearest.addEventListener('click',()=>{
+      if(!session||current()!==result||invalid.size){
+        message.textContent='REFUSED: This editor is stale or has invalid edits. Restore valid state and reopen the current conversion.';
+        return;
+      }
+      let selected=0,skippedZeros=0,skippedOther=0;
+      for(const [pointer,row] of byPointer){
+        const plan=plans[pointer-1];
+        const candidate=plan?.nearestSuggestions?.[0];
+        const suggestion=row.tr.querySelector('[data-final-rigid-suggestion]');
+        const reference=row.tr.querySelector('[data-final-rigid-reference]');
+        // A numeric 0 N is an intentional mass value, NOT a blank.
+        if(row.original.weight===0){skippedZeros++;continue;}
+        if(row.editInput.value.trim()!==row.original.rawWeight.trim()||
+          row.tr.dataset.finalRigidAuditFlagged==='true'||
+          row.original.linkedElements?.length!==1||
+          !candidate||!Number.isFinite(Number(candidate.referenceWeight))||
+          Number(candidate.referenceWeight)<=0||!suggestion||!reference||
+          reference.dataset.referenceKind==='manual'){
+          skippedOther++;continue;
+        }
+        // Leverage the existing per-row comparison handler for the same
+        // reference, ranking and Error %. Never modify edited/approved mass.
+        suggestion.value='0';
+        suggestion.dispatchEvent(new Event('change',{bubbles:true}));
+        selected++;
+      }
+      message.textContent=selected+' nearest suggestion(s) selected as comparison-only references; '+
+        skippedZeros+' existing 0 N weights preserved; '+skippedOther+
+        ' other rows excluded. No RIGID weights staged, no source approval, no CII bytes changed. '+
+        'To edit held weights, supply independently verified physical-mass evidence for each pointer.';
+    });
+  }
 
   if(reviewOnly){
     const note=element('div',

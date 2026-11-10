@@ -1,4 +1,4 @@
-import { createFinalRigidWeightReviewButton, finalRigidReviewAvailable } from './xml-cii-adapted-final-rigid-review.js?v=20261109-ef05-dtxr-phase6-r5';
+import { createFinalRigidWeightReviewButton, finalRigidReviewAvailable } from './xml-cii-adapted-final-rigid-review.js?v=20261110-final-rigid-nearest-toolbar-r1';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
 import { explainRigidMassAudit } from '../xml-cii-rigid-mass-audit-presentation.js?v=20261110-zero-audit-custody-r1';
 import { detectXmlCiiWorkflowSourceKind, maskedFileName } from '../xml-cii-workflow-source-detect.js';

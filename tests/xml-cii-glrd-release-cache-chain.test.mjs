@@ -3,17 +3,18 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const version='20261108-rigid-choice-buttons-1';
 const zeroAuditCustodyVersion='20261110-zero-audit-custody-r1';
+const finalNearestToolbarVersion='20261110-final-rigid-nearest-toolbar-r1';
 const phase6Version='20261109-phase6-readable-table-r4';
 const phase6ReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const finalReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const singlePreviewVersion='20261110-single-xml-preview-r1';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
- ['index.html','main-rhbg-fitguard.js',zeroAuditCustodyVersion],
- ['main-rhbg-fitguard.js','core/app.js',zeroAuditCustodyVersion],
- ['core/app.js','app-standalone-runtime.js',zeroAuditCustodyVersion],
- ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js',zeroAuditCustodyVersion],
- ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',zeroAuditCustodyVersion],
+ ['index.html','main-rhbg-fitguard.js',finalNearestToolbarVersion],
+ ['main-rhbg-fitguard.js','core/app.js',finalNearestToolbarVersion],
+ ['core/app.js','app-standalone-runtime.js',finalNearestToolbarVersion],
+ ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js',finalNearestToolbarVersion],
+ ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',finalNearestToolbarVersion],
  // Phase 6 has been replaced; the legacy Weight Match renderer remains
  // available to independent non-UI consumers, not the active Phase 6 route.
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js',zeroAuditCustodyVersion],
@@ -31,7 +32,7 @@ test('entire live XML-CII Weight Match and consolidated popup import chain is ve
 test('new Phase 6 review and advanced matcher are versioned on the live import chain',()=>{
   const phase6Chain=[
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',
-     'xml-cii-adapted-phase-panels-mode-a.js',zeroAuditCustodyVersion],
+     'xml-cii-adapted-phase-panels-mode-a.js',finalNearestToolbarVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-mode-a.js',
      'xml-cii-adapted-phase6-unified-review.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js',
@@ -88,7 +89,9 @@ test('final RIGID review and exact run-pinned output are versioned through both 
     'xml-cii-adapted-run-workflow-atta-default.js',
     'xml-cii-workflow-api-atta-default.js','xml-cii-workflow-service.js']);
   for(const [path,dependency] of edits){
-    const expected=custodyChanged.has(dependency)?zeroAuditCustodyVersion:finalReviewVersion;
+    const expected=['xml-cii-adapted-phase-panels-smart.js','xml-cii-adapted-phase-panels.js',
+      'xml-cii-adapted-output-run.js','xml-cii-adapted-final-rigid-review.js'].includes(dependency)
+      ? finalNearestToolbarVersion : custodyChanged.has(dependency) ? zeroAuditCustodyVersion : finalReviewVersion;
     assert.ok(read(path).includes(dependency+'?v='+expected),
       path+' must load '+dependency+' at required version '+expected);
   }
@@ -100,9 +103,14 @@ test('Review Final weight opens the revised batch action/length modules, never c
   const editor=read('tabs/xml-cii-2019-standalone/xml-cii-final-property-editor-ui.js');
   const batchUi=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-ui.js');
   const planner=read('tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-corrections.js');
-  assert.ok(editor.includes('xml-cii-final-rigid-batch-ui.js?v='+rev));
+  assert.ok(editor.includes('xml-cii-final-rigid-batch-ui.js?v='+finalNearestToolbarVersion));
+  assert.match(editor,/data-final-rigid-batch-nearest-held/);
+  assert.match(editor,/original\.weight===0/);
   assert.ok(batchUi.includes('xml-cii-final-rigid-batch-corrections.js?v='+rev));
   assert.match(batchUi,/data-final-rigid-batch-apply-nearest/);
+  assert.match(batchUi,/data-final-rigid-batch-open-nearest/);
+  assert.match(batchUi,/nearestShortcut\.addEventListener\('click'/);
+  assert.match(batchUi,/if \(autoSelectNearest\) selectNearestDrafts\(\)/);
   assert.ok(batchUi.includes('Element Length (mm)'));
   assert.match(planner,/planAllNearestBatchDraftSelection/);
 });
