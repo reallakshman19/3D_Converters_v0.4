@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  createModeASourceEntry, commonModeASupportConfig,
+  activateModeASource, createModeASourceEntry, commonModeASupportConfig,
 } from '../tabs/xml-cii-2019-standalone/xml-cii-mode-a-batch.js';
 import {
   importModeASources, replaceModeASourceSelection,
@@ -105,9 +105,12 @@ test('intentional additive API remains available, and disabled/empty sources do 
   assert.equal(renderModeAConsolidatedPreviewPanel(
     {appendChild(){throw new Error('Disabled source counted');}},
     {current:disabled},()=>{}),false);
+  // Switch the active source before clearing the other source's text:
+  // active-source synchronization intentionally mirrors the top-level text.
+  const withBActive = activateModeASource(appended,sourceB.sourceId);
   const empty={
-    ...appended,
-    sourceBatch:{...appended.sourceBatch,
+    ...withBActive,
+    sourceBatch:{...withBActive.sourceBatch,
       sources:[sourceB,{...sourceC,sourceText:'',enabled:true}]},
   };
   assert.equal(renderModeAConsolidatedPreviewPanel(
