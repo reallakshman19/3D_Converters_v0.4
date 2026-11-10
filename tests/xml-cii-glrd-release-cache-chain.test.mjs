@@ -6,6 +6,7 @@ const zeroAuditCustodyVersion='20261110-zero-audit-custody-r1';
 const phase6Version='20261109-phase6-readable-table-r4';
 const phase6ReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const finalReviewVersion='20261109-ef05-dtxr-phase6-r5';
+const singlePreviewVersion='20261110-single-xml-preview-r1';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js',zeroAuditCustodyVersion],

@@ -1,5 +1,7 @@
 import {
   activateModeASource,
+  commonModeASupportConfig,
+  modeASharedSupportConfig,
   createModeASourceEntry,
   normalizeModeABatchState,
   syncActiveModeASource,
@@ -87,6 +89,47 @@ export function importModeASources(state = {}, rows = []) {
   };
   const next = activateModeASource(seeded, activeSourceId);
   return { state: next, added, duplicates };
+}
+
+/** A new file-picker selection replaces the prior set of loaded XML files.
+ * Incremental batch additions remain available through importModeASources().
+ * Do not retain stale enabled sources, per-source mass receipts, or a previous
+ * CII/Preview result when the user selects one new XML file.
+ */
+export function replaceModeASourceSelection(state = {}, rows = []) {
+  const current = syncActiveModeASource(normalizeModeABatchState(state));
+  const sharedSupportConfigJson = commonModeASupportConfig(modeASharedSupportConfig(current));
+  const clean = {
+    ...current,
+    sourceFile: null,
+    sourceText: '',
+    stagedJsonFile: null,
+    stagedJsonText: '',
+    branchSelection: {},
+    branchScope: null,
+    supportConfigJson: sharedSupportConfigJson,
+    regexTesterResult: null,
+    resolverJsonTraceResult: null,
+    resolverJsonTraceJsonResult: null,
+    manualElementSideloadResult: null,
+    previewDiagnosticsAuditReport: null,
+    weightMatchResult: null,
+    supportTypeMapperResult: null,
+    outputRunReadinessReport: null,
+    result: null,
+    batchRunResult: null,
+    batchRunStatus: '',
+    modeAConsolidatedPreviewResult: null,
+    modeAConsolidatedPreviewUndo: null,
+    modeAConsolidatedWeightResult: null,
+    modeAConsolidatedWeightUndo: null,
+    pendingPhase6MassReview: null,
+    sourceBatch: {
+      mode: 'separate-models', activeSourceId: '', sources: [],
+      sharedSupportConfigJson,
+    },
+  };
+  return importModeASources(clean, rows);
 }
 
 export function updateModeASource(state = {}, sourceId, patch = {}) {

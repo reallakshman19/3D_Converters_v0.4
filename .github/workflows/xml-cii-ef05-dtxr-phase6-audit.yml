@@ -30,6 +30,9 @@ jobs:
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js
           node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-atta-default.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-state.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-events-mode-a.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-consolidated.js
       - name: DTXR provenance and EF05 generated-node recovery
         shell: bash
         run: |
@@ -44,6 +47,8 @@ jobs:
           node --test tests/xml-cii-mode-a-fast-multi-ui.test.mjs
           node --test tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
           node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
+          node tests/cii-v11-v14-ui-static.test.mjs
+          node --test tests/xml-cii-preview-single-source-mode-a.test.mjs
       - name: Output/Run and mass HOLD fail-closed regressions
         shell: bash
         run: |
