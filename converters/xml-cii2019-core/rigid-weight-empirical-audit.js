@@ -1,5 +1,9 @@
 import { createEmpiricalWeightEstimator } from '../empirical-weight/index.js';
 
+// A diagnostic revision marker distinguishes old cached audits from the
+// current zero-weight intercomponent policy. It grants no mass authority.
+export const RIGID_MASS_AUDIT_POLICY_REVISION = '20261110-zero-intercomponent-advisory-r1';
+
 // Diagnostic only. No empirical result is accepted as physical mass authority.
 const norm = (v) => String(v ?? '').trim();
 const refKey = (v) => norm(v).replace(/^=/, '').replace(/\s+/g, '').toUpperCase();
@@ -307,6 +311,7 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
   const flags=rows.flatMap(row=>[...new Set(row.flags)].map(code=>asFinding(row,code)));
   const advisories=rows.flatMap(row=>[...new Set(row.advisories||[])].map(code=>asFinding(row,code)));
   return {schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',
+    policyRevision:RIGID_MASS_AUDIT_POLICY_REVISION,
     authority:'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
     massVerified:false,ciiFingerprint:ciiFingerprint(ciiText),
     elementCount:parsed.elementCount,rigidCount:parsed.rigidCount,
