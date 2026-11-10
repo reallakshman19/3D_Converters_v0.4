@@ -8,6 +8,18 @@ import { finalRigidWeightErrorPercent } from './xml-cii-final-rigid-weight-error
 const valid = (value) => Number.isFinite(Number(value)) && Number(value) > 0;
 const keyOf = (mapping) => mapping?.componentRefNo
   ? JSON.stringify([mapping.branchName, mapping.componentRefNo]) : '';
+// Source-context disagreement is warning evidence, not physical mass approval.
+const sourceMetadataWarnings = (context) => {
+  if (!context) return [];
+  const codes = [...(Array.isArray(context.conflicts) ? context.conflicts : [])];
+  if (context.bore?.conflict) codes.push('BORE_CONFLICT');
+  if (context.rating?.conflict) codes.push('RATING_CONFLICT');
+  if (context.dtxr?.suppressed) codes.push('DTXR_SUPPRESSED' +
+    (context.dtxr.suppressionReason ? ': ' + String(context.dtxr.suppressionReason) : ''));
+  if (context.status === 'CONFLICT_REVIEW' && !codes.length)
+    codes.push('SOURCE_CONTEXT_CONFLICT_REVIEW');
+  return [...new Set(codes.map(String))];
+};
 const selectedCandidate = (plan, selectedIndex) => {
   const options = plan?.nearestSuggestions || [];
   const index = Number.isInteger(selectedIndex) && selectedIndex >= 0
@@ -41,24 +53,24 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
 
   const proposals = rows.map((row) => {
     const pointer = row.rigidPointer;
+    const plan = plans?.[pointer - 1];
+    const context = plan?.sourceContext;
+    const warnings = sourceMetadataWarnings(context);
+    const warningText = warnings.length ? ' Source warnings: ' + warnings.join('; ') + '.' : '';
     const base = {
       pointer, originalWeight: Number(row.weight), candidateIndex: -1,
       proposedWeight: null, errorPct: null, status: 'HOLD',
-      reviewRequired: false, candidate: null, reason: '',
+      reviewRequired: false, candidate: null, reason: '', warnings,
     };
     if (scope === 'filtered' && !visible.has(pointer) ||
       scope === 'selected' && !selected.has(pointer))
       return { ...base, status: 'OUT_OF_SCOPE', reason: 'Outside selected batch scope.' };
-    const plan = plans?.[pointer - 1];
     if (!plan || !Array.isArray(row.linkedElements) || row.linkedElements.length !== 1)
       return { ...base, reason: 'Final RIGID must reference exactly one CII ELEMENTS record.' };
     if (row.status === 'SHARED_POINTER' || row.status === 'UNREFERENCED')
       return { ...base, reason: 'Shared/unreferenced CII RIGID requires manual ownership review.' };
-    const context = plan.sourceContext;
-    if (context?.status === 'CONFLICT_REVIEW' || context?.bore?.conflict ||
-        context?.rating?.conflict || context?.dtxr?.suppressed ||
-        (context?.conflicts || []).length)
-      return { ...base, reason: 'Conflicting or suppressed source metadata.' };
+    // Metadata conflicts require manual review but cannot preempt the
+    // numerical comparison; structural / shared-owner holds remain hard.
     if (plan.mapping && (ownerCounts.get(keyOf(plan.mapping)) || 0) > 1)
       return { ...base, reason: 'Multiple final RIGIDs share one physical ComponentRefNo; no bulk allocation.' };
     if (!Number.isFinite(Number(row.weight)) || Number(row.weight) < 0)
@@ -82,15 +94,15 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
       errorPct: error, reviewRequired: !(
         Boolean(plan.mapping) && context?.status === 'VERIFIED' &&
         candidate.direct === true && candidate.approximate !== true &&
-        candidate.comparisonOnly !== true
+        candidate.comparisonOnly !== true && warnings.length === 0
       ),
     };
     if (Math.abs(error) <= threshold)
-      return { ...full, status: 'BELOW_THRESHOLD', reason: 'Absolute error does not exceed ±' + threshold + '%.' };
+      return { ...full, status: 'BELOW_THRESHOLD', reason: 'Absolute error does not exceed ±' + threshold + '%.' + warningText };
     if (full.reviewRequired && !options.includeReviewOnly)
-      return { ...full, status: 'REVIEW_ONLY', reason: 'Approximate or unverified-owner suggestion requires explicit opt-in and per-row approval.' };
+      return { ...full, status: 'REVIEW_ONLY', reason: 'Advisory suggestion / source warnings require explicit review opt-in and per-row approval.' + warningText };
     return { ...full, status: 'ELIGIBLE', reason: full.reviewRequired
-      ? 'REVIEW: catalog comparison only; not proven physical mass. Explicit row approval required.'
+      ? 'REVIEW: catalog comparison / metadata warning; not proven physical mass. Explicit row approval required.' + warningText
       : 'Exact candidate available. Confirm this row before staging.' };
   });
   return {
@@ -107,8 +119,9 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
  * proposal; includeReviewOnly enables PROVISIONAL candidates for selection,
  * but the independent review acknowledgement and Stage/Verify are separate.
  *
- * Hard holds, existing manual edits, threshold-excluded rows and out-of-scope
- * pointers are never selected. Do not change any original RIGID weights.
+ * Structural/ownership holds, existing manual edits, threshold-excluded rows
+ * and out-of-scope pointers are never selected. Metadata warnings require
+ * review opt-in and acknowledgement. Do not change original RIGID weights.
  */
 export function planAllNearestBatchDraftSelection(inventory, plans, options = {}) {
   const candidateIndices = new Map(options.selectedIndices || []);
