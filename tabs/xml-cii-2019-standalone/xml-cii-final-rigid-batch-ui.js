@@ -87,10 +87,10 @@ export function installFinalRigidBatchControls({
     dialogLayer.innerHTML = '<div style="background:#0f172a;color:#e2e8f0;border:1px solid #64748b;border-radius:8px;' +
       'padding:15px;max-width:1200px;width:97%;max-height:88vh;display:flex;flex-direction:column;gap:10px;">' +
       '<h3 style="margin:0;">Preview Batch Weight Corrections</h3>' +
-      '<p style="margin:0;font-size:12px;color:#fbbf24;">A nearest catalog suggestion is not a proven physical mass. Apply All Nearest Suggestions prepares review drafts only. Hard-held, out-of-scope and below-threshold pointers are excluded. Independent review acknowledgement and verified staging are still required; no CII output changes at this stage.</p>' +
+      '<p style="margin:0;font-size:12px;color:#fbbf24;">A nearest catalog suggestion is not a proven physical mass. Apply All Nearest Suggestions prepares review drafts only. Structural/shared-owner holds, out-of-scope and below-threshold pointers are excluded. Source metadata warnings allow review drafts, not mass approval. Independent review acknowledgement and verified staging are still required; no CII output changes at this stage.</p>' +
       '<div data-final-rigid-batch-summary role="status" style="font-size:12px;color:#dbeafe;"></div>' +
       '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:12px;">' +
-      '<label title="Unlock separately reviewed approximate/unverified suggestions; hard HOLD and below-threshold rows remain blocked">' +
+      '<label title="Unlock separately reviewed approximate/unverified suggestions and source metadata warnings; structural holds and below-threshold rows remain excluded">' +
       '<input type="checkbox" data-final-rigid-batch-include-review> Include approximate / unverified nearest</label>' +
       '<button type="button" data-final-rigid-batch-apply-nearest title="Select the nearest candidate for each eligible RIGID in scope, including review-only drafts. Does not approve, stage or change any CII weights." style="cursor:pointer;background:#744c13;color:#fff;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #eab308;">Apply All Nearest Suggestions</button>' +
@@ -99,7 +99,7 @@ export function installFinalRigidBatchControls({
       '<button type="button" data-final-rigid-batch-clear-all disabled style="cursor:pointer;background:#1e293b;color:#e2e8f0;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #475569;">Clear Selection</button>' +
       '</div><div data-final-rigid-batch-nearest-note role="status" style="font-size:11px;color:#fbd38d;display:none;"></div>' +
-      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show held / below-threshold rows</label>' +
+      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show other held / below-threshold rows</label>' +
       '<div style="overflow:auto;flex:1;border:1px solid #334155;border-radius:5px;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">' +
       '<thead><tr style="position:sticky;top:0;background:#1e293b;">' +
@@ -112,7 +112,9 @@ export function installFinalRigidBatchControls({
       '</tr></thead><tbody data-final-rigid-batch-rows></tbody></table></div>' +
       '<label style="color:#fbbf24;font-size:12px;"><input type="checkbox" data-final-rigid-batch-confirm-review>' +
       ' I reviewed the selected approximate / unverified proposals and accept them as explicit weight corrections.</label>' +
+      '<div data-final-rigid-batch-stage-reason role="status" style="font-size:11px;color:#fbbf24;"></div>' +
       '<div style="display:flex;justify-content:flex-end;gap:9px;">' +
+      '<button type="button" data-final-rigid-batch-continue style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Continue without weight changes</button>' +
       '<button type="button" data-final-rigid-batch-cancel style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Cancel</button>' +
       '<button type="button" data-final-rigid-batch-stage disabled style="padding:8px 12px;border:none;border-radius:5px;background:#1d4ed8;color:#fff;cursor:pointer;">Stage & Verify Selected Corrections</button>' +
       '</div></div>';
@@ -128,6 +130,7 @@ export function installFinalRigidBatchControls({
     const approveAllCheckbox = dialogLayer.querySelector('[data-final-rigid-batch-approve-all-checkbox]');
     const confirm = dialogLayer.querySelector('[data-final-rigid-batch-confirm-review]');
     const stage = dialogLayer.querySelector('[data-final-rigid-batch-stage]');
+    const stageReason = dialogLayer.querySelector('[data-final-rigid-batch-stage-reason]');
     includeReview.checked = base.includeReviewOnly;
     const candidateFor = (row) => plans[row.pointer - 1]?.nearestSuggestions || [];
 
@@ -138,7 +141,17 @@ export function installFinalRigidBatchControls({
       for (const pointer of selections) if (!eligibleIds.has(pointer)) selections.delete(pointer);
       const chosen = current.eligible.filter((r) => selections.has(r.pointer));
       const needsApproval = chosen.some((r) => r.reviewRequired);
-      stage.disabled = !chosen.length || (needsApproval && !confirm.checked);
+      const disableReason = !isReady() || !getCurrentResult()
+        ? 'Conversion state is stale or the editor has invalid values; reopen the current review.'
+        : current.eligible.length === 0
+          ? 'No eligible numerical corrections. Review warnings, then continue without changes.'
+          : !chosen.length ? 'Select an eligible correction before staging.'
+            : needsApproval && !confirm.checked
+              ? 'Explicit review acknowledgement is required for selected warnings / estimates.'
+              : '';
+      stage.disabled = Boolean(disableReason);
+      stage.title = disableReason || 'Verify selected CII weight corrections.';
+      stageReason.textContent = disableReason;
       approveAll.disabled = current.eligible.length === 0;
       approveAll.textContent = '✓ Approve All Eligible (' + current.eligible.length + ')';
       approveAllCheckbox.disabled = current.eligible.length === 0;
@@ -150,9 +163,12 @@ export function installFinalRigidBatchControls({
       const reviewOnlyCount = current.proposals.filter((r) => r.status === 'REVIEW_ONLY').length;
       const hardHoldCount = current.proposals.filter((r) =>
         r.status === 'HOLD' || r.status === 'ALREADY_EDITED').length;
+      const warnings = current.proposals.filter((r) =>
+        r.warnings?.length && r.status !== 'OUT_OF_SCOPE').length;
       summary.textContent = current.eligible.length + ' eligible · ' +
         reviewOnlyCount + ' review-only (requires Include) · ' +
-        hardHoldCount + ' hard-held · ' + current.belowThreshold.length +
+        warnings + ' metadata warnings · ' +
+        hardHoldCount + ' structural/other holds · ' + current.belowThreshold.length +
         ' below threshold · ' + chosen.length + ' selected · ' +
         (needsApproval && !confirm.checked ? 'review acknowledgement required' :
           'no exported weights changed');
@@ -162,6 +178,7 @@ export function installFinalRigidBatchControls({
       const current = recalc();
       body.innerHTML = current.proposals
         .filter((row) => showHeld.checked ||
+          (row.warnings?.length && row.status !== 'OUT_OF_SCOPE') ||
           (row.errorPct !== null && Math.abs(row.errorPct) > current.thresholdPct &&
             row.status !== 'OUT_OF_SCOPE'))
         .map((row) => {
@@ -183,7 +200,8 @@ export function installFinalRigidBatchControls({
           if (!approved) selections.delete(row.pointer);
           const cell = (s) => '<td style="padding:7px;border-bottom:1px solid #26364b;vertical-align:top;">' + s + '</td>';
           const checked = approved && selections.has(row.pointer);
-          const badge = row.reviewRequired ? 'REVIEW · ' : '';
+          const badge = (row.warnings?.length ? 'WARNING · ' : '') +
+            (row.reviewRequired ? 'REVIEW · ' : '');
           return '<tr data-final-rigid-batch-row="' + row.pointer + '">' +
             cell('<input type="checkbox" data-final-rigid-batch-approve="' + row.pointer + '"' +
               (checked ? ' checked' : '') + (approved ? '' : ' disabled') +
@@ -203,7 +221,10 @@ export function installFinalRigidBatchControls({
               esc(badge + row.status) + '</span><div title="' +
               esc(row.candidate?.basis || row.reason) +
               '" style="max-width:240px;white-space:normal;font-size:10px;">' +
-              esc(row.reason) + (row.candidate ? '<div>' +
+              esc(row.reason) + (row.warnings?.length
+                 ? '<div style="color:#fbbf24;">⚠ Source warnings: ' +
+                   esc(row.warnings.join('; ')) + '</div>' : '') +
+               (row.candidate ? '<div>' +
                 esc(row.candidate.method + ' · ' + (row.candidate.source || 'unidentified master row')) +
                 '</div>' : '') + '</div>') + '</tr>';
         }).join('') || '<tr><td colspan="9" style="padding:14px;">No qualifying RIGIDs for this scope and threshold.</td></tr>';
@@ -260,6 +281,10 @@ export function installFinalRigidBatchControls({
       selectAllEligible(approveAllCheckbox.checked));
     showHeld.addEventListener('change', render);
     dialogLayer.querySelector('[data-final-rigid-batch-cancel]').addEventListener('click', close);
+    dialogLayer.querySelector('[data-final-rigid-batch-continue]').addEventListener('click', () => {
+      status.textContent = 'Continued without weight changes. Source warnings remain in review evidence; engineering mass approval has not changed.';
+      close();
+    });
     confirm.addEventListener('change', updateStage);
     body.addEventListener('change', (event) => {
       const target = event.target;
