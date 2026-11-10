@@ -36,6 +36,7 @@ export function explainRigidMassAudit(audit={}) {
     advisoryRecords:Array.isArray(audit.advisories)?audit.advisories.length:0,
     zeroConnectionAdvisories:advisoryRows.map(row=>({
       element:row.element,pointer:row.rigidPointer,weightN:row.weightN,
+      lengthMm:row.lengthMm,
       nodes:String(row.from)+' → '+String(row.to),
       fromRef:row.fromRef,toRef:row.toRef,
       reason:'ZERO_MASS_INTERCOMPONENT_CONNECTION',
