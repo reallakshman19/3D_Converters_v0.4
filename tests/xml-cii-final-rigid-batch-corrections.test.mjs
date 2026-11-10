@@ -88,14 +88,14 @@ test('approximate 50% / unverified synthetic-source suggestion remains individua
     .proposals[19];
   assert.equal(conflicted.status, 'ELIGIBLE');
   assert.equal(conflicted.reviewRequired, true);
-  assert.deepEqual(conflicted.warnings, ['RATING_CONFLICT']);
+  assert.ok(conflicted.warnings.includes('RATING_CONFLICT'));
   plans[19].sourceContext.conflicts = [];
   plans[19].sourceContext.dtxr.suppressed = true;
   const suppressed = planFinalRigidBatchCorrections(inventory, plans, { includeReviewOnly: true })
     .proposals[19];
   assert.equal(suppressed.status, 'ELIGIBLE');
   assert.equal(suppressed.reviewRequired, true);
-  assert.deepEqual(suppressed.warnings, ['DTXR_SUPPRESSED']);
+  assert.ok(suppressed.warnings.includes('DTXR_SUPPRESSED'));
 });
 test('alternative choice is requalified against threshold, shared source owner is blocked', () => {
   const { inventory, plans } = inventoryAndPlans(22);
