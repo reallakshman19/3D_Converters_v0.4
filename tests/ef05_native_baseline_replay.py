@@ -147,7 +147,7 @@ cfg['splitCondensedValveFlange']=True
 a=patched._maybe_enrich_from_staged_json(root,stage,cfg)
 b=patched._apply_process_data_to_xml(a,cfg)
 final,info=apply_bend_radius_policy(b,cfg,dest)
-shutil.copyfile(final,dest)
+if final.resolve()!=dest.resolve():shutil.copyfile(final,dest)
 print('BEND_POLICY', info.get('enabled'), info.get('published'),info.get('removed'))
 """
         runner=OUT/"run_native_enrichment.py"
