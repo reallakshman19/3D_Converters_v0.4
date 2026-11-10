@@ -870,6 +870,71 @@ try {
     assert.equal(await page.evaluate(()=>window.currentResult.ciiText),original);
   });
 
+
+  await test('Chromium Mode A Regex click-to-map updates Preview line key without off/on toggles', async () => {
+    await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async () => {
+      const [{ createDefaultRegexTesterConfig }, { renderStandaloneRegexTesterPanel },
+        { createModeARegexProcessingRef }, { createModeASourceEntry }] = await Promise.all([
+        import('/tabs/xml-cii-2019-standalone/xml-cii-regex-tester.js'),
+        import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-regex-tester.js'),
+        import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-propagation.js'),
+        import('/tabs/xml-cii-2019-standalone/xml-cii-mode-a-batch.js'),
+      ]);
+      const sourceText = '<Root><Branch><Branchname>/GLRD-1000-6&quot;-P4110001-93833-01/B6' +
+        '</Branchname></Branch></Root>';
+      const extraction = createDefaultRegexTesterConfig();
+      extraction.formats[0].lineKey = { regex:'-(93833)-', group:1, tokenPosition:'' };
+      extraction.formats[0].pipingClass = { regex:'', group:1, tokenPosition:'5' };
+      const config = JSON.stringify({linelist:{branchNameRegex:'-(93833)-',
+        lineNoGroup:1,lineKeyTokenPositions:'5'},rating:{pipingClassTokenIndex:5}});
+      const src = createModeASourceEntry({sourceText,fileName:'GLRD-real-click.xml',
+        supportConfigJson:config});
+      const baseRef = { current:{sourceKind:'xml',sourceText,supportConfigJson:config,
+        regexTesterConfig:extraction,
+        sourceBatch:{mode:'separate-models',activeSourceId:src.sourceId,
+          sources:[src],sharedSupportConfigJson:config}}};
+      const regexRef = createModeARegexProcessingRef(baseRef);
+      const host = document.createElement('section');
+      host.id = 'regex-glrd-live-click-host';
+      document.body.appendChild(host);
+      const rerender = () => {
+        host.replaceChildren();
+        renderStandaloneRegexTesterPanel(host,regexRef.current,regexRef,rerender);
+      };
+      rerender();
+      window.__glrdRegexClickState = baseRef;
+      localStorage.setItem('xml-cii-pv-cache-v8-rating-policy','STALE_GL_rd_PREVIEW');
+    });
+    const lineButtons = page.locator(
+      '#regex-glrd-live-click-host .xml-cii-regex-rule-card').first()
+      .getByRole('button',{name:'Line Key',exact:true});
+    assert.equal(await lineButtons.count(),6);
+    await lineButtons.nth(3).click();
+    const effective = await page.evaluate(async () => {
+      const [{modeARawState},{buildModeAExecutionState},{deriveLineKeyFromBranchName}] =
+        await Promise.all([
+          import('/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-mode-a-propagation.js'),
+          import('/tabs/xml-cii-2019-standalone/xml-cii-mode-a-batch.js'),
+          import('/converters/xml-cii2019-core/regex-line-key.js'),
+        ]);
+      const current = modeARawState(window.__glrdRegexClickState);
+      const source = buildModeAExecutionState(current,current.sourceBatch.sources[0]);
+      const cfg = JSON.parse(source.supportConfigJson);
+      return {
+        lineKey:deriveLineKeyFromBranchName('/GLRD-1000-6"-P4110001-93833-01/B6',cfg),
+        pipingClassToken:cfg.rating.pipingClassTokenIndex,
+        lineToken:cfg.linelist.lineKeyTokenPositions,
+        branchRegex:cfg.linelist.branchNameRegex,
+        cached:localStorage.getItem('xml-cii-pv-cache-v8-rating-policy'),
+      };
+    });
+    assert.deepEqual(effective,{
+      lineKey:'P4110001',pipingClassToken:'5',lineToken:'4',
+      branchRegex:'',cached:null,
+    });
+  });
+
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
