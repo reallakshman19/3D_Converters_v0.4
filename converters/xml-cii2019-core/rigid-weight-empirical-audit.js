@@ -237,6 +237,19 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
     if(group?.massConflict)flags.push('SOURCE_ENDPOINT_WEIGHTS_CONFLICT');
     if(group?.explicitZeroMass&&edge.weightN>0)flags.push('POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT');
     else if(group?.massMissing&&!group?.explicitZeroMass)flags.push('SOURCE_COMPONENT_MASS_UNRESOLVED');
+    // A zero-weight connector BETWEEN two authentic, distinctly referenced
+    // source components is not itself evidence of an omitted physical mass.
+    // Treat this narrowly as an identity advisory: never for a positive weight,
+    // generated/missing source node, geometry mismatch, ambiguous mapping, or
+    // when ANY other audit flag is present. Do not fabricate a physical owner.
+    const zeroIntercomponentLink=edge.weightN===0&&edge.lengthMm>0&&
+      !group&&matches.length===0&&from&&to&&
+      refKey(from.ref)&&refKey(to.ref)&&refKey(from.ref)!==refKey(to.ref)&&
+      geometricRecovery==='NONE'&&Array.isArray(fromPosition)&&
+      Array.isArray(toPosition)&&flags.length===1&&
+      flags[0]==='PHYSICAL_OWNER_UNRESOLVED';
+    const advisories=zeroIntercomponentLink?['ZERO_MASS_INTERCOMPONENT_CONNECTION']:[];
+    if(zeroIntercomponentLink)flags.pop();
     let empirical={status:'API_NOT_APPLICABLE_CONNECTION'};
     if(group&&!group.explicitZeroMass) {
       if(!apiCache.has(group.key))apiCache.set(group.key,empiricalForGroup(group,effectiveEstimator));
@@ -256,9 +269,11 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
       approvedSourceMassKg:null,sourceMassCandidateKg:group?.massKg??null,
       massAuthority:group?.massConflict?'CONFLICT':group?.explicitZeroMass?'XML_EXPLICIT_ZERO':
         group?.massMissing?'UNRESOLVED':group?'XML_CONSISTENT_UNAPPROVED':'NO_OWNER',
-      ownership:group?'GEOMETRIC_INTERIOR_OVERLAP':'UNRESOLVED',
-      allocationBasis:group?'CII_ELEMENT_OVERLAP_XML_COMPONENT_SPAN':'NO_SOURCE_COMPONENT_INTERIOR_OVERLAP',
-      empirical,flags};
+      ownership:zeroIntercomponentLink?'ZERO_WEIGHT_INTERCOMPONENT_LINK':
+        group?'GEOMETRIC_INTERIOR_OVERLAP':'UNRESOLVED',
+      allocationBasis:zeroIntercomponentLink?'AUTHENTIC_DISTINCT_SOURCE_REFS_NO_PHYSICAL_SPAN':
+        group?'CII_ELEMENT_OVERLAP_XML_COMPONENT_SPAN':'NO_SOURCE_COMPONENT_INTERIOR_OVERLAP',
+      empirical,flags,advisories};
   });
   for(const row of rows) {
     if(!(row.weightN>0)||!row.toRef||
@@ -285,10 +300,12 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
     if(!equal(total,group.massKg*kgToNewtonScale))
       for(const child of children)child.flags.push('PHYSICAL_COMPONENT_MASS_NOT_CONSERVED');
   }
-  const flags=rows.flatMap(row=>[...new Set(row.flags)].map(code=>({
+  const asFinding=(row,code)=>({
     element:row.element,branch:row.branch,from:row.from,to:row.to,
     rigidPointer:row.rigidPointer,weightN:row.weightN,lengthMm:row.lengthMm,
-    physicalComponentRef:row.physicalComponentRef,code})));
+    physicalComponentRef:row.physicalComponentRef,fromRef:row.fromRef,toRef:row.toRef,code});
+  const flags=rows.flatMap(row=>[...new Set(row.flags)].map(code=>asFinding(row,code)));
+  const advisories=rows.flatMap(row=>[...new Set(row.advisories||[])].map(code=>asFinding(row,code)));
   return {schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',
     authority:'READ_ONLY_NOT_MASS_ALLOCATION_OR_RELEASE_AUTHORITY',
     massVerified:false,ciiFingerprint:ciiFingerprint(ciiText),
@@ -296,8 +313,11 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
     auditedRigidCount:rows.length,
     summary:{flaggedElements:new Set(flags.map(f=>f.element)).size,
       flagsByCode:Object.fromEntries([...new Set(flags.map(f=>f.code))].sort().map(
-        code=>[code,flags.filter(f=>f.code===code).length]))},
-    flags,rows,status:flags.length?'HOLD':'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'};
+        code=>[code,flags.filter(f=>f.code===code).length])),
+      advisoryElements:new Set(advisories.map(f=>f.element)).size,
+      advisoriesByCode:Object.fromEntries([...new Set(advisories.map(f=>f.code))].sort().map(
+        code=>[code,advisories.filter(f=>f.code===code).length]))},
+    flags,advisories,rows,status:flags.length?'HOLD':'SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'};
 }
 
 export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, estimator, kgToNewtonScale = 10 } = {}) {
@@ -322,23 +342,51 @@ export function auditRigidWeightFromXml({ ciiText, xmlText, weightMasterRows, es
 export function holdDuplicateRigidMassOutput(output,audit) {
   // A changed status or empty top-level flags cannot wash out flagged child rows.
   // A missing/partial/contradictory evidence object is never a qualified result.
+  const isQualifiedZeroConnector=row=>
+    row.weightN===0&&row.lengthMm>0&&
+    row.ownership==='ZERO_WEIGHT_INTERCOMPONENT_LINK'&&
+    row.allocationBasis==='AUTHENTIC_DISTINCT_SOURCE_REFS_NO_PHYSICAL_SPAN'&&
+    row.massAuthority==='NO_OWNER'&&row.physicalComponentRef===null&&
+    row.physicalComponentKey===null&&row.sourceOverlapMm===0&&
+    row.sourceNodeGeometryRecovery==='NOT_NEEDED'&&
+    Array.isArray(row.fromPosition)&&Array.isArray(row.toPosition)&&
+    refKey(row.fromRef)&&refKey(row.toRef)&&
+    refKey(row.fromRef)!==refKey(row.toRef)&&
+    Array.isArray(row.advisories)&&row.advisories.length===1&&
+    row.advisories[0]==='ZERO_MASS_INTERCOMPONENT_CONNECTION';
   const evidenceRowsValid=Array.isArray(audit?.rows)&&
     audit.rows.length===audit.rigidCount&&
     audit.rows.every(row=>Array.isArray(row.flags)&&row.flags.length===0&&
       Number.isSafeInteger(row.rigidPointer)&&row.rigidPointer>0&&
       Number.isFinite(row.weightN)&&row.weightN>=0&&
-      row.ownership==='GEOMETRIC_INTERIOR_OVERLAP'&&
-      (row.massAuthority==='XML_CONSISTENT_UNAPPROVED' ||
-       (row.massAuthority==='XML_EXPLICIT_ZERO' && row.weightN===0)));
+      (isQualifiedZeroConnector(row) ||
+       (row.ownership==='GEOMETRIC_INTERIOR_OVERLAP'&&
+        (row.massAuthority==='XML_CONSISTENT_UNAPPROVED' ||
+         (row.massAuthority==='XML_EXPLICIT_ZERO' && row.weightN===0))&&
+        (!Array.isArray(row.advisories)||row.advisories.length===0))));
   const summaryClean=audit?.summary?.flaggedElements===0&&
     audit?.summary?.flagsByCode&&Object.keys(audit.summary.flagsByCode).length===0;
+  // A warning is not a shortcut around verification: each advisory must
+  // exactly match an audited zero-connector row. No unlabeled advisory class
+  // may silently become release-eligible.
+  const warningRows=Array.isArray(audit?.rows)
+    ?audit.rows.filter(row=>Array.isArray(row.advisories)&&row.advisories.length>0):[];
+  const advisoriesValid=Array.isArray(audit?.advisories)&&
+    audit.advisories.length===warningRows.length&&
+    warningRows.every(row=>isQualifiedZeroConnector(row)&&
+      audit.advisories.some(a=>a.element===row.element&&a.rigidPointer===row.rigidPointer&&
+        a.weightN===0&&a.code==='ZERO_MASS_INTERCOMPONENT_CONNECTION'&&
+        refKey(a.fromRef)===refKey(row.fromRef)&&refKey(a.toRef)===refKey(row.toRef)))&&
+    audit?.summary?.advisoryElements===warningRows.length&&
+    audit?.summary?.advisoriesByCode&&
+    Object.values(audit.summary.advisoriesByCode).reduce((n,v)=>n+v,0)===warningRows.length;
   const complete=typeof output?.ciiText==='string'&&output.ciiText.length>0&&
     audit?.ciiFingerprint===ciiFingerprint(output.ciiText)&&
     audit?.schema==='xml-cii2019-rigid-empirical-ownership-audit/v2'&&
     audit.auditedRigidCount===audit.rigidCount&&audit.massVerified===false&&
     audit.status==='SOURCE_PARITY_ONLY_NOT_MASS_AUTHORITY'&&
     Array.isArray(audit.flags)&&audit.flags.length===0&&
-    evidenceRowsValid&&summaryClean;
+    evidenceRowsValid&&summaryClean&&advisoriesValid;
   const diagnostics={...(output?.diagnostics||{}),rigidMassAudit:audit||{
     schema:'xml-cii2019-rigid-empirical-ownership-audit/v2',status:'NOT_RUN',massVerified:false},
     rigidMassEngineeringQualified:false};
