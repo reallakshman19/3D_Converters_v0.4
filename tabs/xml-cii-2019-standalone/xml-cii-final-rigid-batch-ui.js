@@ -46,11 +46,15 @@ export function installFinalRigidBatchControls({
   const status = toolbar.querySelector('[data-final-rigid-batch-status]');
   const preview = toolbar.querySelector('[data-final-rigid-batch-preview]');
   const summaryDownload = toolbar.querySelector('[data-final-rigid-batch-summary-download]');
-  let lastReconciliation = null;
+  let lastReconciliation = null, lastEditedSnapshot = null;
+  const editFingerprint = () => JSON.stringify([...getEditedValues()]);
   summaryDownload.addEventListener('click', () => {
     if (!lastReconciliation) return;
     const result = getCurrentResult();
-    if (!result) { status.textContent = 'REFUSED: Conversion run is no longer current.'; return; }
+    if (!result || !isReady() || lastEditedSnapshot !== editFingerprint()) {
+      status.textContent = 'REFUSED: CII or edited values changed; re-verify the batch review.';
+      return;
+    }
     const json = JSON.stringify(lastReconciliation, null, 2) + '\n';
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a');
@@ -58,7 +62,7 @@ export function installFinalRigidBatchControls({
     link.download = String(result.ciiName || 'final-rigid')
       .replace(/\.cii$/i, '') + '_BATCH_REVIEW_SUMMARY.json';
     document.body.appendChild(link);
-    link.click(); link.remove(); URL.revokeObjectURL(url);
+    link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);
   });
   let dialogLayer = null;
 
@@ -80,6 +84,8 @@ export function installFinalRigidBatchControls({
   }, true);
   preview.addEventListener('click', () => {
     close();
+    lastReconciliation = null; lastEditedSnapshot = null;
+    summaryDownload.disabled = true;
     if (!isReady() || !getCurrentResult()) {
       status.textContent = 'REFUSED: Weight editor is not ready or conversion run changed.';
       return;
@@ -107,6 +113,7 @@ export function installFinalRigidBatchControls({
         verification,
         releaseStatus: 'NOT_ENGINEERING_APPROVED_BY_BATCH_REVIEW',
       };
+      lastEditedSnapshot = editFingerprint();
       summaryDownload.disabled = false;
       const x = lastReconciliation;
       status.textContent = 'Batch review: ' + x.corrected + ' corrected · ' +
