@@ -1,0 +1,36 @@
+name: EF05 Native Baseline Reproduction (No Approved Overrides)
+on:
+  push:
+    branches:
+      - audit/ef05-native-baseline-20261110
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify repository converter modules and source hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile converters/scripts/xml_to_cii2019.py converters/scripts/xml_to_cii2019_patched.py converters/scripts/xml_to_cii2019_direction.py converters/scripts/xml_to_cii2019_runtime_custody.py converters/scripts/xml_to_cii2019_bend_radius_policy.py converters/scripts/xml_to_cii2019_pcom_mass.py tests/ef05_native_baseline_replay.py
+          git hash-object Benchmarks/EF-05-PRO.TEST.xml
+          sha256sum Benchmarks/EF-05-PRO.TEST.xml Benchmarks/EF-05-PRO.TEST_enriched-3.xml Benchmarks/ASIM-1836_managed_stage-2.zip
+      - name: Generate labeled EF-05 baseline XML/CII and comparison
+        shell: bash
+        run: |
+          python tests/ef05_native_baseline_replay.py
+      - name: Upload native baseline XML/CII and comparison receipt
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ef05-native-baseline-${{ github.sha }}
+          path: ef05-baseline-output/
+          if-no-files-found: warn
+          compression-level: 6
