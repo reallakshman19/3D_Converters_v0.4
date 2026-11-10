@@ -167,18 +167,30 @@ function renderResolverBatch(root, stateRef, render) {
 
 function renderPreviewBatch(root, stateRef, render) {
   const card = createPhaseCard(root, 'preview');
+  // Count actually loaded/enabled XML documents, not retained placeholders or
+  // the presence of a sourceBatch object (which is seeded even for one XML).
+  const executions = modeAExecutionRows(stateRef).filter(({ source }) =>
+    String(source.sourceText || '').trim().length > 0);
+  if (executions.length <= 1) {
+    // Single XML must use its normal editable Preview UI. A Mode A banner,
+    // consolidated actions or nested individual sections are not applicable.
+    if (executions.length === 1) {
+      const sourceRef = createModeASourceProcessingRef(stateRef, executions[0].source.sourceId);
+      void renderStandalonePreviewReportPanel(card, sourceRef, render);
+    } else {
+      card.appendChild(createElement('p', 'Load a PSI116 XML file to preview it.', 'xml-cii-phase-help'));
+    }
+    return;
+  }
   const state = modeARawState(stateRef);
-  const executions = modeAExecutionRows(stateRef);
-  const multi = executions.length > 1;
   prependBatchScope(card, state, 'Review is fan-out/per-file: values and overrides never share a branch or node namespace across XML files.');
-  if (multi) renderModeAConsolidatedPreviewPanel(card, stateRef, render);
+  renderModeAConsolidatedPreviewPanel(card, stateRef, render);
   individualHeading(card, 'Individual Preview / Review', executions.length);
   for (const { source } of executions) {
-    const { details, body, sourceRef } = sourceDetails(source, stateRef, 'Preview / Review', !multi);
+    const { details, body, sourceRef } = sourceDetails(source, stateRef, 'Preview / Review', false);
     card.appendChild(details);
     const load = () => { void renderStandalonePreviewReportPanel(body, sourceRef, render); };
-    if (multi) lazyRender(details, body, load, 'Preview / Review');
-    else load();
+    lazyRender(details, body, load, 'Preview / Review');
   }
 }
 
