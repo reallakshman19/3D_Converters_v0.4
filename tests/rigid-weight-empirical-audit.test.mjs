@@ -275,6 +275,58 @@ assert.throws(()=>parseCiiRigidElementWeights(raw.replace('150 0','-1 0')),
 assert.throws(()=>auditRigidWeightOwnership({ciiText:raw,xmlRows:[],estimator}),
   /XML_COMPONENT_POPULATION_EMPTY/);
 
+
+// Regression for the owner's reported 434 ELEMENT / 145 RIGID structure:
+// 5 explicitly numeric zero-N weights, 0 missing masses, and one unowned
+// but authentic 0 N connector at ELEMENT #5 / pointer #2.
+const actualShapeEdges=[];
+const actualShapeSource=[];
+for(let i=0;i<434;i++){
+  const rigidPointer=i===0?1:i===4?2:i>=5&&i<=147?i-2:0;
+  const from=i===4?58:100000+i*2;
+  const to=i===4?59:from+1;
+  const weightN=rigidPointer===0?0:rigidPointer>=2&&rigidPointer<=6?0:100;
+  actualShapeEdges.push({
+    branch:'RUN434',from,to,mm:10,dy:0,dz:10,pointer:rigidPointer,weightN,
+  });
+  if(rigidPointer===0)continue;
+  if(i===4){
+    actualShapeSource.push(
+      source('RUN434',58,'=134234934/8043',2,5000,0,'RIGID'),
+      source('RUN434',59,'=134234934/8045',1,5010,0,'RIGID'));
+    continue;
+  }
+  const z=i*20;
+  const kg=weightN/10;
+  const ref='=PHYSICAL_'+i;
+  actualShapeSource.push(
+    source('RUN434',from,ref,1,z,kg,'RIGID'),
+    source('RUN434',to,ref,2,z+10,kg,'RIGID'));
+}
+const actualShapeCii=ciiText(actualShapeEdges);
+const actualShape=auditRigidWeightOwnership({
+  ciiText:actualShapeCii,xmlRows:actualShapeSource,estimator,
+});
+assert.equal(actualShape.elementCount,434);
+assert.equal(actualShape.rigidCount,145);
+assert.equal(actualShape.auditedRigidCount,145);
+assert.equal(actualShape.summary.flaggedElements,0,
+  'four physical zero masses and one connector zero must not generate a HOLD');
+assert.equal(actualShape.summary.advisoryElements,1);
+assert.equal(actualShape.flags.length,0);
+assert.equal(actualShape.rows.filter(row=>row.weightN===0).length,5);
+assert.equal(actualShape.rows.filter(row=>row.weightN>0).length,140);
+assert.equal(actualShape.rows.find(row=>row.element===5).rigidPointer,2);
+assert.deepEqual(actualShape.rows.find(row=>row.element===5).advisories,
+  ['ZERO_MASS_INTERCOMPONENT_CONNECTION']);
+const actualShapeOutput=holdDuplicateRigidMassOutput({
+  ok:true,ciiText:actualShapeCii,logs:[],
+},actualShape);
+assert.equal(actualShapeOutput.ok,true);
+assert.equal(actualShapeOutput.ciiText,actualShapeCii);
+assert.equal(actualShapeOutput.diagnostics.rigidMassEngineeringQualified,false);
+assert.equal(actualShapeOutput.logs.includes('RIGID_MASS_SOURCE_PARITY_ONLY_NOT_ENGINEERING_APPROVED'),true);
+
 if(process.env.GLRD_CII_PATH&&process.env.GLRD_SOURCE_ROWS_JSON) {
   const actual=auditRigidWeightOwnership({
     ciiText:readFileSync(process.env.GLRD_CII_PATH,'utf8'),
