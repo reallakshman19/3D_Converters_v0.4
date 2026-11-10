@@ -24,7 +24,7 @@ import {
 import {
   renderModeAConsolidatedPreviewPanel,
   renderModeAConsolidatedWeightPanel,
-} from './xml-cii-adapted-mode-a-consolidated.js?v=20260813-mode-a-consolidated-1';
+} from './xml-cii-adapted-mode-a-consolidated.js?v=20261110-single-xml-preview-r1';
 
 const BATCH_CUSTOM_PHASES = new Set([
   'regex',
