@@ -21,7 +21,7 @@ const worker = read('converters/cii-v11-v14-worker.js');
 const legacyAdapter = read('tabs/model-converters/legacy-adapter.js');
 
 const releaseKey = '20260816-cii-v11-v14-dropdown-release-4';
-const rootCacheKey = '20261110-zero-audit-custody-r1'; // shell bootstrap supersedes, CAESAR inner chain unchanged
+const rootCacheKey = '20261110-final-rigid-nearest-toolbar-r1'; // shell bootstrap supersedes, CAESAR inner chain unchanged
 const workerReleaseKey = '20260816-cii-v11-v14-import-rca-1';
 const registryQuery = 'v=20260617-basic-glb-3';
 
