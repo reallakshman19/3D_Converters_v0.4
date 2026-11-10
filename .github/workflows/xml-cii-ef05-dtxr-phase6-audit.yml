@@ -47,6 +47,7 @@ jobs:
           node --test tests/xml-cii-mode-a-fast-multi-ui.test.mjs
           node --test tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
           node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
+          node tests/cii-v11-v14-ui-static.test.mjs
           node --test tests/xml-cii-preview-single-source-mode-a.test.mjs
       - name: Output/Run and mass HOLD fail-closed regressions
         shell: bash
