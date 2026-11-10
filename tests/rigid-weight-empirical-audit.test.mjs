@@ -312,9 +312,15 @@ assert.equal(actualShape.rigidCount,145);
 assert.equal(actualShape.auditedRigidCount,145);
 assert.equal(actualShape.summary.flaggedElements,0,
   'four physical zero masses and one connector zero must not generate a HOLD');
+assert.equal(actualShape.policyRevision,'20261110-zero-intercomponent-advisory-r1',
+  'the current source-to-CII policy must be identifiable in downloaded diagnostics');
 assert.equal(actualShape.summary.advisoryElements,1);
 assert.equal(actualShape.flags.length,0);
 assert.equal(actualShape.rows.filter(row=>row.weightN===0).length,5);
+assert.equal(explainRigidMassAudit(actualShape).allZeroWeightCount,5,
+  'numeric zero masses must not be displayed as missing/blank weights');
+assert.equal(explainRigidMassAudit(actualShape).zeroWeightCount,0,
+  'none of five valid zero masses are mass blockers');
 assert.equal(actualShape.rows.filter(row=>row.weightN>0).length,140);
 assert.equal(actualShape.rows.find(row=>row.element===5).rigidPointer,2);
 assert.deepEqual(actualShape.rows.find(row=>row.element===5).advisories,
