@@ -18,6 +18,9 @@ export function explainRigidMassAudit(audit={}) {
     !flagsOf(row).includes('CII_SOURCE_GEOMETRY_MISMATCH'));
   const identityGaps=zeros.filter(row=>!unownedZeroLinks.includes(row));
   const allFlags=Array.isArray(audit.flags)?audit.flags:[];
+  const advisoryRows=rows.filter(row=>Array.isArray(row.advisories)&&
+    row.advisories.includes('ZERO_MASS_INTERCOMPONENT_CONNECTION')&&
+    num(row.weightN)===0);
   return {
     elementCount:Number(audit.elementCount)||0,
     auditedPointers:Number(audit.auditedRigidCount)||0,
@@ -27,6 +30,14 @@ export function explainRigidMassAudit(audit={}) {
     positiveWeightCount:positives.length,
     zeroBetweenDistinctRefs:unownedZeroLinks.length,
     zeroNeedsNodeReconciliation:identityGaps.length,
+    nonblockingZeroConnections:advisoryRows.length,
+    advisoryRecords:Array.isArray(audit.advisories)?audit.advisories.length:0,
+    zeroConnectionAdvisories:advisoryRows.map(row=>({
+      element:row.element,pointer:row.rigidPointer,weightN:row.weightN,
+      nodes:String(row.from)+' → '+String(row.to),
+      fromRef:row.fromRef,toRef:row.toRef,
+      reason:'ZERO_MASS_INTERCOMPONENT_CONNECTION',
+    })),
     weightedElements:positives.map(row=>({
       element:row.element,pointer:row.rigidPointer,weightN:row.weightN,
       nodes:String(row.from)+' → '+String(row.to),reasons:flagsOf(row),
