@@ -72,7 +72,7 @@ test('one newly selected XML replaces the previous loaded file and stale review 
   assert.equal(newConfig.overrides,undefined,'old mass approval must not leak');
   assert.equal(newConfig.linelist?.branchLineKeyMap,undefined,'old line map must not leak');
   assert.equal(newConfig.weight.finalizedMatches,undefined,'old weight match must not leak');
-  assert.equal(next.sourceBatch.sources[0].workflow.result,undefined);
+  assert.equal(next.sourceBatch.sources[0].workflow.result,null);
   assert.equal(modeAExecutionRows(next).length,1);
   assert.equal(renderModeAConsolidatedPreviewPanel(
     {appendChild(){throw new Error('Consolidated Preview rendered with one XML');}},
