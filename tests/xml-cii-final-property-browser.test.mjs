@@ -436,6 +436,8 @@ try {
     assert.equal(await page.evaluate(()=>window.currentResult.ciiText),sourceCii);
     await shortcutModal.locator('[data-final-rigid-batch-cancel]').click();
     assert.equal(await page.locator('[data-final-rigid-batch-dialog]').count(),0);
+    assert.equal(await page.locator('[data-final-rigid-batch-review-only]').isChecked(),false,
+      'Cancel must restore pre-shortcut review-only opt-in');
     await page.locator('[data-final-rigid-batch-preview]').click();
     let modal = page.locator('[data-final-rigid-batch-dialog]');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /0 eligible/);
