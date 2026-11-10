@@ -129,6 +129,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   let session = null, version = 0, previewVersion = -1, committed = null;
   // A warning-bearing batch edit remains a REVIEW-ONLY export.
   let stagedMetadataWarnings = [];
+  const activeMetadataWarnings = () => [...new Set(
+    [...(session?.edits?.values() || [])].flatMap((edit) =>
+      edit.reference?.batch?.metadataWarningCodes || []))];
   const invalid = new Set();
   const current = () => typeof getCurrentResult === 'function' ? getCurrentResult() : result;
 
@@ -363,10 +366,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       }
       // No UI state or live session edits are committed until all checks pass.
       session.edits = scratch.edits;
-      stagedMetadataWarnings = [...new Set([
-        ...stagedMetadataWarnings,
-        ...staged.flatMap(({ item }) => item.warnings || []),
-      ])];
+      stagedMetadataWarnings = activeMetadataWarnings();
       for (const { row, item, reference } of staged) {
         row.editInput.value = String(item.proposedWeight);
         row.tr.dataset.batchProposedValue = String(item.proposedWeight);
@@ -442,6 +442,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         currentCiiText: current().ciiText, runIdentity,
       });
       if (ticket !== version) throw new Error('Edits changed during apply.');
+      stagedMetadataWarnings = activeMetadataWarnings();
       const reviewedOnly = reviewOnly || stagedMetadataWarnings.length > 0;
       committed = reviewedOnly ? {
         ...revised,
