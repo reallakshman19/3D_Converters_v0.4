@@ -1,0 +1,63 @@
+name: EF05 DTXR / Phase 6 Unified Review / Source Mass Audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/xml-cii-ef05-dtxr-phase6-audit.yml'
+      - 'converters/xml-cii2019-core/rigid-weight-empirical-audit.js'
+      - 'tabs/xml-cii-2019-standalone/**'
+      - 'tests/xml-cii-ef05-dtxr-phase6-run-audit.test.mjs'
+      - 'tests/rigid-weight-empirical-audit.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ef05-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check edited JavaScript modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check converters/xml-cii2019-core/rigid-weight-empirical-audit.js
+          node --check tabs/xml-cii-2019-standalone/xml-cii-output-run-readiness.js
+          node --check tabs/xml-cii-2019-standalone/xml-cii-rigid-mass-audit-presentation.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-rigid-review-mode-a.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js
+          node --check tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-atta-default.js
+      - name: DTXR provenance and EF05 generated-node recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/xml-cii-ef05-dtxr-phase6-run-audit.test.mjs
+          node --test tests/rigid-weight-empirical-audit.test.mjs
+      - name: Phase 6 source authority and Run compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/xml-cii-phase6-consolidated.test.mjs
+          node --test tests/xml-cii-mode-a-fast-multi-ui.test.mjs
+          node --test tests/xml-cii-mode-a-consolidated-rigid-review.test.mjs
+          node --test tests/xml-cii-glrd-release-cache-chain.test.mjs
+      - name: Output/Run and mass HOLD fail-closed regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/rigid-weight-run-gate.integration.test.mjs
+          node --test tests/xml-cii-preview-run-parity-closure.test.mjs
+          node tests/xml-cii-standalone-output-run.test.js
+      - name: Receipt
+        shell: bash
+        run: |
+          printf 'SHA=%s\nEF05_DTXR_PHASE6_AND_RIGID_AUDIT=PASS\nCII_MASS_HOLD_POLICY=UNCHANGED\n' "$GITHUB_SHA" > ef05-review-receipt.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ef05-review-${{ github.sha }}
+          path: ef05-review-receipt.txt
+          if-no-files-found: warn

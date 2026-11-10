@@ -6,7 +6,7 @@
 import { createCiiPropertySession, stageCiiPropertyEdit, resetCiiPropertyEdit,
   resetAllCiiPropertyEdits, verifyCiiPropertyTransaction } from './xml-cii-final-property-transactions.js';
 import { classifyFinalRigidWeightError, formatFinalRigidErrorPercent } from './xml-cii-final-rigid-weight-error.js';
-import { installFinalRigidBatchControls } from './xml-cii-final-rigid-batch-ui.js?v=20261109-final-rigid-nearest-length-r3';
+import { installFinalRigidBatchControls } from './xml-cii-final-rigid-batch-ui.js?v=20261109-ef05-dtxr-phase6-r5';
 
 function element(tag, content, attributes = {}) {
   const item = document.createElement(tag);

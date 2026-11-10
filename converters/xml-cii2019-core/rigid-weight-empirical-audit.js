@@ -186,18 +186,49 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
   const rows=parsed.elements.filter(e=>e.rigidPointer>0).map(edge=>{
     const a=byNode.get(keyNode(edge.branch,edge.from))||[];
     const b=byNode.get(keyNode(edge.branch,edge.to))||[];
-    const from=a.length===1?a[0]:null,to=b.length===1?b[0]:null, flags=[];
-    if(a.length!==1||b.length!==1||!from?.position||!to?.position)
-      flags.push('SOURCE_NODE_UNRESOLVED');
-    if(from?.position&&to?.position&&Math.abs(len(from.position,to.position)-edge.lengthMm)>0.25)
+    const from=a.length===1?a[0]:null,to=b.length===1?b[0]:null,flags=[];
+    // Final CII can renumber original XML NodeNumber=-1 when the converter
+    // splits/cleans a component. A generated CII number is NOT a source
+    // ComponentRefNo. Recover the missing coordinate only when exactly one
+    // opposite endpoint has authentic source geometry, then qualify against
+    // a UNIQUE complete physical component span in the original XML.
+    const delta=[edge.dx,edge.dy,edge.dz];
+    let fromPosition=from?.position||null,toPosition=to?.position||null;
+    let geometricRecovery='NONE';
+    if(fromPosition&&!toPosition&&b.length===0){
+      toPosition=fromPosition.map((x,i)=>x+delta[i]);
+      geometricRecovery='CII_TO_FROM_AUTHENTIC_SOURCE_FROM';
+    }else if(toPosition&&!fromPosition&&a.length===0){
+      fromPosition=toPosition.map((x,i)=>x-delta[i]);
+      geometricRecovery='CII_FROM_FROM_AUTHENTIC_SOURCE_TO';
+    }
+    if(!fromPosition||!toPosition) flags.push('SOURCE_NODE_UNRESOLVED');
+    if(fromPosition&&toPosition&&Math.abs(len(fromPosition,toPosition)-edge.lengthMm)>0.25)
       flags.push('CII_SOURCE_GEOMETRY_MISMATCH');
+    const recovered=geometricRecovery!=='NONE';
     const matches=flags.length?[]:groups.map(group=>{
       if(group.branch!==edge.branch||!group.start||!group.end)return null;
-      const overlap=positiveInteriorOverlap(from.position,to.position,group.start.position,group.end.position);
+      if(recovered){
+        // Reject geometric proximity without exact physical endpoint custody.
+        // Connections between unlike source refs and partial overlaps do NOT
+        // acquire a physical owner merely through collinear CII geometry.
+        const known=from||to;
+        if(!known?.ref||refKey(known.ref)!==refKey(group.ref))return null;
+        const forward=len(fromPosition,group.start.position)<=0.25&&
+          len(toPosition,group.end.position)<=0.25;
+        const reverse=len(fromPosition,group.end.position)<=0.25&&
+          len(toPosition,group.start.position)<=0.25;
+        if(!forward&&!reverse)return null;
+      }
+      const overlap=positiveInteriorOverlap(fromPosition,toPosition,group.start.position,group.end.position);
       if(overlap<=0.2)return null;
       const span=len(group.start.position,group.end.position);
       return overlap>=0.5*Math.min(edge.lengthMm,span)?{group,overlap}:null;
     }).filter(Boolean);
+    // A reconstructed coordinate is not a recovered SOURCE node. It may
+    // replace SOURCE_NODE_UNRESOLVED only after a unique original physical
+    // component with both authentic endpoints is independently established.
+    if(recovered&&matches.length!==1)flags.push('SOURCE_NODE_UNRESOLVED');
     if(matches.length>1)flags.push('PHYSICAL_OWNER_AMBIGUOUS');
     const hit=matches.length===1?matches[0]:null;
     const group=hit?.group||null;
@@ -213,7 +244,11 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
     }
     return {...edge,
       fromRef:from?.ref||null,toRef:to?.ref||null,
-      fromPosition:from?.position||null,toPosition:to?.position||null,
+      fromPosition:fromPosition||null,toPosition:toPosition||null,
+      sourceNodeGeometryRecovery:recovered
+        ? (group?'UNIQUE_ORIGINAL_COMPONENT_SPAN_CONFIRMED':'POSITION_RECONSTRUCTED_OWNER_UNRESOLVED')
+        : 'NOT_NEEDED',
+      sourceGeneratedEndpoint:recovered?(from?'TO':'FROM'):null,
       physicalComponentRef:group?.ref||null,physicalComponentKey:group?.key||null,
       ownerType:group?.end?.componentType||group?.start?.componentType||null,
       ownerSpanMm:group?.start&&group?.end?len(group.start.position,group.end.position):null,
@@ -236,7 +271,12 @@ export function auditRigidWeightOwnership({ciiText,xmlRows,estimator,kgToNewtonS
        equal(next.weightN,group.massKg*kgToNewtonScale)) {
       row.flags.push('DUPLICATE_FULL_COMPONENT_MASS_ON_CONNECTION');
       row.duplicatedWithElement=next.element;
-    }else row.flags.push('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER');
+    }else if(!row.physicalComponentRef)
+      row.flags.push('WEIGHTED_CONNECTION_WITHOUT_PHYSICAL_OWNER');
+    // Known zero-mass owner already has POSITIVE_WEIGHT_ON_ZERO_MASS_COMPONENT.
+    // Do not falsely claim it has NO physical owner unless the source mapping
+    // is genuinely absent. The GLRD adjacent-flange duplicate check above
+    // remains mandatory for mapped zero-mass PCOMs.
   }
   for(const group of groups) {
     const children=rows.filter(row=>row.physicalComponentKey===group.key);

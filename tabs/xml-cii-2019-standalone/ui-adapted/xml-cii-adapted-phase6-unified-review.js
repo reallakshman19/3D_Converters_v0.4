@@ -5,7 +5,7 @@
 import {
   collectModeARigidWeightReviewIssues,
   openModeAConsolidatedRigidWeightReviewPopup,
-} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261109-phase6-readable-table-r4';
+} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261109-ef05-dtxr-phase6-r5';
 import { applyModeAConsolidatedRigidReviewUpdates } from './xml-cii-adapted-rigid-review-mode-a-state.js';
 import { xmlCiiEnrichedConfigFromState, saveMasterContextToLocalStorage } from './xml-cii-adapted-state.js';
 import { modeAExecutionRows, modeARawState } from './xml-cii-adapted-mode-a-propagation.js';
@@ -45,6 +45,7 @@ export function applyPhase6SingleReview(state = {}, updates = {}) {
       : state.masterContext,
     weightMatchResult:null,
     weightMatchStatus:'Rigid physical masses reviewed in Phase 6.',
+    pendingPhase6MassReview:null,
     outputRunReadinessReport:null,result:null,
   };
 }
@@ -69,6 +70,7 @@ export function applyPhase6ModeAReview(state = {}, updates = {}) {
     } : source);
   return syncActiveModeASource(normalizeModeABatchState({
     ...applied,phase6Undo:{mode:'batch',sourceConfigs:original,sourceIdentity},
+    pendingPhase6MassReview:null,
     sourceBatch:{...applied.sourceBatch,sources},
     weightMatchResult:null,outputRunReadinessReport:null,
     batchRunResult:null,result:null,
@@ -352,6 +354,15 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
     <div class="model-converters-workflow-detail-title">
       Rigid Weights Need Review — Consolidated
     </div>
+    ${snapshot.pendingPhase6MassReview ? `<div data-phase6-run-redirect
+      style="margin:8px 0;padding:10px;border-radius:6px;border:1px solid #e4ae43;
+      background:#352810;color:#ffe7b4;font-size:12px;">
+      RUN PAUSED — source mass review required before conversion.
+      ${Number(snapshot.pendingPhase6MassReview.issueCount||0)} unresolved
+      physical-component mass(es). Use Review / Edit Rigid Weights, save
+      independently verified masses or explicit 0 kg skips, then return
+      to 10 Output / Run and run again. Nothing has been converted or
+      automatically approved by this redirect.</div>` : ''}
     <p class="model-converters-workflow-detail-text">
       The same physical-mass approval gate used by Run is available here before conversion.
       Suggestions stage kg values; neither a catalog score nor a button click approves mass.

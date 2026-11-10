@@ -1,4 +1,4 @@
-import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-final-rigid-nearest-length-r3';
+import { runWorkflowFromUi as runSingleWorkflow } from './xml-cii-adapted-run-workflow-atta-default.js?v=20261109-ef05-dtxr-phase6-r5';
 import {
   activateModeASource,
   buildModeABatchManifest,
@@ -9,11 +9,8 @@ import {
 } from '../xml-cii-mode-a-batch.js?v=20260813-mode-a-full-propagation-2';
 import { clearModeASourceCaches, replaceModeAState } from './xml-cii-adapted-mode-a-state.js?v=20260813-mode-a-full-propagation-2';
 import { xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js?v=20260813-mode-a-rigid-review-1';
-import {
-  collectModeARigidWeightReviewIssues,
-  openModeAConsolidatedRigidWeightReviewPopup,
-} from './xml-cii-adapted-rigid-review-mode-a.js?v=20261108-rigid-choice-buttons-1';
-import { applyModeAConsolidatedRigidReviewUpdates } from './xml-cii-adapted-rigid-review-mode-a-state.js?v=20260813-mode-a-rigid-review-1';
+import { collectModeARigidWeightReviewIssues }
+  from './xml-cii-adapted-rigid-review-mode-a.js?v=20261109-ef05-dtxr-phase6-r5';
 import { downloadModeACiiZip } from './xml-cii-adapted-mode-a-cii-zip.js?v=20260814-save-all-cii-zip-1';
 
 function sourceManifest(source, result, scope, error = '') {
@@ -87,6 +84,12 @@ function yieldUi() {
   });
 }
 
+// Review routing ends BEFORE the conversion loop. Re-render only once after
+// the preflight review decision, never while converting individual sources.
+function renderAfterMassReviewRedirect(render) {
+  if(typeof render==='function')render();
+}
+
 async function consolidatedRigidReview(stateRef, state, enabled, preflight, progressElement) {
   const entries = [];
   const errors = [];
@@ -123,26 +126,19 @@ async function consolidatedRigidReview(stateRef, state, enabled, preflight, prog
   if (!entries.length) return { cancelled: false, state };
 
   const issueCount = entries.reduce((sum, entry) => sum + entry.issues.length, 0);
-  const message = `Review ${issueCount} rigid weight(s) across ${entries.length} XML file(s).`;
-  replaceModeAState(stateRef, { ...state, batchRunning: false, batchRunStatus: message });
-  setProgress(progressElement, message);
-  const result = await openModeAConsolidatedRigidWeightReviewPopup(entries);
-  if (result.cancelled) {
-    const cancelled = 'Batch run cancelled during consolidated rigid-weight review.';
-    replaceModeAState(stateRef, { ...state, batchRunning: false, batchRunStatus: cancelled, batchRunResult: null });
-    setProgress(progressElement, cancelled, 'bad');
-    return { cancelled: true, state };
-  }
-
-  const updated = syncActiveModeASource(normalizeModeABatchState(
-    applyModeAConsolidatedRigidReviewUpdates(state, result.updates),
-  ));
-  replaceModeAState(stateRef, {
-    ...updated,
-    batchRunning: false,
-    batchRunStatus: `Applied consolidated rigid-weight review across ${entries.length} XML file(s).`,
-  });
-  return { cancelled: false, state: updated };
+  // One and ONLY one physical-mass review workbench is authoritative:
+  // Phase 6. Do not open the legacy conversion-time popup, which has a
+  // different row population, stale DTXR presentation and approval UX.
+  // Pausing is deliberate: no mass/receipt is changed and no engine runs.
+  const message = `RUN NOT STARTED: ${issueCount} unresolved rigid mass(es) across ${entries.length} XML file(s). Complete 6 Rigid Weight Review (Weight Match), save verified kg masses or explicit zero skips, then start Run again.`;
+  const routed = {
+    ...state,activePhaseId:'weight-match',batchRunning:false,
+    batchRunResult:null,batchRunStatus:message,
+    pendingPhase6MassReview:{issueCount,xmlCount:entries.length,reason:'OUTPUT_RUN_UNRESOLVED_RIGIDS'},
+  };
+  replaceModeAState(stateRef, routed);
+  setProgress(progressElement, message, 'bad');
+  return { cancelled: true, state: routed };
 }
 
 /**
@@ -180,7 +176,7 @@ export async function runModeABatchFastFromUi(stateRef, render, options = {}) {
   await yieldUi();
   const review = await consolidatedRigidReview(stateRef, state, enabled, preflight, progressElement);
   if (review.cancelled) {
-    render?.();
+    renderAfterMassReviewRedirect(render);
     return null;
   }
   state = review.state;

@@ -1,8 +1,9 @@
 import { isApprovedPhysicalMassCandidate } from '../../../converters/xml-cii2019-core/physical-mass-approval.js';
 import { classifySourceWeightFamily, isWeightMasterPhysicalFamilyMatch } from '../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { proposedRigidReviewWeight, stageRigidReviewProposal, clearRigidReviewProposal, rigidReviewProposalNeedsVerification, isRigidWeightReviewEligibleIssue } from './xml-cii-adapted-rigid-review-prefill.js?v=20261107-weights-pyodide-fix-1';
-import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api-atta-default.js?v=20261109-final-rigid-nearest-length-r3';
+import { runXmlCii2019Workflow, validateSupportConfigJson } from '../xml-cii-workflow-api-atta-default.js?v=20261109-ef05-dtxr-phase6-r5';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
+import { detectXmlCiiWorkflowSourceKind } from '../xml-cii-workflow-source-detect.js';
 import { buildXmlCiiWorkflowJobFromUiState } from '../xml-cii-workflow-ui-adapter.js';
 import { applyStandaloneOutputRunReadiness, updateWorkflowState, xmlCiiEnrichedConfigFromState, saveMasterContextToLocalStorage } from './xml-cii-adapted-state.js';
 import {
@@ -307,28 +308,71 @@ async function unresolvedRigidIssues(state, config) {
       candidates: ranking.candidates.slice(0, 5),
       rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
     }, config);
-  }).filter((issue) => !issue.mapped);
+  }).filter(issue=>{
+    if(issue.mapped)return false;
+    const skip=config?.overrides?.rigidWeightSkipped?.[issue.key];
+    // An explicit, source-local 0 kg skip is a recorded owner decision,
+    // NOT an approved positive mass. Do not send a previously skipped row
+    // back into the missing-weight loop on every Run.
+    return !(skip?.skipped===true && Number(skip.weightKg)===0);
+  });
 }
 
-async function reviewRigidWeights(stateRef, config) {
-  try {
-    const result = await openStandaloneRigidWeightReviewPopup(await unresolvedRigidIssues(stateRef.current, config), stateRef, config);
-    if (result.cancelled) return false;
-    if ((result.weightsByKey && Object.keys(result.weightsByKey).length > 0) ||
-        (result.ratingsByKey && Object.keys(result.ratingsByKey).length > 0)) {
-      config.overrides = { ...(config.overrides || {}),
-        rigidWeight: { ...(config.overrides?.rigidWeight || {}), ...(result.weightsByKey || {}) },
-        rating: { ...(config.overrides?.rating || {}), ...(result.ratingsByKey || {}) } };
-      stateRef.current.supportConfigJson = JSON.stringify(config, null, 2);
-      if (stateRef.current.masterContext) {
-        stateRef.current.masterContext.config = config;
+async function reviewInputXmlRigidWeights(stateRef,config){
+  // InputXML has its own element-based review semantics. Keep this legacy
+  // source-kind-specific workflow; only PSI116 XML is unified with Phase 6.
+  try{
+    const result=await openStandaloneRigidWeightReviewPopup(
+      await unresolvedRigidIssues(stateRef.current,config),stateRef,config);
+    if(result.cancelled)return false;
+    if(Object.keys(result.weightsByKey||{}).length||Object.keys(result.ratingsByKey||{}).length){
+      config.overrides={...(config.overrides||{}),
+        rigidWeight:{...(config.overrides?.rigidWeight||{}),...(result.weightsByKey||{})},
+        rating:{...(config.overrides?.rating||{}),...(result.ratingsByKey||{})},
+      };
+      stateRef.current.supportConfigJson=JSON.stringify(config,null,2);
+      if(stateRef.current.masterContext){
+        stateRef.current.masterContext.config=config;
         saveMasterContextToLocalStorage(stateRef.current.masterContext);
       }
     }
     return true;
-  } catch (error) {
-    console.warn('Standalone rigid weight review failed to execute:', error);
-    return true;
+  }catch(error){
+    console.warn('InputXML rigid weight review failed:',error);
+    return false; // never continue CII conversion after a failed review
+  }
+}
+
+async function reviewRigidWeights(stateRef, config, render) {
+  const actual=detectXmlCiiWorkflowSourceKind(
+    stateRef.current?.sourceText,stateRef.current?.sourceKind);
+  if(actual==='inputxml')return reviewInputXmlRigidWeights(stateRef,config);
+  // InputXML keeps its own established route; XML source-mass decisions live
+  // exclusively in unified 6 Rigid Weight Review (Phase 6), in both single
+  // and Mode A. Run is never allowed to silently use a second popup.
+  try {
+    const issues=await unresolvedRigidIssues(stateRef.current, config);
+    if(!issues.length)return true;
+    const message='RUN NOT STARTED: '+issues.length+
+      ' unresolved rigid mass(es). Open 6 Rigid Weight Review (Weight Match), '+
+      'save verified source masses or explicit 0 kg skips, then run again.';
+    stateRef.current={
+      ...stateRef.current,activePhaseId:'weight-match',
+      pendingPhase6MassReview:{
+        issueCount:issues.length,xmlCount:1,reason:'OUTPUT_RUN_UNRESOLVED_RIGIDS',
+      },
+      outputRunReadinessStatus:message,
+    };
+    render?.();
+    return false;
+  }catch(error){
+    const message='RUN REFUSED: source mass review could not be independently rechecked: '+
+      (error?.message||error)+'. Open 6 Rigid Weight Review to investigate.';
+    stateRef.current={...stateRef.current,activePhaseId:'weight-match',
+      outputRunReadinessStatus:message,
+      pendingPhase6MassReview:{reason:'OUTPUT_RUN_REVIEW_BUILD_FAILED',error:String(error?.message||error)}};
+    render?.();
+    return false; // fail closed, never continue to CII engine on missing evidence
   }
 }
 
@@ -340,7 +384,7 @@ export async function runWorkflowFromUi(stateRef, render) {
     render();
     return;
   }
-  if (!await reviewRigidWeights(stateRef, xmlCiiEnrichedConfigFromState(stateRef.current))) return;
+  if (!await reviewRigidWeights(stateRef, xmlCiiEnrichedConfigFromState(stateRef.current), render)) return;
   stateRef.current = updateWorkflowState(stateRef.current, { running: true, result: null });
   render();
   try {

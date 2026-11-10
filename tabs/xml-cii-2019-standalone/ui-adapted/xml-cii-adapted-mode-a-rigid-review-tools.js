@@ -21,11 +21,13 @@ function isConsolidated(dialog) {
 
 function enhance(dialog) {
   if (!dialog || !isConsolidated(dialog) || dialog.dataset.modeARigidExtraTools === 'true') return false;
-  dialog.dataset.modeARigidExtraTools = 'true';
   const refresh = dialog.querySelector('[data-mode-a-rigid-refresh]');
   const exact = dialog.querySelector('[data-mode-a-rigid-fill-exact]');
   const controls = refresh?.parentElement || exact?.parentElement;
+  // A dialog may be detected before its controls have been mounted.
+  // Mark it installed only after the controls exist, so a later scan retries.
   if (!controls) return false;
+  dialog.dataset.modeARigidExtraTools = 'true';
 
   const dtxr = document.createElement('button');
   dtxr.type = 'button';
@@ -52,7 +54,8 @@ function enhance(dialog) {
     let count = 0;
     for (const row of dialog.querySelectorAll('[data-mode-a-rigid-review-row]')) {
       const input = row.querySelector('.mc-rigid-review-rating-input');
-      const dtxrText = text(row.children?.[5]?.textContent);
+      // Read the source DTXR cell by identity, not a fragile column index.
+      const dtxrText = text(row.querySelector('[data-dtxr-source-path]')?.textContent);
       const rating = extractXmlCiiRatingFromDtxr(dtxrText);
       if (!input || !rating) continue;
       input.value = rating;
@@ -81,7 +84,7 @@ function enhance(dialog) {
     }
     setStatus(count
       ? `Filled ${count} approved source mass(es).`
-      : 'No visible positive suggestions are available.',
+      : 'No visible approved source masses are available.',
       count === 0);
   });
 

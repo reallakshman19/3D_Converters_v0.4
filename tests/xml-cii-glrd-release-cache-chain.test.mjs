@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const version='20261108-rigid-choice-buttons-1';
 const phase6Version='20261109-phase6-readable-table-r4';
-const finalReviewVersion='20261109-final-rigid-nearest-length-r3';
+const phase6ReviewVersion='20261109-ef05-dtxr-phase6-r5';
+const finalReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
  ['index.html','main-rhbg-fitguard.js'],
@@ -15,7 +16,7 @@ const chain=[
  // available to independent non-UI consumers, not the active Phase 6 route.
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js',finalReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-events-mode-a-consolidated-review-v2.js','xml-cii-adapted-run-workflow-mode-a-fast.js',finalReviewVersion],
- ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js','xml-cii-adapted-rigid-review-mode-a.js'],
+ ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js','xml-cii-adapted-rigid-review-mode-a.js',phase6ReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-consolidated-review-v2.js','xml-cii-adapted-rigid-review-mode-a.js']
 ];
 test('entire live XML-CII Weight Match and consolidated popup import chain is versioned',()=>{
@@ -30,11 +31,11 @@ test('new Phase 6 review and advanced matcher are versioned on the live import c
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',
      'xml-cii-adapted-phase-panels-mode-a.js',finalReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-mode-a.js',
-     'xml-cii-adapted-phase6-unified-review.js',phase6Version],
+     'xml-cii-adapted-phase6-unified-review.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js',
-     'xml-cii-adapted-phase6-unified-review.js',phase6Version],
+     'xml-cii-adapted-phase6-unified-review.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js',
-     'xml-cii-adapted-rigid-review-mode-a.js',phase6Version],
+     'xml-cii-adapted-rigid-review-mode-a.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js',
      'weight-match-renderer.js',phase6Version],
   ];
@@ -96,4 +97,17 @@ test('Review Final weight opens the revised batch action/length modules, never c
   assert.match(batchUi,/data-final-rigid-batch-apply-nearest/);
   assert.ok(batchUi.includes('Element Length (mm)'));
   assert.match(planner,/planAllNearestBatchDraftSelection/);
+});
+
+
+test('EF05 active Run uses the same versioned Phase 6 review and updated ownership audit',()=>{
+  const rev=phase6ReviewVersion;
+  const run=read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js');
+  const service=read('tabs/xml-cii-2019-standalone/xml-cii-workflow-service.js');
+  assert.ok(run.includes('xml-cii-adapted-rigid-review-mode-a.js?v='+rev));
+  assert.ok(service.includes('rigid-weight-empirical-audit.js?v='+rev));
+  const panels=read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js');
+  assert.ok(panels.includes('xml-cii-adapted-phase6-unified-review.js?v='+rev));
+  const phase6=read('tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase6-unified-review.js');
+  assert.ok(phase6.includes('xml-cii-adapted-rigid-review-mode-a.js?v='+rev));
 });
