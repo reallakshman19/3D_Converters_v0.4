@@ -466,7 +466,8 @@ async function runBuild({ button, progress, stateRef, render, kind }) {
 }
 
 export function renderModeAConsolidatedPreviewPanel(parent, stateRef, render) {
-  const executions = modeAExecutionRows(stateRef);
+  const executions = modeAExecutionRows(stateRef).filter(({ source }) =>
+    String(source.sourceText || '').trim().length > 0);
   if (executions.length <= 1) return false;
   const state = modeARawState(stateRef);
   const result = state.modeAConsolidatedPreviewResult;
