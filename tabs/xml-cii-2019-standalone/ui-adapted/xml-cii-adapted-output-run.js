@@ -87,8 +87,22 @@ function renderRigidMassAudit(parent,state) {
     {id:'Flagged positive-weight RIGIDs',Value:summary.positiveWeightCount},
     {id:'Zero-weight intercomponent links (source refs distinct)',Value:summary.zeroBetweenDistinctRefs},
     {id:'Other zero-weight source identity gaps',Value:summary.zeroNeedsNodeReconciliation},
+    {id:'Nonblocking zero-weight intercomponent connections',Value:summary.nonblockingZeroConnections},
     {id:'Audit exception',Value:audit.errorCode||'none'},
   ],'No independent mass audit evidence.'));
+  if(summary.nonblockingZeroConnections) {
+    panel.appendChild(createElement('p',
+      summary.nonblockingZeroConnections+' zero-weight connection(s) between distinct original source component references are retained as NONBLOCKING identity advisories, not claimed as physical-component masses. This does not approve a source mass or override Phase 6 review.',
+      'model-converters-workflow-detail-note'));
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)',
+      'Source FROM ref','Source TO ref','Classification'],
+      summary.zeroConnectionAdvisories.map(row=>({
+        Element:row.element,Nodes:row.nodes,'Rigid pointer':row.pointer,
+        'Weight (N)':row.weightN,
+        'Source FROM ref':row.fromRef,'Source TO ref':row.toRef,
+        Classification:row.reason,
+      })),'No nonblocking zero-weight connectors.'));
+  }
   if(summary.flagRecords){
     panel.appendChild(createElement('p',
       'WHY HELD: the CII converter ran, but the source-to-final-RIGID audit could not establish a unique physical owner for every emitted RIGID element. '+
