@@ -430,11 +430,13 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isDisabled(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(), '150');
+    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /No eligible numerical corrections/);
     assert.match(await modal.locator('thead').innerText(),/Element Length \(mm\)/);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1',
       'batch length must be the final CII 19.1 mm route, not a catalog/physical length');
-    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),0,
-      'hidden below-threshold pointers are not silently shown');
+    assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').count(),1,
+      'source-warning pointers remain visible even below the numeric threshold');
 
     // Apply All Nearest is only a draft-selection action: it explicitly opts
     // provisional suggestions into review without granting mass authority.
@@ -477,6 +479,8 @@ try {
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
       'bulk selection still requires review acknowledgement');
+    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /Explicit review acknowledgement/);
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     await modal.locator('[data-final-rigid-batch-stage]').click();
@@ -490,7 +494,7 @@ try {
 
     // The only released output uses the existing full verification/reparse path.
     await page.locator('[data-final-rigid-apply]').click();
-    await page.waitForFunction(() => document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('VERIFIED REVISED CII READY'));
+    await page.waitForFunction(() => document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
     const [ciiDownload] = await Promise.all([
       page.waitForEvent('download'), page.locator('[data-final-rigid-download]').click(),
     ]);
@@ -585,8 +589,8 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1');
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').innerText(),'19.1');
     const hardHeldRow = modal.locator('[data-final-rigid-batch-row="3"]');
-    assert.equal(await hardHeldRow.count(), 0,
-      'hard-held row is hidden by default but not eligible for bulk approval');
+    assert.equal(await hardHeldRow.count(), 1,
+      'unsafe rows remain visible as skipped warnings and cannot be auto-approved');
     await modal.locator('[data-final-rigid-batch-show-held]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-row="3"] [data-final-rigid-batch-approve]').isDisabled(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="3"]').innerText(),'109',
@@ -601,7 +605,7 @@ try {
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="3"] [data-final-rigid-edited]').inputValue(), '590');
     assert.equal(await page.locator('[data-final-rigid-apply]').isDisabled(), false);
     await page.locator('[data-final-rigid-apply]').click();
-    await page.waitForFunction(() => document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('VERIFIED REVISED CII READY'));
+    await page.waitForFunction(() => document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
     const [ciiDownload] = await Promise.all([
       page.waitForEvent('download'), page.locator('[data-final-rigid-download]').click(),
     ]);
@@ -822,6 +826,47 @@ try {
       'mass HOLD must still withhold released CII after the review-only patch');
     assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
   });
+
+  await test('Chromium no-change path verifies byte-identical CII and exports review reconciliation JSON', async () => {
+    await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async (ciiText) => {
+      const {openFinalRigidWeightReview} = await import(
+        '/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js');
+      window.currentResult = {
+        ok:true, ciiText, ciiName:'GLRD-NoChange-Fixture.cii',
+        finalRigidReviewEvidence:{sourceKind:'xml',engineInputText:'<Root/>',
+          engineInputDigest:'sha256:no-change-synthetic-fixture',
+          weightScale:10,supportConfigJson:JSON.stringify({weight:{masterRows:[]}})},
+      };
+      openFinalRigidWeightReview(window.currentResult,{
+        getCurrentResult:()=>window.currentResult,
+      });
+    }, original);
+    await page.waitForFunction(() =>
+      document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('Ready:'));
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const dialog = page.locator('[data-final-rigid-batch-dialog]');
+    assert.equal(await dialog.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.match(await dialog.locator('[data-final-rigid-batch-stage-reason]').innerText(),
+      /No eligible numerical corrections/);
+    await dialog.locator('[data-final-rigid-batch-continue]').click();
+    await page.waitForFunction(() => !document.querySelector('[data-final-rigid-batch-dialog]'));
+    assert.match(await page.locator('[data-final-rigid-preview-report]').innerText(),
+      /VERIFIED UNCHANGED CII/);
+    assert.equal(await page.locator('[data-final-rigid-batch-summary-download]').isDisabled(), false);
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('[data-final-rigid-batch-summary-download]').click(),
+    ]);
+    const summary = JSON.parse(await readFile(await download.path(),'utf8'));
+    assert.equal(summary.verification.mode,'VERIFIED_UNCHANGED');
+    assert.equal(summary.verification.changeCount,0);
+    assert.equal(summary.verification.unchangedBytesEqual,true);
+    assert.equal(summary.verification.sourceSha256,summary.verification.revisedSha256);
+    assert.equal(summary.releaseStatus,'NOT_ENGINEERING_APPROVED_BY_BATCH_REVIEW');
+    assert.equal(await page.evaluate(()=>window.currentResult.ciiText),original);
+  });
+
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
