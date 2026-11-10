@@ -11,7 +11,7 @@ function reportStartupError(error) {
 }
 
 async function startStandaloneApp() {
-  const module = await import('./core/app.js?v=20261110-single-xml-preview-r1');
+  const module = await import('./core/app.js?v=20261110-zero-audit-custody-r1');
   await module.init(startupMount());
 }
 

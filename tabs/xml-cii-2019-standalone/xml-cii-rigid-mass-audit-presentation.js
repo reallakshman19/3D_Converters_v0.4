@@ -25,8 +25,10 @@ export function explainRigidMassAudit(audit={}) {
     elementCount:Number(audit.elementCount)||0,
     auditedPointers:Number(audit.auditedRigidCount)||0,
     flaggedUnique:flagged.length||Number(audit.summary?.flaggedElements)||0,
+    policyRevision:String(audit.policyRevision||''),
     flagRecords:allFlags.length,
     zeroWeightCount:zeros.length,
+    allZeroWeightCount:rows.filter(row=>num(row.weightN)===0).length,
     positiveWeightCount:positives.length,
     zeroBetweenDistinctRefs:unownedZeroLinks.length,
     zeroNeedsNodeReconciliation:identityGaps.length,
@@ -34,6 +36,7 @@ export function explainRigidMassAudit(audit={}) {
     advisoryRecords:Array.isArray(audit.advisories)?audit.advisories.length:0,
     zeroConnectionAdvisories:advisoryRows.map(row=>({
       element:row.element,pointer:row.rigidPointer,weightN:row.weightN,
+      lengthMm:row.lengthMm,
       nodes:String(row.from)+' → '+String(row.to),
       fromRef:row.fromRef,toRef:row.toRef,
       reason:'ZERO_MASS_INTERCOMPONENT_CONNECTION',

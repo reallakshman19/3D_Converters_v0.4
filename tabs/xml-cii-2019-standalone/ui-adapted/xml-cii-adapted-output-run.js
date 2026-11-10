@@ -1,6 +1,6 @@
 import { createFinalRigidWeightReviewButton, finalRigidReviewAvailable } from './xml-cii-adapted-final-rigid-review.js?v=20261109-ef05-dtxr-phase6-r5';
 import { buildStandaloneOutputRunReadiness } from '../xml-cii-output-run-readiness.js';
-import { explainRigidMassAudit } from '../xml-cii-rigid-mass-audit-presentation.js';
+import { explainRigidMassAudit } from '../xml-cii-rigid-mass-audit-presentation.js?v=20261110-zero-audit-custody-r1';
 import { detectXmlCiiWorkflowSourceKind, maskedFileName } from '../xml-cii-workflow-source-detect.js';
 import { createElement, createOption, downloadTextFile } from './xml-cii-adapted-dom.js';
 import { updateWorkflowOptions, applyStandaloneOutputRunReadiness, updateWorkflowState, xmlCiiEnrichedConfigFromState } from './xml-cii-adapted-state.js';
@@ -83,22 +83,29 @@ function renderRigidMassAudit(parent,state) {
     {id:'Rigid pointers audited',Value:audit.auditedRigidCount??'NOT_RUN'},
     {id:'Distinct flagged elements',Value:audit.summary?.flaggedElements??'NOT_RUN'},
     {id:'Diagnostic findings (may repeat an element)',Value:summary.flagRecords},
+    {id:'Final RIGIDs with numeric 0 N (not blanks)',Value:summary.allZeroWeightCount},
     {id:'Flagged zero-weight RIGIDs',Value:summary.zeroWeightCount},
     {id:'Flagged positive-weight RIGIDs',Value:summary.positiveWeightCount},
     {id:'Zero-weight intercomponent links (source refs distinct)',Value:summary.zeroBetweenDistinctRefs},
     {id:'Other zero-weight source identity gaps',Value:summary.zeroNeedsNodeReconciliation},
     {id:'Nonblocking zero-weight intercomponent connections',Value:summary.nonblockingZeroConnections},
+    {id:'Audit policy revision',Value:summary.policyRevision||'LEGACY / NOT RECORDED — RE-RUN'},
     {id:'Audit exception',Value:audit.errorCode||'none'},
   ],'No independent mass audit evidence.'));
+  if(status==='HOLD'&&!summary.policyRevision) {
+    panel.appendChild(createElement('p',
+      'This HOLD has no recorded zero-connection audit revision. It may be a stale pre-fix result. Refresh the updated application and re-run the XML→CII converter before diagnosing the remaining flag.',
+      'model-converters-workflow-detail-note'));
+  }
   if(summary.nonblockingZeroConnections) {
     panel.appendChild(createElement('p',
       summary.nonblockingZeroConnections+' zero-weight connection(s) between distinct original source component references are retained as NONBLOCKING identity advisories, not claimed as physical-component masses. This does not approve a source mass or override Phase 6 review.',
       'model-converters-workflow-detail-note'));
-    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)',
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Element length (mm)','Weight (N)',
       'Source FROM ref','Source TO ref','Classification'],
       summary.zeroConnectionAdvisories.map(row=>({
         Element:row.element,Nodes:row.nodes,'Rigid pointer':row.pointer,
-        'Weight (N)':row.weightN,
+        'Element length (mm)':row.lengthMm??'NOT_RUN','Weight (N)':row.weightN,
         'Source FROM ref':row.fromRef,'Source TO ref':row.toRef,
         Classification:row.reason,
       })),'No nonblocking zero-weight connectors.'));
@@ -114,12 +121,13 @@ function renderRigidMassAudit(parent,state) {
   const flags=Array.isArray(audit.flags)?audit.flags:[];
   if(flags.length) {
     const rowsByPointer=new Map(rows(audit.rows).map(row=>[row.rigidPointer,row]));
-    panel.appendChild(table(['Element','Nodes','Rigid pointer','Weight (N)','Mass finding',
+    panel.appendChild(table(['Element','Nodes','Rigid pointer','Element length (mm)','Weight (N)','Mass finding',
       'Source FROM ref','Source TO ref','Identity evidence','Component','Reason'],
       flags.slice(0,80).map(f=>{
         const row=rowsByPointer.get(f.rigidPointer)||{};
         return {
           Element:f.element,Nodes:f.from+' → '+f.to,'Rigid pointer':f.rigidPointer,
+          'Element length (mm)':f.lengthMm??row.lengthMm??'NOT_RUN',
           'Weight (N)':f.weightN,
           'Mass finding':Number(f.weightN)>0
             ? 'POSITIVE MASS: owner review required'
