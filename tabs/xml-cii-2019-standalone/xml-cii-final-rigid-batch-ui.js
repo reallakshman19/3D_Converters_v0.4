@@ -168,7 +168,7 @@ export function installFinalRigidBatchControls({
       summary.textContent = current.eligible.length + ' eligible · ' +
         reviewOnlyCount + ' review-only (requires Include) · ' +
         warnings + ' metadata warnings · ' +
-        hardHoldCount + ' structural/other holds · ' + current.belowThreshold.length +
+        hardHoldCount + ' hard-held (structural/other) · ' + current.belowThreshold.length +
         ' below threshold · ' + chosen.length + ' selected · ' +
         (needsApproval && !confirm.checked ? 'review acknowledgement required' :
           'no exported weights changed');
