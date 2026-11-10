@@ -3,11 +3,11 @@ import { downloadTextFile } from './xml-cii-adapted-dom.js?v=20260813-mode-a-ful
 import { activateModeASource, normalizeModeABatchState } from '../xml-cii-mode-a-batch.js?v=20260813-mode-a-full-propagation-2';
 import {
   clearModeASourceCaches,
-  importModeASources,
+  replaceModeASourceSelection,
   removeModeASource,
   replaceModeAState,
   updateModeASource,
-} from './xml-cii-adapted-mode-a-state.js?v=20260813-mode-a-full-propagation-2';
+} from './xml-cii-adapted-mode-a-state.js?v=20261110-single-xml-preview-r1';
 import { modeABatchArtifactValue } from './xml-cii-adapted-mode-a-panel.js?v=20260813-mode-a-full-propagation-2';
 import { runModeABatchFromUi } from './xml-cii-adapted-run-workflow-mode-a.js?v=20260813-mode-a-full-propagation-2';
 import { detectXmlCiiWorkflowSourceKind } from '../xml-cii-workflow-source-detect.js?v=20260813-mode-a-full-propagation-2';
@@ -59,7 +59,22 @@ function installMultipleSourceCapture(container, stateRef, render) {
       const files = [...(event.target.files || [])];
       if (!files.length) return;
       const { rows, rejected } = await sourceRows(files, stateRef.current);
-      const imported = importModeASources(stateRef.current, rows);
+      // The file picker is a selection, not an implicit additive import.
+      // Otherwise selecting one replacement XML leaves the prior XML enabled
+      // and incorrectly activates the multi-file Consolidated Preview.
+      if (!rows.length) {
+        const existing = modeARawState(stateRef);
+        replaceModeAState(stateRef, {
+          ...existing,
+          sourceBatch: {
+            ...existing.sourceBatch,
+            importStatus: rejected.join(' | ') || 'No valid PSI116 XML files selected.',
+          },
+        });
+        render();
+        return;
+      }
+      const imported = replaceModeASourceSelection(stateRef.current, rows);
       const batch = imported.state.sourceBatch || {};
       clearModeASourceCaches();
       replaceModeAState(stateRef, {

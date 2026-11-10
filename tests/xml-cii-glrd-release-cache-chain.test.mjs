@@ -5,16 +5,17 @@ const version='20261108-rigid-choice-buttons-1';
 const phase6Version='20261109-phase6-readable-table-r4';
 const phase6ReviewVersion='20261109-ef05-dtxr-phase6-r5';
 const finalReviewVersion='20261109-ef05-dtxr-phase6-r5';
+const singlePreviewVersion='20261110-single-xml-preview-r1';
 const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const chain=[
- ['index.html','main-rhbg-fitguard.js'],
- ['main-rhbg-fitguard.js','core/app.js'],
- ['core/app.js','app-standalone-runtime.js'],
- ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js'],
- ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',finalReviewVersion],
+ ['index.html','main-rhbg-fitguard.js',singlePreviewVersion],
+ ['main-rhbg-fitguard.js','core/app.js',singlePreviewVersion],
+ ['core/app.js','app-standalone-runtime.js',singlePreviewVersion],
+ ['core/app-standalone-runtime.js','xml-cii-2019-standalone-tab.js',singlePreviewVersion],
+ ['tabs/xml-cii-2019-standalone-tab.js','xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',singlePreviewVersion],
  // Phase 6 has been replaced; the legacy Weight Match renderer remains
  // available to independent non-UI consumers, not the active Phase 6 route.
- ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js',finalReviewVersion],
+ ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js','xml-cii-adapted-events-mode-a-consolidated-review-v2.js',singlePreviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-events-mode-a-consolidated-review-v2.js','xml-cii-adapted-run-workflow-mode-a-fast.js',finalReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-fast.js','xml-cii-adapted-rigid-review-mode-a.js',phase6ReviewVersion],
  ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-run-workflow-mode-a-consolidated-review-v2.js','xml-cii-adapted-rigid-review-mode-a.js']
@@ -29,7 +30,7 @@ test('entire live XML-CII Weight Match and consolidated popup import chain is ve
 test('new Phase 6 review and advanced matcher are versioned on the live import chain',()=>{
   const phase6Chain=[
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-workflow-shell-mode-a-easy-bulk-v6.js',
-     'xml-cii-adapted-phase-panels-mode-a.js',finalReviewVersion],
+     'xml-cii-adapted-phase-panels-mode-a.js',singlePreviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels-mode-a.js',
      'xml-cii-adapted-phase6-unified-review.js',phase6ReviewVersion],
     ['tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-phase-panels.js',
