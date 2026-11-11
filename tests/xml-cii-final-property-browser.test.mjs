@@ -474,7 +474,12 @@ try {
       /Nearest review drafts selected for 1 eligible pointers/);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(),true);
     assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true,
+      'first Stage click requires a separate review acknowledgement, without edits');
+    assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150');
+    await modal.locator('[data-final-rigid-batch-attestation-cancel]').click();
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150',
       'the Apply All Nearest click cannot modify CII/editor weights');
 
@@ -498,17 +503,18 @@ try {
     await modal.locator('[data-final-rigid-batch-approve-all]').click();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'Stage opens a review confirmation rather than silently accepting catalog estimates');
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(), '150');
     await modal.locator('[data-final-rigid-batch-clear-all]').click();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), false);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), false);
     await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').check();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
-      'bulk selection still requires review acknowledgement');
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'bulk selection opens an explicit review confirmation');
     assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
-      /Explicit review acknowledgement/);
+      /Click Stage & Verify/);
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     await modal.locator('[data-final-rigid-batch-stage]').click();
@@ -604,8 +610,8 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
-      'review-only approval is independent of selecting all eligible pointers');
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'selection does not grant mass approval; staging click opens a separate confirmation');
     await modal.locator('[data-final-rigid-batch-clear-all]').click();
     await modal.locator('[data-final-rigid-batch-include-review]').uncheck();
     await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
@@ -613,7 +619,7 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(), false);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1');
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').innerText(),'19.1');
     const hardHeldRow = modal.locator('[data-final-rigid-batch-row="3"]');
@@ -625,11 +631,12 @@ try {
       'hard-held neighbouring emitted flange remains 109 mm and cannot be auto-selected');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 selected/);
 
-    await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.match(await modal.locator('[data-final-rigid-batch-stage]').innerText(), /2 Selected Corrections/);
-    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
-      /skipped pointers stay unchanged/);
     await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false,
+      'opening the confirmation panel does not automatically approve');
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
     await page.waitForFunction(() => !document.querySelector('[data-final-rigid-batch-dialog]'));
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="1"] [data-final-rigid-edited]').inputValue(), '29.84');
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="2"] [data-final-rigid-edited]').inputValue(), '29.84');
