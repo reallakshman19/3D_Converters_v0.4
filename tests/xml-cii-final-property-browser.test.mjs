@@ -1234,6 +1234,7 @@ try {
     const modal=page.locator('[data-final-rigid-batch-dialog]');
     await modal.locator('[data-final-rigid-batch-include-review]').check();
     const row35=modal.locator('[data-final-rigid-batch-row="35"]');
+    await row35.locator('td').nth(8).locator('details').evaluate(el=>{el.open=true;});
     await row35.locator('[data-final-rigid-batch-owner]').selectOption('0');
     const row35After=modal.locator('[data-final-rigid-batch-row="35"]');
     assert.equal(await row35After.locator('td').nth(6).innerText(),'29.84',
