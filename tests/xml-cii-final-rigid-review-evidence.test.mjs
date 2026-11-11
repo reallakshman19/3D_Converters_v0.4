@@ -161,3 +161,38 @@ test('no-change transaction fully reparses CII and retains every original byte',
     currentCiiText:original.replace('2019','2018'),runIdentity:'NO-CHANGE-SESSION',
   }),/source CII content changed/);
 });
+
+test('144-pointer review: 43 eligible corrections proceed despite 14 skips, 87 no-change and 144 warnings',()=>{
+  const {inventory,plans}=witness();
+  inventory.rows=[]; plans.length=0;
+  for(let pointer=1;pointer<=144;pointer++){
+    const correctable=pointer<=43;
+    const skipped=pointer>43 && pointer<=57;
+    inventory.rows.push({
+      rigidPointer:pointer,weight:correctable?100:150,
+      rawWeight:String(correctable?100:150),
+      status:'LINKED',
+      linkedElements:skipped?[]:[{index:pointer,fromNode:String(pointer*10),
+        toNode:String(pointer*10+1),lengthMm:109}],
+    });
+    plans.push({rigidPointer:pointer,
+      mapping:{branchName:'/B',componentRefNo:'/C'+pointer},
+      sourceContext:{status:'CONFLICT_REVIEW',conflicts:['RATING_CONFLICT'],
+        bore:{conflict:false},rating:{conflict:true},dtxr:{suppressed:false}},
+      nearestSuggestions:[{referenceWeight:correctable?300:150,
+        matchPct:100,direct:true,approximate:false,comparisonOnly:false}],
+    });
+  }
+  const approved=planFinalRigidBatchCorrections(inventory,plans,{includeReviewOnly:true});
+  assert.equal(approved.eligible.length,43);
+  assert.equal(approved.skipped.length,14);
+  assert.equal(approved.belowThreshold.length,87);
+  const selection=planAllNearestBatchDraftSelection(inventory,plans,{});
+  assert.equal(selection.selectedPointers.length,43);
+  assert.equal(selection.hardHeld,14);
+  assert.equal(selection.belowThreshold,87);
+  const summary=summarizeFinalRigidBatch(selection.plan,selection.selectedPointers);
+  assert.deepEqual([summary.corrected,summary.unchanged,summary.skipped,
+    summary.unresolved,summary.warningRows],[43,87,14,14,144]);
+  assert.equal(summary.engineeringMassApproval,'NOT_ESTABLISHED_BY_BATCH_REVIEW');
+});
