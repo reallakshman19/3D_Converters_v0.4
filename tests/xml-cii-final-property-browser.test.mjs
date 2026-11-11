@@ -474,7 +474,12 @@ try {
       /Nearest review drafts selected for 1 eligible pointers/);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(),true);
     assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true,
+      'first Stage click requires a separate review acknowledgement, without edits');
+    assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150');
+    await modal.locator('[data-final-rigid-batch-attestation-cancel]').click();
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(),'150',
       'the Apply All Nearest click cannot modify CII/editor weights');
 
@@ -498,17 +503,18 @@ try {
     await modal.locator('[data-final-rigid-batch-approve-all]').click();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'Stage opens a review confirmation rather than silently accepting catalog estimates');
     assert.equal(await first.locator('[data-final-rigid-edited]').inputValue(), '150');
     await modal.locator('[data-final-rigid-batch-clear-all]').click();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), false);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), false);
     await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').check();
     assert.equal(await proposed.locator('[data-final-rigid-batch-approve]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
-      'bulk selection still requires review acknowledgement');
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'bulk selection opens an explicit review confirmation');
     assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
-      /Explicit review acknowledgement/);
+      /Click Stage & Verify/);
     await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     await modal.locator('[data-final-rigid-batch-stage]').click();
@@ -604,8 +610,8 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve-all-checkbox]').isChecked(), true);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true,
-      'review-only approval is independent of selecting all eligible pointers');
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false,
+      'selection does not grant mass approval; staging click opens a separate confirmation');
     await modal.locator('[data-final-rigid-batch-clear-all]').click();
     await modal.locator('[data-final-rigid-batch-include-review]').uncheck();
     await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
@@ -613,7 +619,7 @@ try {
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="1"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-approve="2"]').isChecked(), true);
     assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(), false);
-    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(), false);
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="1"]').innerText(),'19.1');
     assert.equal(await modal.locator('[data-final-rigid-batch-element-length="2"]').innerText(),'19.1');
     const hardHeldRow = modal.locator('[data-final-rigid-batch-row="3"]');
@@ -625,11 +631,12 @@ try {
       'hard-held neighbouring emitted flange remains 109 mm and cannot be auto-selected');
     assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(), /2 selected/);
 
-    await modal.locator('[data-final-rigid-batch-confirm-review]').check();
     assert.match(await modal.locator('[data-final-rigid-batch-stage]').innerText(), /2 Selected Corrections/);
-    assert.match(await modal.locator('[data-final-rigid-batch-stage-reason]').innerText(),
-      /skipped pointers stay unchanged/);
     await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false,
+      'opening the confirmation panel does not automatically approve');
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
     await page.waitForFunction(() => !document.querySelector('[data-final-rigid-batch-dialog]'));
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="1"] [data-final-rigid-edited]').inputValue(), '29.84');
     assert.equal(await page.locator('[data-final-rigid-row][data-pointer="2"] [data-final-rigid-edited]').inputValue(), '29.84');
@@ -862,6 +869,79 @@ try {
     assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
   });
 
+  await test('Chromium quarantined CII accepts independently acknowledged nearest draft, preserves HOLD and exports REVIEW_ONLY CII',async()=>{
+    await page.goto(address+'/tests/fixtures/final-cii-property-ui-host.html');
+    const pinnedXml='<Root><Branch><Branchname>/B</Branchname><Rating>900</Rating>'+
+      '<Node><NodeNumber>1</NodeNumber><ComponentType>PIPE</ComponentType>'+
+      '<Position>0 0 0</Position></Node></Branch></Root>';
+    const sourceCii=original
+      .replace(row([1000,1001,19.1,0,0,80]),row([639,10000,19.1,0,0,60.3]))
+      .replace(row([430,'0.000000']),row([17.48,'0.000000']));
+    const masters=[{id:'SPECTACLE-BLIND-REFERENCE',boreMm:50,rating:'900',
+      lengthMm:147,weight:2.984*147/19.1,type:'FLANGE',
+      typeDesc:'SPECTACLE BLIND'}];
+    await page.evaluate(async({ciiText,pinnedXml,masters})=>{
+      const {openFinalRigidWeightReview}=await import(
+        '/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js');
+      window.currentResult={
+        ok:false,error:'RIGID_MASS_CONSERVATION_HOLD',
+        diagnostics:{rigidMassAudit:{status:'HOLD',flags:[
+          {rigidPointer:1,code:'SOURCE_OWNER_UNRESOLVED',element:1},
+        ]}},
+        rigidMassRepairCandidate:{status:'QUARANTINED_REVIEW_ONLY',
+          engineeringReleaseAuthorized:false,ciiText,ciiName:'GLRD-held-nearest.cii'},
+        finalRigidReviewEvidence:{
+          sourceKind:'xml',engineInputText:pinnedXml,
+          engineInputDigest:'sha256:held-catalog-batch-demo',
+          stagedJsonText:'',weightScale:10,
+          supportConfigJson:JSON.stringify({weight:{masterRows:masters,
+            valveHintLengthToleranceMm:6}}),
+        },
+      };
+      openFinalRigidWeightReview(window.currentResult,{
+        getCurrentResult:()=>window.currentResult,
+      });
+    },{ciiText:sourceCii,pinnedXml,masters});
+    await page.waitForFunction(()=>
+      document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('Ready:'));
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const modal=page.locator('[data-final-rigid-batch-dialog]');
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    const row1=modal.locator('[data-final-rigid-batch-row="1"]');
+    assert.equal(await row1.locator('td').nth(6).innerText(),'29.84');
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await page.locator('[data-final-rigid-edited="1"]').inputValue(), '17.48');
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-rigid-batch-dialog]'));
+    assert.equal(await page.locator('[data-final-rigid-edited="1"]').inputValue(),'29.84');
+    assert.match(await page.locator('[data-final-rigid-preview-report]').innerText(),
+      /VERIFIED BATCH PREVIEW/);
+    await page.locator('[data-final-rigid-hold-ack]').check();
+    await page.locator('[data-final-rigid-apply]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-final-rigid-preview-report]')
+      ?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
+    const [download]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-download]').click()]);
+    const revised=await readFile(await download.path(),'utf8');
+    assert.deepEqual(parseFinalCiiRigidInventory(revised).rows.map(r=>r.weight),
+      [29.84,590,590]);
+    const [auditDownload]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-audit]').click()]);
+    const audit=JSON.parse(await readFile(await auditDownload.path(),'utf8'));
+    assert.deepEqual(audit.changes.map(c=>c.recordPointer),[1]);
+    assert.equal(audit.engineeringReleaseStatus,'HELD_NOT_APPROVED');
+    assert.equal(audit.physicalMassVerification,'NOT_ESTABLISHED_BY_CII_PATCH');
+    assert.equal(audit.untouchedBytesEqual,true);
+    assert.equal(audit.changes[0].reference.batch.massAuthority,'UNVERIFIED_REVIEW_ONLY');
+    assert.ok(audit.changes[0].reference.batch.metadataWarningCodes.includes(
+      'ENGINEERING_MASS_HOLD_REVIEW_ONLY_NOT_APPROVED'));
+    assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),sourceCii);
+    assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
+  });
+
   await test('Chromium no-change path verifies byte-identical CII and exports review reconciliation JSON', async () => {
     await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
     await page.evaluate(async (ciiText) => {
@@ -1073,6 +1153,123 @@ try {
     assert.equal(audit.engineeringReleaseStatus,'HELD_NOT_APPROVED');
     assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
     assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),sourceCii);
+  });
+
+
+  await test('Chromium 145-pointer screenshot case: 40 selected, 15 skipped, 90 below; 19.1mm invalid owner warns and Stage two-step works', async () => {
+    await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async () => {
+      const {installFinalRigidBatchControls}=await import(
+        '/tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-ui.js');
+      const shortPointers=new Map([
+        [15,[46,459,10000]],[28,[85,829,10010]],[35,[101,939,10020]],
+      ]);
+      const inventory={rows:[]},plans=[];
+      const overlay=document.createElement('div');
+      overlay.setAttribute('data-browser-145-batch-fixture','');
+      overlay.innerHTML='<div><table><tbody>'+
+        Array.from({length:145},(_,j)=>'<tr data-final-rigid-row data-pointer="'+(j+1)+'"><td>'+
+          (j+1)+'</td></tr>').join('')+'</tbody></table></div>';
+      document.body.appendChild(overlay);
+      for(let pointer=1;pointer<=145;pointer++){
+        const special=shortPointers.get(pointer);
+        const skip=pointer>=41&&pointer<=55;
+        const below=pointer>=56;
+        const weight=special?17.48:below?150:100;
+        const [index,from,to]=special || [pointer,1000+pointer,1001+pointer];
+        inventory.rows.push({
+          rigidPointer:pointer,weight,
+          rawWeight:special?'17.4800':String(weight),
+          status:'LINKED',
+          linkedElements:skip?[]:[{
+            index,fromNode:String(from),toNode:String(to),
+            lengthMm:special?19.1:109,
+          }],
+        });
+        const owners=special?[
+          {branchName:'/GLRD',componentRefNo:'/PCOM-'+pointer,componentType:'PCOM',
+            sourceNode:String(from),side:'FROM',sourceLengthMm:12.7},
+          {branchName:'/GLRD',componentRefNo:'/FLANGE-'+pointer,componentType:'FLAN',
+            sourceNode:String(to),side:'TO',sourceLengthMm:109},
+        ]:[];
+        plans.push({
+          rigidPointer:pointer,
+          mapping:special?null:{branchName:'/GLRD',componentRefNo:'/C'+pointer},
+          sourceContext:{
+            status:'CONFLICT_REVIEW',conflicts:['SOURCE_OWNER_UNVERIFIED'],
+            ownerCandidates:owners,bore:{conflict:false},rating:{conflict:false},
+            dtxr:{suppressed:false},
+          },
+          nearestSuggestions:[{
+            referenceWeight:special?29.84:below?150:300,
+            masterWeightKg:special?2.984:below?15:30,
+            matchPct:special?50:90,
+            title:special?'SPECTACLE BLIND':'Reference flange',
+            method:'length-extrapolated',approximate:true,comparisonOnly:true,direct:false,
+          }],
+        });
+      }
+      const currentResult={ok:true,ciiName:'GLRD-reported-145.cii',
+        finalRigidReviewEvidence:{weightScale:10}};
+      window.__batch145Calls=[];
+      installFinalRigidBatchControls({
+        overlay,inventory,plans,getEditedValues:()=>new Map(
+          inventory.rows.map(row=>[row.rigidPointer,row.rawWeight])),
+        getCurrentResult:()=>currentResult,isReady:()=>true,
+        verifyUnchanged:async()=>{throw Error('No-change path not requested');},
+        stageAndVerify:async(proposals,threshold,ack)=>{
+          window.__batch145Calls.push({pointerValues:proposals.map(row=>[
+            row.pointer,row.originalWeight,row.proposedWeight,
+            row.reviewRequired,row.ownerResolution,row.warnings,
+          ]),threshold,ack});
+          return {audit:{originalSha256:'mock-source',revisedSha256:'mock-revised',
+            untouchedBytesEqual:true,changes:proposals.map(row=>({
+              recordPointer:row.pointer,originalValue:row.originalWeight,
+              newValue:row.proposedWeight,
+            }))}};
+        },
+      });
+    });
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const modal=page.locator('[data-final-rigid-batch-dialog]');
+    await modal.locator('[data-final-rigid-batch-include-review]').check();
+    const row35=modal.locator('[data-final-rigid-batch-row="35"]');
+    await row35.locator('td').nth(8).locator('details').evaluate(el=>{el.open=true;});
+    await row35.locator('[data-final-rigid-batch-owner]').selectOption('0');
+    const row35After=modal.locator('[data-final-rigid-batch-row="35"]');
+    assert.equal(await row35After.locator('td').nth(6).innerText(),'29.84',
+      'pointer 35 2.984 kg nearest proposal must not be formatted as zero');
+    await row35After.locator('td').last().locator('details').first().evaluate(el=>{el.open=true;});
+    assert.match(await row35After.locator('td').last().innerText(),/OWNER_SELECTION_UNQUALIFIED_REVIEW_ONLY/);
+    assert.match(await row35After.locator('td').last().innerText(),/REVIEW.*ELIGIBLE/);
+    const skipped=modal.locator('[data-final-rigid-batch-row="41"]');
+    await modal.locator('[data-final-rigid-batch-show-held]').check();
+    assert.equal(await skipped.locator('td').nth(6).innerText(),'—',
+      'no proposed weight is unknown, NOT a numeric zero');
+    await modal.locator('[data-final-rigid-batch-show-held]').uncheck();
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(),
+      /40 selected of 40 eligible.*15 skipped.*90 unchanged.*145 advisory source warnings/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false,
+      'Stage button should be actionable and open separate review confirmation');
+    assert.equal(await page.evaluate(()=>window.__batch145Calls.length),0);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await page.evaluate(()=>window.__batch145Calls.length),0,
+      'no stage without explicit independent review acknowledgement');
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-rigid-batch-dialog]'));
+    const final=await page.evaluate(()=>window.__batch145Calls);
+    assert.equal(final.length,1);
+    assert.equal(final[0].pointerValues.length,40);
+    assert.equal(final[0].ack,true);
+    assert.deepEqual(final[0].pointerValues.filter(row=>[15,28,35].includes(row[0])).map(
+      row=>[row[0],row[2],row[3],row[4]]),[
+        [15,29.84,true,null],[28,29.84,true,null],[35,29.84,true,null],
+      ]);
+    assert.equal(final[0].pointerValues.some(row=>row[0]>=41&&row[0]<=55),false);
   });
 
 } finally {

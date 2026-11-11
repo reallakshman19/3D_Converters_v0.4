@@ -61,6 +61,11 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     const pointer = row.rigidPointer;
     const plan = plans?.[pointer - 1];
     const context = plan?.sourceContext;
+    const singleShortSpan = row.status === 'LINKED' &&
+      Array.isArray(row.linkedElements) && row.linkedElements.length === 1 &&
+      Number.isFinite(Number(row.linkedElements[0]?.lengthMm)) &&
+      Number(row.linkedElements[0].lengthMm) > 0 &&
+      Number(row.linkedElements[0].lengthMm) <= 25;
     const ownerInput = ownerSelections.get(pointer);
     const ownerReview = resolveFinalRigidOwnerSelection(context, ownerInput);
     const manualInput = manualReferences.get(pointer);
@@ -69,6 +74,8 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     const warnings = sourceMetadataWarnings(context);
     if (!plan?.mapping && !ownerReview.selection) warnings.push('SOURCE_OWNER_UNVERIFIED');
     if (ownerReview.selection) warnings.push('EXPLICIT_OWNER_SELECTION_REVIEW_ONLY');
+    if (options.engineeringHold === true)
+      warnings.push('ENGINEERING_MASS_HOLD_REVIEW_ONLY_NOT_APPROVED');
     if (manual.candidate) {
       warnings.push('MANUAL_REFERENCE_REVIEW_ONLY');
       if (!plan?.mapping && !ownerReview.selection)
@@ -90,16 +97,24 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
       return skip('INVALID_POINTER', 'Final RIGID must reference exactly one CII ELEMENTS record.');
     if (row.status === 'SHARED_POINTER' || row.status === 'UNREFERENCED')
       return skip('SHARED_POINTER', 'Shared/unreferenced RIGID cannot be edited through one pointer.');
-    if (ownerReview.error) return skip('OWNER_SELECTION_INVALID', ownerReview.error);
+    // A 19.1 mm (≤25 mm) *single final element* can be corrected in a
+    // quarantined per-pointer review draft even when the source edge contains
+    // competing owners or an incomplete operator owner-selection rationale.
+    // Never pretend the invalid owner choice resolved source ownership.
+    if (ownerReview.error) {
+      if (!singleShortSpan) return skip('OWNER_SELECTION_INVALID', ownerReview.error);
+      warnings.push('OWNER_SELECTION_UNQUALIFIED_REVIEW_ONLY: ' + ownerReview.error);
+    }
     if (manual.error) return skip('INVALID_MANUAL_REFERENCE', manual.error);
     // Competing physical owners must be resolved from the *actual source edge*.
     const competingRefs = new Set((context?.ownerCandidates || [])
       .map((c) => c.componentRefNo).filter(Boolean));
-    if (competingRefs.size > 1 && !ownerReview.selection && !manual.candidate)
-      return skip('OWNER_SELECTION_REQUIRED',
-        'Multiple source ComponentRefNos own this edge; select one or supply a documented review-only final-pointer correction.');
-    if (competingRefs.size > 1 && !ownerReview.selection && manual.candidate)
+    if (competingRefs.size > 1 && !ownerReview.selection) {
+      if (!manual.candidate && !singleShortSpan)
+        return skip('OWNER_SELECTION_REQUIRED',
+          'Multiple source ComponentRefNos own this edge; select one or supply a documented review-only final-pointer correction.');
       warnings.push('PHYSICAL_OWNER_CONFLICT_UNRESOLVED_FINAL_POINTER_DRAFT');
+    }
     // Shared-owner mass cannot be duplicated across final pointers. Permit
     // only a pointer-local manual allocation with exact-edge owner evidence;
     // this remains review-only, never release authority.
@@ -131,7 +146,9 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
       // reference planner can be staged by explicit row selection. Mode A
       // comparison-only candidates, approximate weights and unverified owner
       // matches MUST require separate review opt-in + acknowledgement.
-      errorPct: error, reviewRequired: !(
+      errorPct: error, reviewRequired: options.engineeringHold === true ||
+        Boolean(ownerReview.error) ||
+        (competingRefs.size > 1 && !ownerReview.selection) || !(
         Boolean(plan.mapping) && context?.status === 'VERIFIED' &&
         candidate.direct === true && candidate.approximate !== true &&
         candidate.comparisonOnly !== true && !candidate.manual &&

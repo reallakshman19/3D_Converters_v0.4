@@ -322,8 +322,12 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         if (!row || row.editInput.value.trim() !== row.original.rawWeight.trim())
           throw new Error('RIGID ' + pointer + ' was edited since the batch preview.');
         const manual = item.candidate?.manual === true;
-        if (reviewOnly && !manual)
-          throw new Error('Held CII requires a documented manual final-pointer correction; catalog comparison cannot clear mass ownership.');
+        // On an engineering-HOLD CII, catalog/reference proposals are only
+        // per-pointer REVIEW-ONLY drafts. Do not block explicit operator
+        // staging merely because source ownership is unresolved; the
+        // original HOLD and release restriction survive in the output audit.
+        if (reviewOnly && !approval)
+          throw new Error('Held CII requires explicit review acknowledgement before staging. Engineering mass ownership remains unresolved.');
         if (item.status !== 'ELIGIBLE' || !item.candidate || !Number.isFinite(item.proposedWeight) ||
           item.proposedWeight <= 0 || !Number.isFinite(item.errorPct) ||
           Math.abs(item.errorPct) <= (manual ? 1e-9 : thresholdPct))

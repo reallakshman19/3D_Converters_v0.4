@@ -10,7 +10,9 @@ import { summarizeFinalRigidBatch } from './xml-cii-final-rigid-review-evidence.
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const pretty = (v) => Number.isFinite(Number(v)) ? Number(v).toFixed(3).replace(/\.?0+$/, '') : '—';
+const pretty = (v) => v === null || v === undefined || String(v).trim() === ''
+  ? '—' : Number.isFinite(Number(v))
+    ? Number(v).toFixed(3).replace(/\.?0+$/, '') : '—';
 const candidateTitle = (entry) => {
   if (!entry) return 'No qualified suggestion';
   return pretty(entry.masterWeightKg) + ' kg · ' +
@@ -75,6 +77,7 @@ export function installFinalRigidBatchControls({
       r.querySelector('[data-final-rigid-select]')?.checked).map((r) => Number(r.dataset.pointer)),
     currentEditedValues: getEditedValues(),
     weightScale: getCurrentResult()?.finalRigidReviewEvidence?.weightScale,
+    engineeringHold: getCurrentResult()?.rigidMassReviewOnly === true,
     selectedIndices: new Map([...overlay.querySelectorAll('[data-final-rigid-suggestion]')].filter((select) =>
       select.value !== '').map((select) =>
       [Number(select.getAttribute('data-final-rigid-suggestion')), Number(select.value)])),
@@ -156,8 +159,17 @@ export function installFinalRigidBatchControls({
         '<th style="padding:8px;white-space:nowrap;">' + s + '</th>').join('') +
       '</tr></thead><tbody data-final-rigid-batch-rows></tbody></table></div>' +
       '<label style="color:#fbbf24;font-size:12px;"><input type="checkbox" data-final-rigid-batch-confirm-review>' +
-      ' I reviewed the selected approximate / unverified proposals and accept them as explicit weight corrections.</label>' +
+      ' I reviewed the selected approximate / unverified proposals and accept them as explicit REVIEW-ONLY weight corrections (not source mass approval).</label>' +
       '<div data-final-rigid-batch-stage-reason role="status" style="font-size:11px;color:#fbbf24;"></div>' +
+      '<div data-final-rigid-batch-attestation-panel hidden style="padding:10px;border-radius:6px;border:1px solid #fbbf24;background:#2a210b;color:#ffe3a0;font-size:12px;">' +
+      '<strong>Explicit review confirmation before staging</strong>' +
+      '<p data-final-rigid-batch-attestation-description style="margin:6px 0;">No CII edits have been made.</p>' +
+      '<p style="margin:5px 0;">I confirm that I reviewed the selected pointer corrections. ' +
+      'Catalog matches do NOT prove physical-component masses or resolve source ownership. ' +
+      'Unresolved corrections remain REVIEW-ONLY after re-extraction.</p>' +
+      '<button type="button" data-final-rigid-batch-attestation-accept style="cursor:pointer;border:1px solid #60a5fa;border-radius:5px;background:#1d4ed8;color:white;padding:7px 10px;">I reviewed these corrections — Stage &amp; Verify</button>' +
+      ' <button type="button" data-final-rigid-batch-attestation-cancel style="cursor:pointer;border:1px solid #64748b;border-radius:5px;background:#1e293b;color:white;padding:7px 10px;">Back to corrections</button>' +
+      '</div>' +
       '<div style="display:flex;justify-content:flex-end;gap:9px;">' +
       '<button type="button" data-final-rigid-batch-continue style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Continue without weight changes</button>' +
       '<button type="button" data-final-rigid-batch-cancel style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Cancel</button>' +
@@ -177,6 +189,10 @@ export function installFinalRigidBatchControls({
     const stage = dialogLayer.querySelector('[data-final-rigid-batch-stage]');
     const continueButton = dialogLayer.querySelector('[data-final-rigid-batch-continue]');
     const stageReason = dialogLayer.querySelector('[data-final-rigid-batch-stage-reason]');
+    const attestationPanel = dialogLayer.querySelector('[data-final-rigid-batch-attestation-panel]');
+    const attestationDescription = dialogLayer.querySelector('[data-final-rigid-batch-attestation-description]');
+    const attestationAccept = dialogLayer.querySelector('[data-final-rigid-batch-attestation-accept]');
+    const attestationCancel = dialogLayer.querySelector('[data-final-rigid-batch-attestation-cancel]');
     includeReview.checked = base.includeReviewOnly;
     const candidateFor = (row) => plans[row.pointer - 1]?.nearestSuggestions || [];
     const ownerOptionsFor = (pointer) => plans[pointer - 1]?.sourceContext?.ownerCandidates || [];
@@ -192,20 +208,26 @@ export function installFinalRigidBatchControls({
         ? 'Conversion state is stale or the editor has invalid values; reopen the current review.'
         : current.eligible.length === 0
           ? 'No eligible numerical corrections. Review warnings, then continue without changes.'
-          : !chosen.length ? 'Select an eligible correction before staging.'
-            : needsApproval && !confirm.checked
-              ? 'Explicit review acknowledgement is required for selected warnings / estimates.'
-              : '';
+          : !chosen.length ? 'Select an eligible correction before staging.' : '';
+      const awaitingAttestation = needsApproval && !confirm.checked;
+      // The stage button is actionable when proposals exist. If the separate
+      // review acknowledgement is missing, its first click opens the
+      // confirmation panel; it never stages without an explicit second act.
       stage.disabled = Boolean(disableReason);
       const skippedCount = current.skipped?.length || 0;
       stage.textContent = chosen.length
         ? 'Stage & Verify ' + chosen.length + ' Selected Corrections'
         : 'Stage & Verify Selected Corrections';
-      stage.title = disableReason || ('Only ' + chosen.length +
-        ' selected pointers will change. ' + skippedCount + ' skipped pointers do not block.');
-      stageReason.textContent = disableReason || ('READY: ' + chosen.length +
-        ' selected correction(s). ' + skippedCount + ' skipped pointers stay unchanged. ' +
-        'Next: Apply Changes & Re-extract REVIEW-ONLY CII in the parent editor.');
+      stage.title = disableReason || (awaitingAttestation
+        ? 'Click to review and explicitly acknowledge the ' + chosen.length + ' selected draft corrections.'
+        : 'Only ' + chosen.length + ' selected pointers will change. ' +
+          skippedCount + ' skipped pointers do not block.');
+      stageReason.textContent = disableReason || (awaitingAttestation
+        ? 'NEXT: Click Stage & Verify to review and explicitly confirm ' + chosen.length +
+          ' selected draft corrections; skipped pointers do not block.'
+        : 'READY: ' + chosen.length + ' selected correction(s). ' +
+          skippedCount + ' skipped pointers stay unchanged. ' +
+          'Next: Apply Changes & Re-extract REVIEW-ONLY CII in the parent editor.');
       continueButton.textContent = chosen.length
         ? 'Discard ' + chosen.length + ' selections & continue unchanged'
         : 'Verify & continue unchanged';
@@ -233,6 +255,7 @@ export function installFinalRigidBatchControls({
 
     function render() {
       const current = recalc();
+      if (attestationPanel) attestationPanel.hidden = true;
       body.innerHTML = current.proposals
         .filter((row) => row.status !== 'OUT_OF_SCOPE' &&
           (showHeld.checked || row.status === 'ELIGIBLE' ||
@@ -411,7 +434,10 @@ export function installFinalRigidBatchControls({
         stageReason.textContent = 'REFUSED: ' + (error?.message || error);
       }
     });
-    confirm.addEventListener('change', updateStage);
+    confirm.addEventListener('change', () => {
+      attestationPanel.hidden = true;
+      updateStage();
+    });
     body.addEventListener('change', (event) => {
       const target = event.target;
       if (target.matches('[data-final-rigid-batch-approve]')) {
@@ -450,12 +476,23 @@ export function installFinalRigidBatchControls({
         render();
       }
     });
-    stage.addEventListener('click', async () => {
+    const stageSelected = async () => {
       updateStage();
       if (stage.disabled || !isReady()) return;
       const current = recalc();
       const chosen = current.eligible.filter((r) => selections.has(r.pointer));
-      if (!chosen.length || chosen.some((r) => r.reviewRequired) && !confirm.checked) return;
+      if (!chosen.length) return;
+      if (chosen.some((r) => r.reviewRequired) && !confirm.checked) {
+        const warningCount = chosen.filter(r => r.warnings?.length).length;
+        attestationDescription.textContent = chosen.length + ' selected final RIGIDs (' +
+          warningCount + ' with source warnings) will be staged as review drafts. ' +
+          'All skipped and no-change pointers stay unchanged. No CII edits yet.';
+        attestationPanel.hidden = false;
+        attestationPanel.scrollIntoView?.({ block:'nearest' });
+        attestationAccept.focus();
+        return;
+      }
+      attestationPanel.hidden = true;
       stage.disabled = true;
       summary.textContent = 'Verifying exact RIGID pointer edits, full CII reparse and untouched-byte parity…';
       try {
@@ -470,6 +507,20 @@ export function installFinalRigidBatchControls({
         summary.textContent = 'REFUSED: ' + (error?.message || error) + '. No batch changes were staged.';
         updateStage();
       }
+    };
+    stage.addEventListener('click', stageSelected);
+    attestationCancel.addEventListener('click', () => {
+      attestationPanel.hidden = true;
+      stage.focus();
+    });
+    attestationAccept.addEventListener('click', () => {
+      if (attestationPanel.hidden) return;
+      // This deliberate click records review acknowledgement, not physical
+      // mass approval. Apply Nearest/Approve All never sets this automatically.
+      confirm.checked = true;
+      attestationPanel.hidden = true;
+      updateStage();
+      void stageSelected();
     });
     render();
     dialogLayer.querySelector('[data-final-rigid-batch-cancel]').focus();
