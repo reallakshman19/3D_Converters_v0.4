@@ -279,7 +279,9 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
   // The batch toolbar is a PREVIEW and explicitly approved staging aid, not a
   // second writer. The same property transaction verifies the original source
   // digest, exact RIGID pointers, reparse and all bytes outside edited fields.
-  if(!reviewOnly)installFinalRigidBatchControls({
+  // HOLD results may stage documented pointer-local MANUAL changes in a
+  // quarantined review copy; catalog suggestions alone remain disallowed.
+  installFinalRigidBatchControls({
     overlay, inventory, plans,
     getEditedValues: () => new Map([...byPointer].map(([pointer, row]) =>
       [pointer, row.editInput.value])),
@@ -319,14 +321,19 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
         const row = byPointer.get(pointer);
         if (!row || row.editInput.value.trim() !== row.original.rawWeight.trim())
           throw new Error('RIGID ' + pointer + ' was edited since the batch preview.');
+        const manual = item.candidate?.manual === true;
+        if (reviewOnly && !manual)
+          throw new Error('Held CII requires a documented manual final-pointer correction; catalog comparison cannot clear mass ownership.');
         if (item.status !== 'ELIGIBLE' || !item.candidate || !Number.isFinite(item.proposedWeight) ||
-          item.proposedWeight <= 0 || Math.abs(item.errorPct) <= thresholdPct)
-          throw new Error('RIGID ' + pointer + ' is not an eligible >±' + thresholdPct + '% correction.');
+          item.proposedWeight <= 0 || !Number.isFinite(item.errorPct) ||
+          Math.abs(item.errorPct) <= (manual ? 1e-9 : thresholdPct))
+          throw new Error('RIGID ' + pointer + ' is not an eligible verified pointer-local correction.');
         if (item.reviewRequired && !approval)
           throw new Error('RIGID ' + pointer + ' requires explicit review-only approval.');
         const comparison = item.candidate;
         const reference = {
-          kind: 'batch-nearest-review', value: String(item.proposedWeight),
+          kind: manual ? 'batch-manual-pointer-review' : 'batch-nearest-review',
+          value: String(item.proposedWeight),
           basis: comparison.basis || '', sourceContext: plans[pointer - 1]?.sourceContext || null,
           batch: {
             thresholdPct, originalErrorPct: item.errorPct,
@@ -340,7 +347,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
             metadataWarningCodes: [...(item.warnings || [])],
             ownerResolution: item.ownerResolution || null,
             manualReferenceProvenance: comparison.manualEvidence || null,
-            massAuthority: item.reviewRequired ? 'UNVERIFIED_REVIEW_ONLY' : 'UNCHANGED',
+            massAuthority: item.reviewRequired || reviewOnly ? 'UNVERIFIED_REVIEW_ONLY' : 'UNCHANGED',
             individuallyApproved: true, reviewOnlyAccepted: Boolean(item.reviewRequired && approval),
             generatedFromRun: String(result.finalRigidReviewEvidence?.engineInputDigest || ''),
           },
@@ -385,7 +392,7 @@ export function installFinalCiiPropertyEditor({ overlay, result, inventory, plan
       dirty();
       previewVersion = version;
       buttons.apply.disabled = false;
-      if (stagedMetadataWarnings.length)
+      if (stagedMetadataWarnings.length || reviewOnly)
         buttons.apply.textContent = 'Apply & Re-extract REVIEW-ONLY CII';
       repaint();
       report.textContent = 'VERIFIED BATCH PREVIEW — select Apply & Re-extract to publish a separate revised file.\n' +

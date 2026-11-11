@@ -64,11 +64,16 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     const ownerInput = ownerSelections.get(pointer);
     const ownerReview = resolveFinalRigidOwnerSelection(context, ownerInput);
     const manualInput = manualReferences.get(pointer);
-    const manual = qualifyFinalRigidManualReference(manualInput, ownerReview.selection);
+    const manual = qualifyFinalRigidManualReference(manualInput, ownerReview.selection,
+      { weightScale: options.weightScale });
     const warnings = sourceMetadataWarnings(context);
     if (!plan?.mapping && !ownerReview.selection) warnings.push('SOURCE_OWNER_UNVERIFIED');
     if (ownerReview.selection) warnings.push('EXPLICIT_OWNER_SELECTION_REVIEW_ONLY');
-    if (manual.candidate) warnings.push('MANUAL_REFERENCE_REVIEW_ONLY');
+    if (manual.candidate) {
+      warnings.push('MANUAL_REFERENCE_REVIEW_ONLY');
+      if (!plan?.mapping && !ownerReview.selection)
+        warnings.push('FINAL_POINTER_ONLY_SOURCE_OWNER_UNVERIFIED');
+    }
     const warningText = () => warnings.length ? ' Source warnings: ' + [...new Set(warnings)].join('; ') + '.' : '';
     const base = {
       pointer, originalWeight: Number(row.weight), candidateIndex: -1,
@@ -90,9 +95,11 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     // Competing physical owners must be resolved from the *actual source edge*.
     const competingRefs = new Set((context?.ownerCandidates || [])
       .map((c) => c.componentRefNo).filter(Boolean));
-    if (competingRefs.size > 1 && !ownerReview.selection)
+    if (competingRefs.size > 1 && !ownerReview.selection && !manual.candidate)
       return skip('OWNER_SELECTION_REQUIRED',
-        'Multiple source ComponentRefNos own this edge; select one and document why.');
+        'Multiple source ComponentRefNos own this edge; select one or supply a documented review-only final-pointer correction.');
+    if (competingRefs.size > 1 && !ownerReview.selection && manual.candidate)
+      warnings.push('PHYSICAL_OWNER_CONFLICT_UNRESOLVED_FINAL_POINTER_DRAFT');
     // Shared-owner mass cannot be duplicated across final pointers. Permit
     // only a pointer-local manual allocation with exact-edge owner evidence;
     // this remains review-only, never release authority.
@@ -131,7 +138,10 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
         !ownerReview.selection && warnings.length === 0
       ),
     };
-    if (Math.abs(error) <= threshold)
+    // A deliberately entered, evidenced final-pointer correction is NOT a
+    // nearest-catalog bulk suggestion and must not be suppressed by the
+    // automatic deviation threshold. An exact no-op is still unchanged.
+    if (Math.abs(error) <= threshold && (!manual.candidate || Math.abs(error) <= 1e-9))
       return { ...full, status: 'BELOW_THRESHOLD',
         disposition: Math.abs(error) <= 1e-9 ? 'NO_CHANGE_REQUIRED' : 'BELOW_THRESHOLD',
         reason: Math.abs(error) <= 1e-9 ? 'No numerical correction required.' + warningText()

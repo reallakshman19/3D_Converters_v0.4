@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { createHash } from 'node:crypto';
 import { parseFinalCiiRigidInventory } from '../tabs/xml-cii-2019-standalone/xml-cii-final-rigid-inventory.js';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
@@ -37,6 +38,33 @@ function ciiFileMany(count = 144) {
     ...Array.from({ length: count }, (_, i) => row([i === 19 ? 150 : 590, '0.000000'])));
   return parts.join('\r\n') + '\r\n';
 }
+
+// Pin the Owner-reported 19.1mm final CII geometry as a structural fixture.
+// This is NOT represented as an authentic emission of the uploaded GLRD XML.
+function ciiOwnerReported191Fixture() {
+  const count=144, ids=Array.from({length:count},(_,i)=>i+1);
+  for(const [pointer,element] of [[15,46],[28,85],[35,101]]){
+    [ids[pointer-1],ids[element-1]]=[ids[element-1],ids[pointer-1]];
+  }
+  const pairs=new Map([[46,[459,10000]],[85,[829,10010]],[101,[939,10020]]]);
+  const lines=['#$ VERSION','2019','#$ CONTROL',row([count,0,0,0,0,0]),
+    row([0,count,0,0,0,0]),row([0,0,0,0,0,0]),row([0]),'#$ ELEMENTS'];
+  for(let i=0;i<count;i++){
+    const [from,to]=pairs.get(i+1) || [10000+i*10,10001+i*10];
+    const short=pairs.has(i+1);
+    lines.push(row([from,to,short?19.1:109,0,0,60.3]),
+      ...Array.from({length:9},()=>row([0,0,0,0,0,0])),
+      branchRow('/GLRD-1000-6"-P4110001-93833-01/B6'),
+      row([0,0,0,0,0,0]),row([0,ids[i],0,0,0,0]),
+      row([0,0,0,0,0,0]),row([0,0,0]));
+  }
+  lines.push('#$ RIGID',
+    ...Array.from({length:count},(_,i)=>row([
+      [15,28,35].includes(i+1)?'17.4800':'150.0000','0.000000',
+    ])));
+  return lines.join('\r\n')+'\r\n';
+}
+
 const original = ciiFile();
 const out = await mkdtemp(join(tmpdir(), 'cii-final-ui-'));
 const server = createServer(async (req, res) => {
@@ -791,8 +819,12 @@ try {
     await short.locator('[data-final-rigid-repair-evidence] summary').click();
     assert.match(await short.locator('[data-final-rigid-repair-evidence] pre').innerText(),
       /SHORT SPAN|19\.100|short final/i);
-    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
-      'catalog batch mass promotion prohibited on engineering HOLD');
+    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),1,
+      'HOLD offers only documented manual final-pointer drafts, not catalog mass promotion');
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const heldModal=page.locator('[data-final-rigid-batch-dialog]');
+    assert.equal(await heldModal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    await heldModal.locator('[data-final-rigid-batch-cancel]').click();
     const edited=short.locator('[data-final-rigid-edited]');
     await edited.fill('17.48');
     assert.match(await short.locator('[data-final-rigid-edit-feedback]').innerText(),
@@ -938,6 +970,109 @@ try {
       lineKey:'P4110001',previewLineKey:'P4110001',previewClass:'93833',
       pipingClassToken:'5',lineToken:'4',branchRegex:'',cached:null,
     });
+  });
+
+
+  await test('GLRD pinned source plus Owner-reported 3×19.1mm final-pointer review: 2.984 kg → 29.84 and review-only re-extract', {
+    skip: !process.env.GLRD_E2E_XML_FILE || !process.env.GLRD_E2E_STAGE_FILE,
+  }, async () => {
+    const xml=await readFile(process.env.GLRD_E2E_XML_FILE,'utf8');
+    const stagedJson=await readFile(process.env.GLRD_E2E_STAGE_FILE,'utf8');
+    assert.equal(createHash('sha256').update(xml).digest('hex'),
+      '6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151');
+    assert.equal(createHash('sha256').update(stagedJson).digest('hex'),
+      '1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746');
+    const sourceCii=ciiOwnerReported191Fixture();
+    const originalParsed=parseFinalCiiRigidInventory(sourceCii);
+    for(const [ptr,element,from,to] of [[15,46,459,10000],[28,85,829,10010],[35,101,939,10020]]){
+      const entry=originalParsed.rows[ptr-1];
+      assert.equal(entry.weight,17.48);
+      assert.equal(entry.linkedElements[0].index,element);
+      assert.deepEqual([Number(entry.linkedElements[0].fromNode),
+        Number(entry.linkedElements[0].toNode)],[from,to]);
+      assert.equal(entry.linkedElements[0].lengthMm,19.1);
+    }
+    await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async ({ciiText,xml,stagedJson})=>{
+      const {openFinalRigidWeightReview}=await import(
+        '/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js');
+      window.currentResult={
+        ok:false,error:'RIGID_MASS_CONSERVATION_HOLD',
+        diagnostics:{rigidMassAudit:{status:'HOLD',flags:[
+          {reason:'PHYSICAL_OWNER_UNRESOLVED',pointer:15},
+          {reason:'PHYSICAL_OWNER_UNRESOLVED',pointer:28},
+          {reason:'PHYSICAL_OWNER_UNRESOLVED',pointer:35},
+        ]}},
+        rigidMassRepairCandidate:{status:'QUARANTINED_REVIEW_ONLY',
+          engineeringReleaseAuthorized:false,ciiText,ciiName:'GLRD-reported-191.cii'},
+        finalRigidReviewEvidence:{sourceKind:'xml',engineInputText:xml,
+          engineInputDigest:'sha256:6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151',
+          stagedJsonText:stagedJson,weightScale:10,
+          supportConfigJson:JSON.stringify({weight:{masterRows:[]}})},
+      };
+      openFinalRigidWeightReview(window.currentResult,{
+        getCurrentResult:()=>window.currentResult,
+      });
+    },{ciiText:sourceCii,xml,stagedJson});
+    await page.waitForFunction(()=>
+      document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('Ready:'));
+    assert.equal(await page.locator('[data-final-rigid-batch-preview]').count(),1,
+      'HOLD permits documented pointer-local batch drafts but not approved output');
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const modal=page.locator('[data-final-rigid-batch-dialog]');
+    const pointers=[15,28,35];
+    for(const pointer of pointers){
+      const target=modal.locator('[data-final-rigid-batch-row="'+pointer+'"]');
+      assert.equal(await target.count(),1,'short unresolved row must be visible in batch');
+      assert.equal(await target.locator('[data-final-rigid-batch-element-length="'+pointer+'"]').innerText(),'19.1');
+      await target.evaluate((tr)=>{
+        tr.querySelector('[data-final-rigid-batch-manual-weight]').value='2.984';
+        tr.querySelector('[data-final-rigid-batch-manual-unit]').value='SOURCE_KG';
+        tr.querySelector('[data-final-rigid-batch-manual-document]').value='OWNER-GLRD-11NOV';
+        tr.querySelector('[data-final-rigid-batch-manual-basis]').value=
+          'Owner-directed 19.1 mm pointer-only review draft; physical source owner unresolved';
+        tr.querySelector('[data-final-rigid-batch-manual-unit]').dispatchEvent(
+          new Event('change',{bubbles:true}));
+      });
+      const qualified=modal.locator('[data-final-rigid-batch-row="'+pointer+'"]');
+      assert.match(await qualified.innerText(),/29\.84/);
+      await qualified.locator('[data-final-rigid-batch-approve="'+pointer+'"]').check();
+    }
+    assert.equal(await modal.locator('[data-final-rigid-batch-include-review]').isChecked(),true);
+    await modal.locator('[data-final-rigid-batch-confirm-review]').check();
+    assert.match(await modal.locator('[data-final-rigid-batch-stage]').innerText(),/3 Selected Corrections/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-rigid-batch-dialog]'));
+    for(const pointer of pointers)
+      assert.equal(await page.locator('[data-final-rigid-edited="'+pointer+'"]').inputValue(),'29.84');
+    assert.equal(await page.locator('[data-final-rigid-apply]').isDisabled(),false);
+    await page.locator('[data-final-rigid-hold-ack]').check();
+    await page.locator('[data-final-rigid-apply]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-final-rigid-preview-report]')
+      ?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
+    const [ciiDownload]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-download]').click()]);
+    assert.match(ciiDownload.suggestedFilename(),/REVIEW_ONLY\.cii$/);
+    const revised=await readFile(await ciiDownload.path(),'utf8');
+    const reParsed=parseFinalCiiRigidInventory(revised);
+    assert.deepEqual(reParsed.rows.map((r,i)=>r.weight!==originalParsed.rows[i].weight?i+1:null)
+      .filter(Boolean),pointers);
+    for(const pointer of pointers)assert.equal(reParsed.rows[pointer-1].weight,29.84);
+    const [auditDownload]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-audit]').click()]);
+    const audit=JSON.parse(await readFile(await auditDownload.path(),'utf8'));
+    assert.equal(audit.untouchedBytesEqual,true);
+    assert.deepEqual(audit.changes.map(r=>r.recordPointer),pointers);
+    for(const change of audit.changes){
+      assert.equal(change.newValue,29.84);
+      assert.equal(change.reference.batch.manualReferenceProvenance.sourceKg,2.984);
+      assert.equal(change.reference.batch.manualReferenceProvenance.weightScale,10);
+      assert.equal(change.reference.batch.massAuthority,'UNVERIFIED_REVIEW_ONLY');
+    }
+    assert.equal(audit.engineeringReleaseStatus,'HELD_NOT_APPROVED');
+    assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
+    assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),sourceCii);
   });
 
 } finally {

@@ -196,3 +196,44 @@ test('144-pointer review: 43 eligible corrections proceed despite 14 skips, 87 n
     summary.unresolved,summary.warningRows],[43,87,14,14,144]);
   assert.equal(summary.engineeringMassApproval,'NOT_ESTABLISHED_BY_BATCH_REVIEW');
 });
+
+
+test('GLRD reported 19.1 mm pointers 15, 28, 35 accept source 2.984 kg as 29.84 CII units without physical owner authority',()=>{
+  const pairs=[[15,46,459,10000],[28,85,829,10010],[35,101,939,10020]];
+  const inventory={rows:pairs.map(([pointer,index,from,to])=>({
+    rigidPointer:pointer,weight:17.48,rawWeight:'17.4800',status:'LINKED',
+    linkedElements:[{index,fromNode:String(from),toNode:String(to),lengthMm:19.1}],
+  }))};
+  const plans=Array.from({length:35},()=>null);
+  for(const [pointer] of pairs)plans[pointer-1]={
+    sourceContext:{status:'NOT_RESOLVED',conflicts:['SOURCE_OWNER_UNVERIFIED'],
+      ownerCandidates:[],bore:{value:50},rating:{value:900},dtxr:{suppressed:false}},
+    mapping:null,nearestSuggestions:[],
+  };
+  const options={
+    scope:'selected',selectedPointers:pairs.map(p=>p[0]),thresholdPct:40,
+    includeReviewOnly:true,weightScale:10,
+    manualReferences:new Map(pairs.map(([pointer])=>[pointer,{
+      referenceWeight:'2.984',unit:'SOURCE_KG',documentRef:'OWNER-GLRD-11NOV',
+      basis:'Owner-directed pointer-specific 19.1 mm review draft; physical owner unresolved',
+    }])),
+  };
+  const plan=planFinalRigidBatchCorrections(inventory,plans,options);
+  assert.deepEqual(plan.eligible.map(p=>p.pointer),[15,28,35]);
+  for(const row of plan.eligible){
+    assert.equal(row.proposedWeight,29.84);
+    assert.equal(row.reviewRequired,true);
+    assert.equal(row.candidate.manualEvidence.sourceKg,2.984);
+    assert.equal(row.candidate.manualEvidence.weightScale,10);
+    assert.equal(row.candidate.manualEvidence.engineeringMassApproval,'NOT_ESTABLISHED');
+    assert.ok(row.warnings.includes('FINAL_POINTER_ONLY_SOURCE_OWNER_UNVERIFIED'));
+  }
+  const noScale=planFinalRigidBatchCorrections(inventory,plans,{...options,weightScale:null});
+  assert.deepEqual(noScale.proposals.map(p=>p.skipCode),
+    ['INVALID_MANUAL_REFERENCE','INVALID_MANUAL_REFERENCE','INVALID_MANUAL_REFERENCE']);
+  const noBasis={...options,manualReferences:new Map([[15,{
+    referenceWeight:'2.984',unit:'SOURCE_KG',documentRef:'X',basis:'unverified',
+  }]])};
+  assert.equal(planFinalRigidBatchCorrections(inventory,plans,noBasis)
+    .proposals[0].skipCode,'INVALID_MANUAL_REFERENCE');
+});

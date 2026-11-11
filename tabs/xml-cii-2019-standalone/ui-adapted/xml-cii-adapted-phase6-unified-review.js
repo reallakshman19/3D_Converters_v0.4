@@ -350,6 +350,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
     xmlCiiEnrichedConfigFromState(row.state)):[config];
   const overrideCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeight),0);
   const receiptCount=sourceConfigs.reduce((sum,c)=>sum+count(c.overrides?.rigidWeightReviewReceipts),0);
+  const savedNotice = snapshot.phase6Undo ? '<div data-phase6-saved-preview-status role="status" style="padding:9px;margin:8px 0;border:1px solid #4a80ad;border-radius:6px;background:#102840;color:#d0eaff;font-size:12px;">SAVED SOURCE KG — NO CII RE-EXTRACTION YET. The ledger below shows source-component weights, not final post-split RIGID ownership. Run conversion and review final emitted pointers; unresolved short spans require documented REVIEW-ONLY edits.</div>' : '';
   card.innerHTML=`
     <div class="model-converters-workflow-detail-title">
       Rigid Weights Need Review — Consolidated
@@ -381,6 +382,7 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
         ${overrideCount} saved positive masses · ${receiptCount} review receipts
       </span>
     </div>
+    ${savedNotice}
     <div data-phase6-status role="status" aria-live="polite"
       style="font-size:12px;margin:8px 0;color:#9cc5ff;">Recheck to inspect pending source masses.</div>
     <div data-phase6-sources></div>
@@ -447,6 +449,10 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
     const entries=await phase6CollectReviewEntries(stateRef,modeA);
     if(output){
       output.innerHTML=summaryHtml(entries)+phase6LedgerHtml(entries);
+      if(snapshot.phase6Undo){
+        const ledger=output.querySelector('[data-phase6-ledger]');
+        if(ledger)ledger.open=true;
+      }
       const searchInput=output.querySelector('[data-phase6-ledger-search]');
       const statusFilter=output.querySelector('[data-phase6-ledger-filter]');
       const applyFilter=()=>{
@@ -470,6 +476,10 @@ export function renderUnifiedPhase6WeightReview(card, stateRef, render, {modeA=f
       ' previously skipped 0kg physical components (re-editable).');
     return entries;
   };
+  if(snapshot.phase6Undo){
+    setStatus('Loading saved source-component weights (kg), receipts and unresolved rows…');
+    void load().catch(error=>setStatus('Saved weight preview failed: '+error.message,true));
+  }
   refresh?.addEventListener('click',async()=>{
     refresh.disabled=true;setStatus('Rechecking source identity, Preview Rating and master suggestions…');
     try{await load();}catch(error){setStatus('Weight recheck failed: '+error.message,true);}

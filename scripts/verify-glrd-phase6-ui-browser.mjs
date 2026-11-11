@@ -188,6 +188,14 @@ try{
     positives:109,receipts:109,skips:5,zeroMassInPositives:0,
     outputResult:null,readiness:null,
   });
+  // Save Reviewed Weights (No Run) must immediately display the newly saved
+  // source kg ledger, rather than leaving the Phase 6 page blank until Recheck.
+  await page.waitForFunction(() =>
+    document.querySelectorAll('[data-phase6-ledger-row]').length === 114);
+  assert.match(await page.locator('[data-phase6-saved-preview-status]').innerText(),
+    /SAVED SOURCE KG.*NO CII RE-EXTRACTION YET/);
+  assert.equal(await page.locator('[data-phase6-ledger]').evaluate(el=>el.open),true);
+  assert.equal(await page.locator('[data-phase6-ledger-row]').count(),114);
   await page.locator('[data-phase6-refresh-review]').click();
   assert.match(await page.locator('[data-phase6-status]').innerText(),/0 unresolved/i,
     'Run/Phase 6 must honor prior five intentional skipped zero-mass records');
