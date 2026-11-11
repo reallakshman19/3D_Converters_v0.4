@@ -26,26 +26,43 @@ export function resolveFinalRigidOwnerSelection(context, input) {
     rationale, authority: 'OPERATOR_SELECTED_SOURCE_CANDIDATE_REVIEW_ONLY',
   } };
 }
-export function qualifyFinalRigidManualReference(input, ownerResolution = null) {
+/**
+ * An operator-directed final RIGID edit is allowed as a QUARANTINED draft even
+ * when physical ownership cannot be reconstructed. This is not an approval of
+ * source component mass. The exact run's weightScale is required to use kg.
+ */
+export function qualifyFinalRigidManualReference(input, ownerResolution = null, options = {}) {
   if (!input) return { candidate: null, error: '' };
-  const referenceWeight = Number(input.referenceWeight);
   const documentRef = clean(input.documentRef);
   const basis = clean(input.basis);
+  const unit = clean(input.unit);
+  const scale = Number(options.weightScale);
   if (!finitePositive(input.referenceWeight))
-    return { candidate: null, error: 'Manual reference must be positive and finite in final CII output units.' };
+    return { candidate: null, error: 'Manual reference must be positive and finite.' };
   if (documentRef.length < 4 || basis.length < 12)
-    return { candidate: null, error: 'Manual reference needs a source-document ID (4+ chars) and allocation basis (12+ chars).' };
-  if (clean(input.unit) !== 'CII_OUTPUT_WEIGHT')
-    return { candidate: null, error: 'Manual reference unit must be CII_OUTPUT_WEIGHT for this emitted CII.' };
+    return { candidate: null, error: 'Manual reference needs a source-document ID (4+ chars) and pointer-specific allocation basis (12+ chars).' };
+  if (!['CII_OUTPUT_WEIGHT', 'SOURCE_KG'].includes(unit))
+    return { candidate: null, error: 'Manual reference unit must be SOURCE_KG or CII_OUTPUT_WEIGHT.' };
+  if (unit === 'SOURCE_KG' && (!Number.isFinite(scale) || ![1, 10].includes(scale)))
+    return { candidate: null, error: 'Cannot convert kg to final CII units without a verified run-specific weight scale (×1 or ×10).' };
+  const referenceWeight = unit === 'SOURCE_KG'
+    ? Math.round(Number(input.referenceWeight) * scale * 1e8) / 1e8
+    : Number(input.referenceWeight);
+  if (!Number.isFinite(referenceWeight) || referenceWeight <= 0)
+    return { candidate: null, error: 'Converted CII weight must be positive and finite.' };
+  const sourceKg = unit === 'SOURCE_KG' ? Number(input.referenceWeight) : null;
   return { error: '', candidate: {
-    referenceWeight, masterWeightKg: null, matchPct: null, rank: -1,
-    title: 'Manual source reference', method: 'owner-reviewed-manual',
+    referenceWeight, masterWeightKg: sourceKg, matchPct: null, rank: -1,
+    title: 'Manual final RIGID correction', method: 'owner-directed-pointer-draft',
     source: documentRef, preferred: false, approximate: true, comparisonOnly: true,
     direct: false, manual: true,
-    manualEvidence: { documentRef, basis, unit: 'CII_OUTPUT_WEIGHT',
-      ownerResolution },
-    basis: 'Operator-provided CII output-weight reference from ' + documentRef +
-      '; ' + basis + '; REVIEW-ONLY, not verified engineering mass',
+    manualEvidence: { documentRef, basis, unit, sourceKg,
+      weightScale: unit === 'SOURCE_KG' ? scale : null,
+      convertedCiiWeight: referenceWeight, ownerResolution,
+      engineeringMassApproval: 'NOT_ESTABLISHED',
+    },
+    basis: 'Operator-directed final RIGID correction from ' + documentRef +
+      '; ' + basis + '; REVIEW-ONLY, original source mass and ownership unverified',
   } };
 }
 const isUnresolvedCode = (code) =>
