@@ -74,6 +74,8 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
     const warnings = sourceMetadataWarnings(context);
     if (!plan?.mapping && !ownerReview.selection) warnings.push('SOURCE_OWNER_UNVERIFIED');
     if (ownerReview.selection) warnings.push('EXPLICIT_OWNER_SELECTION_REVIEW_ONLY');
+    if (options.engineeringHold === true)
+      warnings.push('ENGINEERING_MASS_HOLD_REVIEW_ONLY_NOT_APPROVED');
     if (manual.candidate) {
       warnings.push('MANUAL_REFERENCE_REVIEW_ONLY');
       if (!plan?.mapping && !ownerReview.selection)
@@ -144,7 +146,8 @@ export function planFinalRigidBatchCorrections(inventory, plans, options = {}) {
       // reference planner can be staged by explicit row selection. Mode A
       // comparison-only candidates, approximate weights and unverified owner
       // matches MUST require separate review opt-in + acknowledgement.
-      errorPct: error, reviewRequired: Boolean(ownerReview.error) ||
+      errorPct: error, reviewRequired: options.engineeringHold === true ||
+        Boolean(ownerReview.error) ||
         (competingRefs.size > 1 && !ownerReview.selection) || !(
         Boolean(plan.mapping) && context?.status === 'VERIFIED' &&
         candidate.direct === true && candidate.approximate !== true &&
