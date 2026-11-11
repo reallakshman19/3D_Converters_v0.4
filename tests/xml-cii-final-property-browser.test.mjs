@@ -1082,6 +1082,121 @@ try {
     assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),sourceCii);
   });
 
+
+  await test('Chromium 145-pointer screenshot case: 40 selected, 15 skipped, 90 below; 19.1mm invalid owner warns and Stage two-step works', async () => {
+    await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
+    await page.evaluate(async () => {
+      const {installFinalRigidBatchControls}=await import(
+        '/tabs/xml-cii-2019-standalone/xml-cii-final-rigid-batch-ui.js');
+      const shortPointers=new Map([
+        [15,[46,459,10000]],[28,[85,829,10010]],[35,[101,939,10020]],
+      ]);
+      const inventory={rows:[]},plans=[];
+      const overlay=document.createElement('div');
+      overlay.setAttribute('data-browser-145-batch-fixture','');
+      overlay.innerHTML='<div><table><tbody>'+
+        Array.from({length:145},(_,j)=>'<tr data-final-rigid-row data-pointer="'+(j+1)+'"><td>'+
+          (j+1)+'</td></tr>').join('')+'</tbody></table></div>';
+      document.body.appendChild(overlay);
+      for(let pointer=1;pointer<=145;pointer++){
+        const special=shortPointers.get(pointer);
+        const skip=pointer>=41&&pointer<=55;
+        const below=pointer>=56;
+        const weight=special?17.48:below?150:100;
+        const [index,from,to]=special || [pointer,1000+pointer,1001+pointer];
+        inventory.rows.push({
+          rigidPointer:pointer,weight,
+          rawWeight:special?'17.4800':String(weight),
+          status:'LINKED',
+          linkedElements:skip?[]:[{
+            index,fromNode:String(from),toNode:String(to),
+            lengthMm:special?19.1:109,
+          }],
+        });
+        const owners=special?[
+          {branchName:'/GLRD',componentRefNo:'/PCOM-'+pointer,componentType:'PCOM',
+            sourceNode:String(from),side:'FROM',sourceLengthMm:12.7},
+          {branchName:'/GLRD',componentRefNo:'/FLANGE-'+pointer,componentType:'FLAN',
+            sourceNode:String(to),side:'TO',sourceLengthMm:109},
+        ]:[];
+        plans.push({
+          rigidPointer:pointer,
+          mapping:special?null:{branchName:'/GLRD',componentRefNo:'/C'+pointer},
+          sourceContext:{
+            status:'CONFLICT_REVIEW',conflicts:['SOURCE_OWNER_UNVERIFIED'],
+            ownerCandidates:owners,bore:{conflict:false},rating:{conflict:false},
+            dtxr:{suppressed:false},
+          },
+          nearestSuggestions:[{
+            referenceWeight:special?29.84:below?150:300,
+            masterWeightKg:special?2.984:below?15:30,
+            matchPct:special?50:90,
+            title:special?'SPECTACLE BLIND':'Reference flange',
+            method:'length-extrapolated',approximate:true,comparisonOnly:true,direct:false,
+          }],
+        });
+      }
+      const currentResult={ok:true,ciiName:'GLRD-reported-145.cii',
+        finalRigidReviewEvidence:{weightScale:10}};
+      window.__batch145Calls=[];
+      installFinalRigidBatchControls({
+        overlay,inventory,plans,getEditedValues:()=>new Map(
+          inventory.rows.map(row=>[row.rigidPointer,row.rawWeight])),
+        getCurrentResult:()=>currentResult,isReady:()=>true,
+        verifyUnchanged:async()=>{throw Error('No-change path not requested');},
+        stageAndVerify:async(proposals,threshold,ack)=>{
+          window.__batch145Calls.push({pointerValues:proposals.map(row=>[
+            row.pointer,row.originalWeight,row.proposedWeight,
+            row.reviewRequired,row.ownerResolution,row.warnings,
+          ]),threshold,ack});
+          return {audit:{originalSha256:'mock-source',revisedSha256:'mock-revised',
+            untouchedBytesEqual:true,changes:proposals.map(row=>({
+              recordPointer:row.pointer,originalValue:row.originalWeight,
+              newValue:row.proposedWeight,
+            }))}};
+        },
+      });
+    });
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const modal=page.locator('[data-final-rigid-batch-dialog]');
+    await modal.locator('[data-final-rigid-batch-include-review]').check();
+    const row35=modal.locator('[data-final-rigid-batch-row="35"]');
+    await row35.locator('[data-final-rigid-batch-owner]').selectOption('0');
+    const row35After=modal.locator('[data-final-rigid-batch-row="35"]');
+    assert.equal(await row35After.locator('td').nth(6).innerText(),'29.84',
+      'pointer 35 2.984 kg nearest proposal must not be formatted as zero');
+    assert.match(await row35After.locator('td').last().innerText(),/OWNER_SELECTION_UNQUALIFIED_REVIEW_ONLY/);
+    assert.match(await row35After.locator('td').last().innerText(),/REVIEW.*ELIGIBLE/);
+    const skipped=modal.locator('[data-final-rigid-batch-row="41"]');
+    await modal.locator('[data-final-rigid-batch-show-held]').check();
+    assert.equal(await skipped.locator('td').nth(6).innerText(),'—',
+      'no proposed weight is unknown, NOT a numeric zero');
+    await modal.locator('[data-final-rigid-batch-show-held]').uncheck();
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    assert.match(await modal.locator('[data-final-rigid-batch-summary]').innerText(),
+      /40 selected of 40 eligible.*15 skipped.*90 unchanged.*145 advisory source warnings/);
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false,
+      'Stage button should be actionable and open separate review confirmation');
+    assert.equal(await page.evaluate(()=>window.__batch145Calls.length),0);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await page.evaluate(()=>window.__batch145Calls.length),0,
+      'no stage without explicit independent review acknowledgement');
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-rigid-batch-dialog]'));
+    const final=await page.evaluate(()=>window.__batch145Calls);
+    assert.equal(final.length,1);
+    assert.equal(final[0].pointerValues.length,40);
+    assert.equal(final[0].ack,true);
+    assert.deepEqual(final[0].pointerValues.filter(row=>[15,28,35].includes(row[0])).map(
+      row=>[row[0],row[2],row[3],row[4]]),[
+        [15,29.84,true,null],[28,29.84,true,null],[35,29.84,true,null],
+      ]);
+    assert.equal(final[0].pointerValues.some(row=>row[0]>=41&&row[0]<=55),false);
+  });
+
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
