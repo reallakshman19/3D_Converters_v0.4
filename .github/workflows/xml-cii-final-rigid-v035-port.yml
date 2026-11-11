@@ -39,8 +39,21 @@ jobs:
         run: |
           npm install --no-save --package-lock=false playwright@1.55.0
           npx playwright install --with-deps chromium
+      - name: Pin Owner GLRD source and stage from uploaded archive manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/glrd-191
+          root='https://raw.githubusercontent.com/reallakshman19/3D_Converters/3377b7f4baeeee5851e72dcc414d6c4a93f5a933/Benchmarks/XML-CII-2019/revamped'
+          curl -fsSL --retry 3 "$root/GLRD-1000-PI-01%20-%20BM2.xml" -o '/tmp/glrd-191/GLRD-1000-PI-01 - BM2.xml'
+          curl -fsSL --retry 3 "$root/STF_2026Nov03-0839_managed_stage.json" -o '/tmp/glrd-191/STF_2026Nov03-0839_managed_stage.json'
+          echo '6bcc477860fdbe9a80159839bf476a8c1e6ce7a966587a25bc62498709843151  /tmp/glrd-191/GLRD-1000-PI-01 - BM2.xml' | sha256sum -c -
+          echo '1d2469fe05d712cd1dd2da9913a840516ae686fb1616eb6d7b5e14d8918e2746  /tmp/glrd-191/STF_2026Nov03-0839_managed_stage.json' | sha256sum -c -
       - name: Browser verify RIGID pointer listing, preview, apply and source byte preservation
         shell: bash
+        env:
+          GLRD_E2E_XML_FILE: /tmp/glrd-191/GLRD-1000-PI-01 - BM2.xml
+          GLRD_E2E_STAGE_FILE: /tmp/glrd-191/STF_2026Nov03-0839_managed_stage.json
         run: |
           set -euo pipefail
           node --test tests/xml-cii-final-property-browser.test.mjs
