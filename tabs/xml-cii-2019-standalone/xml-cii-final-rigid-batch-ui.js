@@ -77,6 +77,7 @@ export function installFinalRigidBatchControls({
       r.querySelector('[data-final-rigid-select]')?.checked).map((r) => Number(r.dataset.pointer)),
     currentEditedValues: getEditedValues(),
     weightScale: getCurrentResult()?.finalRigidReviewEvidence?.weightScale,
+    engineeringHold: getCurrentResult()?.rigidMassReviewOnly === true,
     selectedIndices: new Map([...overlay.querySelectorAll('[data-final-rigid-suggestion]')].filter((select) =>
       select.value !== '').map((select) =>
       [Number(select.getAttribute('data-final-rigid-suggestion')), Number(select.value)])),
