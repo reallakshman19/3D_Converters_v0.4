@@ -237,3 +237,51 @@ test('GLRD reported 19.1 mm pointers 15, 28, 35 accept source 2.984 kg as 29.84 
   assert.equal(planFinalRigidBatchCorrections(inventory,plans,noBasis)
     .proposals[0].skipCode,'INVALID_MANUAL_REFERENCE');
 });
+
+test('Owner pointer 35 #101 939→10020: 2.984kg nearest shows 29.84 instead of a false zero despite incomplete owner rationale',()=>{
+  const target={
+    rigidPointer:35,weight:17.48,rawWeight:'17.4800',status:'LINKED',
+    linkedElements:[{index:101,fromNode:'939',toNode:'10020',lengthMm:19.1}],
+  };
+  const candidates=[
+    {branchName:'/B',componentRefNo:'/PCOM-35',componentType:'PCOM',
+      sourceNode:'939',side:'FROM',sourceLengthMm:12.7},
+    {branchName:'/B',componentRefNo:'/FLANGE-35',componentType:'FLAN',
+      sourceNode:'10020',side:'TO',sourceLengthMm:109},
+  ];
+  const context={
+    status:'CONFLICT_REVIEW',ownerCandidates:candidates,
+    conflicts:['COMPETING_SOURCE_COMPONENTS'],
+    bore:{conflict:false},rating:{conflict:false},dtxr:{suppressed:false},
+  };
+  const plan={rigidPointer:35,mapping:null,sourceContext:context,
+    nearestSuggestions:[{referenceWeight:29.84,masterWeightKg:2.984,
+      matchPct:50,title:'SPECTACLE BLIND',method:'length-extrapolated',
+      approximate:true,direct:false,comparisonOnly:true}]};
+  const plans=Array.from({length:35},()=>null);plans[34]=plan;
+  const selection=new Map([[35,{candidateIndex:0,rationale:''}]]);
+  const allowed=planFinalRigidBatchCorrections({rows:[target]},plans,{
+    includeReviewOnly:true,ownerSelections:selection,
+  }).proposals[0];
+  assert.equal(allowed.status,'ELIGIBLE');
+  assert.equal(allowed.proposedWeight,29.84);
+  assert.ok(Math.abs(allowed.errorPct)>40);
+  assert.equal(allowed.reviewRequired,true);
+  assert.equal(allowed.ownerResolution,null,
+    'invalid source owner selection must NEVER gain physical mass authority');
+  assert.ok(allowed.warnings.some(w=>w.startsWith('OWNER_SELECTION_UNQUALIFIED_REVIEW_ONLY')));
+  assert.ok(allowed.warnings.includes('PHYSICAL_OWNER_CONFLICT_UNRESOLVED_FINAL_POINTER_DRAFT'));
+  assert.equal(allowed.candidate.masterWeightKg,2.984);
+  // Without review opt-in the same candidate is not silently eligible.
+  assert.equal(planFinalRigidBatchCorrections({rows:[target]},plans,{
+    ownerSelections:selection,
+  }).proposals[0].status,'REVIEW_ONLY');
+  // A real 109 mm competing-owner edge is still a hard hold, not relaxed
+  // merely because a nearby short CII span can be reviewed.
+  const flange={...target,linkedElements:[{index:101,fromNode:'939',
+    toNode:'10020',lengthMm:109}]};
+  const denied=planFinalRigidBatchCorrections({rows:[flange]},plans,{
+    includeReviewOnly:true,ownerSelections:selection,
+  }).proposals[0];
+  assert.equal(denied.skipCode,'OWNER_SELECTION_INVALID');
+});
