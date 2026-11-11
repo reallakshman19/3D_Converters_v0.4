@@ -285,3 +285,22 @@ test('Owner pointer 35 #101 939→10020: 2.984kg nearest shows 29.84 instead of 
   }).proposals[0];
   assert.equal(denied.skipCode,'OWNER_SELECTION_INVALID');
 });
+
+test('quarantined engineering-HOLD CII can stage only acknowledged REVIEW-ONLY drafts, never approved source mass',()=>{
+  const {inventory,plans}=witness();
+  const withoutOptIn=planFinalRigidBatchCorrections(inventory,plans,{
+    engineeringHold:true,includeReviewOnly:false,
+  });
+  assert.equal(withoutOptIn.eligible.length,0);
+  assert.deepEqual(withoutOptIn.proposals.map(p=>p.status),
+    ['REVIEW_ONLY','REVIEW_ONLY','REVIEW_ONLY']);
+  const optedIn=planFinalRigidBatchCorrections(inventory,plans,{
+    engineeringHold:true,includeReviewOnly:true,
+  });
+  assert.equal(optedIn.eligible.length,3);
+  assert.ok(optedIn.eligible.every(p=>p.reviewRequired===true));
+  assert.ok(optedIn.eligible.every(p=>
+    p.warnings.includes('ENGINEERING_MASS_HOLD_REVIEW_ONLY_NOT_APPROVED')));
+  assert.equal(summarizeFinalRigidBatch(optedIn,[1,2,3]).engineeringMassApproval,
+    'NOT_ESTABLISHED_BY_BATCH_REVIEW');
+});
