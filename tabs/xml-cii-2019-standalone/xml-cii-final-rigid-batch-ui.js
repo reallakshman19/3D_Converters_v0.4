@@ -10,7 +10,9 @@ import { summarizeFinalRigidBatch } from './xml-cii-final-rigid-review-evidence.
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const pretty = (v) => Number.isFinite(Number(v)) ? Number(v).toFixed(3).replace(/\.?0+$/, '') : '—';
+const pretty = (v) => v === null || v === undefined || String(v).trim() === ''
+  ? '—' : Number.isFinite(Number(v))
+    ? Number(v).toFixed(3).replace(/\.?0+$/, '') : '—';
 const candidateTitle = (entry) => {
   if (!entry) return 'No qualified suggestion';
   return pretty(entry.masterWeightKg) + ' kg · ' +
@@ -156,8 +158,17 @@ export function installFinalRigidBatchControls({
         '<th style="padding:8px;white-space:nowrap;">' + s + '</th>').join('') +
       '</tr></thead><tbody data-final-rigid-batch-rows></tbody></table></div>' +
       '<label style="color:#fbbf24;font-size:12px;"><input type="checkbox" data-final-rigid-batch-confirm-review>' +
-      ' I reviewed the selected approximate / unverified proposals and accept them as explicit weight corrections.</label>' +
+      ' I reviewed the selected approximate / unverified proposals and accept them as explicit REVIEW-ONLY weight corrections (not source mass approval).</label>' +
       '<div data-final-rigid-batch-stage-reason role="status" style="font-size:11px;color:#fbbf24;"></div>' +
+      '<div data-final-rigid-batch-attestation-panel hidden style="padding:10px;border-radius:6px;border:1px solid #fbbf24;background:#2a210b;color:#ffe3a0;font-size:12px;">' +
+      '<strong>Explicit review confirmation before staging</strong>' +
+      '<p data-final-rigid-batch-attestation-description style="margin:6px 0;">No CII edits have been made.</p>' +
+      '<p style="margin:5px 0;">I confirm that I reviewed the selected pointer corrections. ' +
+      'Catalog matches do NOT prove physical-component masses or resolve source ownership. ' +
+      'Unresolved corrections remain REVIEW-ONLY after re-extraction.</p>' +
+      '<button type="button" data-final-rigid-batch-attestation-accept style="cursor:pointer;border:1px solid #60a5fa;border-radius:5px;background:#1d4ed8;color:white;padding:7px 10px;">I reviewed these corrections — Stage &amp; Verify</button>' +
+      ' <button type="button" data-final-rigid-batch-attestation-cancel style="cursor:pointer;border:1px solid #64748b;border-radius:5px;background:#1e293b;color:white;padding:7px 10px;">Back to corrections</button>' +
+      '</div>' +
       '<div style="display:flex;justify-content:flex-end;gap:9px;">' +
       '<button type="button" data-final-rigid-batch-continue style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Continue without weight changes</button>' +
       '<button type="button" data-final-rigid-batch-cancel style="padding:8px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#fff;cursor:pointer;">Cancel</button>' +
@@ -177,6 +188,10 @@ export function installFinalRigidBatchControls({
     const stage = dialogLayer.querySelector('[data-final-rigid-batch-stage]');
     const continueButton = dialogLayer.querySelector('[data-final-rigid-batch-continue]');
     const stageReason = dialogLayer.querySelector('[data-final-rigid-batch-stage-reason]');
+    const attestationPanel = dialogLayer.querySelector('[data-final-rigid-batch-attestation-panel]');
+    const attestationDescription = dialogLayer.querySelector('[data-final-rigid-batch-attestation-description]');
+    const attestationAccept = dialogLayer.querySelector('[data-final-rigid-batch-attestation-accept]');
+    const attestationCancel = dialogLayer.querySelector('[data-final-rigid-batch-attestation-cancel]');
     includeReview.checked = base.includeReviewOnly;
     const candidateFor = (row) => plans[row.pointer - 1]?.nearestSuggestions || [];
     const ownerOptionsFor = (pointer) => plans[pointer - 1]?.sourceContext?.ownerCandidates || [];
@@ -233,6 +248,7 @@ export function installFinalRigidBatchControls({
 
     function render() {
       const current = recalc();
+      if (attestationPanel) attestationPanel.hidden = true;
       body.innerHTML = current.proposals
         .filter((row) => row.status !== 'OUT_OF_SCOPE' &&
           (showHeld.checked || row.status === 'ELIGIBLE' ||
