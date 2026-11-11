@@ -74,6 +74,7 @@ export function installFinalRigidBatchControls({
     selectedPointers: [...overlay.querySelectorAll('[data-final-rigid-row]')].filter((r) =>
       r.querySelector('[data-final-rigid-select]')?.checked).map((r) => Number(r.dataset.pointer)),
     currentEditedValues: getEditedValues(),
+    weightScale: getCurrentResult()?.finalRigidReviewEvidence?.weightScale,
     selectedIndices: new Map([...overlay.querySelectorAll('[data-final-rigid-suggestion]')].filter((select) =>
       select.value !== '').map((select) =>
       [Number(select.getAttribute('data-final-rigid-suggestion')), Number(select.value)])),
@@ -142,7 +143,8 @@ export function installFinalRigidBatchControls({
       '<button type="button" data-final-rigid-batch-clear-all disabled style="cursor:pointer;background:#1e293b;color:#e2e8f0;' +
       'padding:6px 10px;border-radius:5px;border:1px solid #475569;">Clear Selection</button>' +
       '</div><div data-final-rigid-batch-nearest-note role="status" style="font-size:11px;color:#fbd38d;display:none;"></div>' +
-      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show skipped, advisory-warning and no-change rows</label>' +
+      '<label style="font-size:12px;"><input type="checkbox" data-final-rigid-batch-show-held> Show all skipped, advisory-warning and no-change rows</label>' +
+       '<span style="font-size:11px;color:#a7c7ee;">Short (≤25 mm) final RIGIDs remain visible for documented manual edits, even without a qualified source owner.</span>' +
       '<div style="overflow:auto;flex:1;border:1px solid #334155;border-radius:5px;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">' +
       '<thead><tr style="position:sticky;top:0;background:#1e293b;">' +
@@ -234,7 +236,10 @@ export function installFinalRigidBatchControls({
       body.innerHTML = current.proposals
         .filter((row) => row.status !== 'OUT_OF_SCOPE' &&
           (showHeld.checked || row.status === 'ELIGIBLE' ||
-            row.status === 'REVIEW_ONLY'))
+            row.status === 'REVIEW_ONLY' ||
+            (inventory.rows[row.pointer - 1]?.linkedElements || []).some(
+              e => Number.isFinite(Number(e.lengthMm)) &&
+                Number(e.lengthMm) > 0 && Number(e.lengthMm) <= 25)))
         .map((row) => {
           const item = inventory.rows[row.pointer - 1];
           const linked = item?.linkedElements || [];
@@ -272,10 +277,20 @@ export function installFinalRigidBatchControls({
                 'value="' + esc(chosenOwner?.rationale || '') + '" style="max-width:240px;display:block;">'
             : '<span>Exact source-edge owner candidates unavailable</span>';
           const manualData = manualReferences.get(row.pointer) || {};
-          const manualControl = '<input type="number" min="0" step="any" ' +
+          const manualControl = '<label style="display:block;font-size:10px;">Final RIGID target' +
+            '<input type="number" min="0" step="any" ' +
             'data-final-rigid-batch-manual-weight="' + row.pointer +
-            '" placeholder="Weight, final CII units" value="' +
-            esc(manualData.referenceWeight ?? '') + '" style="width:150px;display:block;">' +
+            '" placeholder="e.g. 2.984" value="' +
+            esc(manualData.referenceWeight ?? '') + '" style="width:150px;display:block;"></label>' +
+            '<select data-final-rigid-batch-manual-unit="' + row.pointer +
+            '" style="width:175px;display:block;">' +
+            '<option value="CII_OUTPUT_WEIGHT"' +
+            (manualData.unit === 'SOURCE_KG' ? '' : ' selected') +
+            '>As exported (CII units)</option>' +
+            '<option value="SOURCE_KG"' +
+            (manualData.unit === 'SOURCE_KG' ? ' selected' : '') +
+            '>Source kg × run scale</option></select>' +
+            '<small>kg conversion requires the captured ×1/×10 output scale.</small>' +
             '<input type="text" data-final-rigid-batch-manual-document="' + row.pointer +
             '" placeholder="Reference document ID" value="' +
             esc(manualData.documentRef || '') + '" style="max-width:170px;display:block;">' +
@@ -302,7 +317,10 @@ export function installFinalRigidBatchControls({
               sourceChoices.length + ' source owner candidate(s)</summary>' +
               ownerControl + '</details>' :
               '<span title="No exact-edge candidate proved by source XML">Not verified</span>') +
-            cell('<details><summary style="cursor:pointer;">Manual reference…</summary>' +
+            cell('<details ' +
+              (linked.some(e => Number(e.lengthMm) > 0 && Number(e.lengthMm) <= 25)
+                ? 'open ' : '') +
+              '><summary style="cursor:pointer;">Manual final-pointer correction…</summary>' +
               manualControl + '</details>') +
             cell('<span style="color:' + (approved ? '#86efac' : '#fbbf24') + ';">' +
               esc(badge + (row.disposition || row.status)) +
@@ -400,7 +418,7 @@ export function installFinalRigidBatchControls({
         const pointer = Number(target.getAttribute('data-final-rigid-batch-approve'));
         if (target.checked) selections.add(pointer); else selections.delete(pointer);
         updateStage();
-      } else if (target.matches('[data-final-rigid-batch-owner], [data-final-rigid-batch-owner-basis], [data-final-rigid-batch-manual-weight], [data-final-rigid-batch-manual-document], [data-final-rigid-batch-manual-basis]')) {
+      } else if (target.matches('[data-final-rigid-batch-owner], [data-final-rigid-batch-owner-basis], [data-final-rigid-batch-manual-weight], [data-final-rigid-batch-manual-document], [data-final-rigid-batch-manual-basis], [data-final-rigid-batch-manual-unit]')) {
         const tr = target.closest('[data-final-rigid-batch-row]');
         const pointer = Number(tr?.getAttribute('data-final-rigid-batch-row'));
         const chosen = tr?.querySelector('[data-final-rigid-batch-owner]');
@@ -411,9 +429,15 @@ export function installFinalRigidBatchControls({
         const manualWeight = tr?.querySelector('[data-final-rigid-batch-manual-weight]')?.value || '';
         const manualDoc = tr?.querySelector('[data-final-rigid-batch-manual-document]')?.value || '';
         const manualBasis = tr?.querySelector('[data-final-rigid-batch-manual-basis]')?.value || '';
+        const manualUnit = tr?.querySelector('[data-final-rigid-batch-manual-unit]')?.value || 'CII_OUTPUT_WEIGHT';
         if (manualWeight.trim() || manualDoc.trim() || manualBasis.trim()) {
           manualReferences.set(pointer, { referenceWeight: manualWeight,
-            documentRef: manualDoc, basis: manualBasis, unit: 'CII_OUTPUT_WEIGHT' });
+            documentRef: manualDoc, basis: manualBasis, unit: manualUnit });
+          // Manual pointer edits must remain review-only, never inherit source
+          // approval from a catalog suggestion.
+          base.includeReviewOnly = true;
+          includeReview.checked = true;
+          includeInput.checked = true;
         } else manualReferences.delete(pointer);
         selections.delete(pointer);
         confirm.checked = false;
