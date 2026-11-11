@@ -1165,6 +1165,7 @@ try {
     const row35After=modal.locator('[data-final-rigid-batch-row="35"]');
     assert.equal(await row35After.locator('td').nth(6).innerText(),'29.84',
       'pointer 35 2.984 kg nearest proposal must not be formatted as zero');
+    await row35After.locator('td').last().locator('details').first().evaluate(el=>{el.open=true;});
     assert.match(await row35After.locator('td').last().innerText(),/OWNER_SELECTION_UNQUALIFIED_REVIEW_ONLY/);
     assert.match(await row35After.locator('td').last().innerText(),/REVIEW.*ELIGIBLE/);
     const skipped=modal.locator('[data-final-rigid-batch-row="41"]');
