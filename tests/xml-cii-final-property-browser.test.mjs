@@ -1035,7 +1035,7 @@ try {
           new Event('change',{bubbles:true}));
       });
       const qualified=modal.locator('[data-final-rigid-batch-row="'+pointer+'"]');
-      assert.match(await qualified.innerText(),/29\\.84/);
+      assert.match(await qualified.innerText(),/29\.84/);
       await qualified.locator('[data-final-rigid-batch-approve="'+pointer+'"]').check();
     }
     assert.equal(await modal.locator('[data-final-rigid-batch-include-review]').isChecked(),true);
@@ -1053,7 +1053,7 @@ try {
       ?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
     const [ciiDownload]=await Promise.all([page.waitForEvent('download'),
       page.locator('[data-final-rigid-download]').click()]);
-    assert.match(ciiDownload.suggestedFilename(),/REVIEW_ONLY\\.cii$/);
+    assert.match(ciiDownload.suggestedFilename(),/REVIEW_ONLY\.cii$/);
     const revised=await readFile(await ciiDownload.path(),'utf8');
     const reParsed=parseFinalCiiRigidInventory(revised);
     assert.deepEqual(reParsed.rows.map((r,i)=>r.weight!==originalParsed.rows[i].weight?i+1:null)
