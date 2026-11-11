@@ -869,6 +869,79 @@ try {
     assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
   });
 
+  await test('Chromium quarantined CII accepts independently acknowledged nearest draft, preserves HOLD and exports REVIEW_ONLY CII',async()=>{
+    await page.goto(address+'/tests/fixtures/final-cii-property-ui-host.html');
+    const pinnedXml='<Root><Branch><Branchname>/B</Branchname><Rating>900</Rating>'+
+      '<Node><NodeNumber>1</NodeNumber><ComponentType>PIPE</ComponentType>'+
+      '<Position>0 0 0</Position></Node></Branch></Root>';
+    const sourceCii=original
+      .replace(row([1000,1001,19.1,0,0,80]),row([639,10000,19.1,0,0,60.3]))
+      .replace(row([430,'0.000000']),row([17.48,'0.000000']));
+    const masters=[{id:'SPECTACLE-BLIND-REFERENCE',boreMm:50,rating:'900',
+      lengthMm:147,weight:2.984*147/19.1,type:'FLANGE',
+      typeDesc:'SPECTACLE BLIND'}];
+    await page.evaluate(async({ciiText,pinnedXml,masters})=>{
+      const {openFinalRigidWeightReview}=await import(
+        '/tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-final-rigid-review.js');
+      window.currentResult={
+        ok:false,error:'RIGID_MASS_CONSERVATION_HOLD',
+        diagnostics:{rigidMassAudit:{status:'HOLD',flags:[
+          {rigidPointer:1,code:'SOURCE_OWNER_UNRESOLVED',element:1},
+        ]}},
+        rigidMassRepairCandidate:{status:'QUARANTINED_REVIEW_ONLY',
+          engineeringReleaseAuthorized:false,ciiText,ciiName:'GLRD-held-nearest.cii'},
+        finalRigidReviewEvidence:{
+          sourceKind:'xml',engineInputText:pinnedXml,
+          engineInputDigest:'sha256:held-catalog-batch-demo',
+          stagedJsonText:'',weightScale:10,
+          supportConfigJson:JSON.stringify({weight:{masterRows:masters,
+            valveHintLengthToleranceMm:6}}),
+        },
+      };
+      openFinalRigidWeightReview(window.currentResult,{
+        getCurrentResult:()=>window.currentResult,
+      });
+    },{ciiText:sourceCii,pinnedXml,masters});
+    await page.waitForFunction(()=>
+      document.querySelector('[data-final-rigid-preview-report]')?.textContent.includes('Ready:'));
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const modal=page.locator('[data-final-rigid-batch-dialog]');
+    await modal.locator('[data-final-rigid-batch-apply-nearest]').click();
+    const row1=modal.locator('[data-final-rigid-batch-row="1"]');
+    assert.equal(await row1.locator('td').nth(6).innerText(),'29.84');
+    assert.equal(await modal.locator('[data-final-rigid-batch-confirm-review]').isChecked(),false);
+    assert.equal(await modal.locator('[data-final-rigid-batch-stage]').isDisabled(),false);
+    await modal.locator('[data-final-rigid-batch-stage]').click();
+    assert.equal(await modal.locator('[data-final-rigid-batch-attestation-panel]').isVisible(),true);
+    assert.equal(await page.locator('[data-final-rigid-edited="1"]').inputValue(), '17.48');
+    await modal.locator('[data-final-rigid-batch-attestation-accept]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-rigid-batch-dialog]'));
+    assert.equal(await page.locator('[data-final-rigid-edited="1"]').inputValue(),'29.84');
+    assert.match(await page.locator('[data-final-rigid-preview-report]').innerText(),
+      /VERIFIED BATCH PREVIEW/);
+    await page.locator('[data-final-rigid-hold-ack]').check();
+    await page.locator('[data-final-rigid-apply]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-final-rigid-preview-report]')
+      ?.textContent.includes('REVIEW-ONLY REVISED CII READY'));
+    const [download]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-download]').click()]);
+    const revised=await readFile(await download.path(),'utf8');
+    assert.deepEqual(parseFinalCiiRigidInventory(revised).rows.map(r=>r.weight),
+      [29.84,590,590]);
+    const [auditDownload]=await Promise.all([page.waitForEvent('download'),
+      page.locator('[data-final-rigid-audit]').click()]);
+    const audit=JSON.parse(await readFile(await auditDownload.path(),'utf8'));
+    assert.deepEqual(audit.changes.map(c=>c.recordPointer),[1]);
+    assert.equal(audit.engineeringReleaseStatus,'HELD_NOT_APPROVED');
+    assert.equal(audit.physicalMassVerification,'NOT_ESTABLISHED_BY_CII_PATCH');
+    assert.equal(audit.untouchedBytesEqual,true);
+    assert.equal(audit.changes[0].reference.batch.massAuthority,'UNVERIFIED_REVIEW_ONLY');
+    assert.ok(audit.changes[0].reference.batch.metadataWarningCodes.includes(
+      'ENGINEERING_MASS_HOLD_REVIEW_ONLY_NOT_APPROVED'));
+    assert.equal(await page.evaluate(()=>window.currentResult.rigidMassRepairCandidate.ciiText),sourceCii);
+    assert.equal(await page.evaluate(()=>window.currentResult.ok),false);
+  });
+
   await test('Chromium no-change path verifies byte-identical CII and exports review reconciliation JSON', async () => {
     await page.goto(address + '/tests/fixtures/final-cii-property-ui-host.html');
     await page.evaluate(async (ciiText) => {
