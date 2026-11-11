@@ -62,7 +62,7 @@ function ciiOwnerReported191Fixture() {
     ...Array.from({length:count},(_,i)=>row([
       [15,28,35].includes(i+1)?'17.4800':'150.0000','0.000000',
     ])));
-  return lines.join('\\r\\n')+'\\r\\n';
+  return lines.join('\r\n')+'\r\n';
 }
 
 const original = ciiFile();
@@ -819,8 +819,12 @@ try {
     await short.locator('[data-final-rigid-repair-evidence] summary').click();
     assert.match(await short.locator('[data-final-rigid-repair-evidence] pre').innerText(),
       /SHORT SPAN|19\.100|short final/i);
-    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),0,
-      'catalog batch mass promotion prohibited on engineering HOLD');
+    assert.equal(await page.locator('[data-final-rigid-batch-toolbar]').count(),1,
+      'HOLD offers only documented manual final-pointer drafts, not catalog mass promotion');
+    await page.locator('[data-final-rigid-batch-preview]').click();
+    const heldModal=page.locator('[data-final-rigid-batch-dialog]');
+    assert.equal(await heldModal.locator('[data-final-rigid-batch-stage]').isDisabled(),true);
+    await heldModal.locator('[data-final-rigid-batch-cancel]').click();
     const edited=short.locator('[data-final-rigid-edited]');
     await edited.fill('17.48');
     assert.match(await short.locator('[data-final-rigid-edit-feedback]').innerText(),
